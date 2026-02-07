@@ -1,45 +1,38 @@
+import 'package:intl/intl.dart';
+
 class TourPlan {
-  final String? id;
   final DateTime date;
-  final String area;
-  final String objective;
-  final bool isJointWork;
-  final List<String>? jointWith; // List of IDs or Names
+  final List<int> doctorIds;
+  final String status; // e.g., "Submitted", "Draft"
 
   TourPlan({
-    this.id,
     required this.date,
-    required this.area,
-    required this.objective,
-    this.isJointWork = false,
-    this.jointWith,
+    required this.doctorIds,
+    this.status = 'Submitted',
   });
 
-  // Factory: From JSON
+  // --- 1. FROM JSON (API -> App) ---
   factory TourPlan.fromJson(Map<String, dynamic> json) {
-    List<String>? partners;
-    if (json['joint_with'] != null) {
-      partners = List<String>.from(json['joint_with']);
-    }
-
     return TourPlan(
-      id: json['id'].toString(),
-      date: DateTime.parse(json['date']),
-      area: json['area'] ?? '',
-      objective: json['objective'] ?? '',
-      isJointWork: json['is_joint_work'] == 1 || json['is_joint_work'] == true,
-      jointWith: partners,
+      // Parse date string (e.g., "2023-10-25") to DateTime
+      date: DateTime.parse(json['plan_date']),
+
+      // Safely convert JSON array to List<int>
+      doctorIds: json['doctor_ids'] != null
+          ? List<int>.from(json['doctor_ids'])
+          : [],
+
+      status: json['status'] ?? 'Submitted',
     );
   }
 
-  // To JSON
+  // --- 2. TO JSON (App -> API) ---
   Map<String, dynamic> toJson() {
     return {
-      'date': date.toIso8601String().split('T')[0], // Send YYYY-MM-DD
-      'area': area,
-      'objective': objective,
-      'is_joint_work': isJointWork,
-      'joint_with': jointWith ?? [],
+      // Format DateTime back to string "yyyy-MM-dd" for Laravel
+      'plan_date': DateFormat('yyyy-MM-dd').format(date),
+      'doctor_ids': doctorIds,
+      'status': status,
     };
   }
 }

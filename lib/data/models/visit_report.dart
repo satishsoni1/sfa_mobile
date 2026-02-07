@@ -1,5 +1,6 @@
 class VisitReport {
   final String? id; // Nullable for new reports not yet saved to DB
+  final String doctorId;
   final String doctorName;
   final DateTime visitTime;
   final String remarks;
@@ -9,6 +10,7 @@ class VisitReport {
 
   VisitReport({
     this.id,
+    required this.doctorId,
     required this.doctorName,
     required this.visitTime,
     required this.remarks,
@@ -33,12 +35,15 @@ class VisitReport {
     }
 
     return VisitReport(
-      id: json['id'].toString(),
+      id: json['id']?.toString(),
+      // FIX: robustly parse doctor_id to string, handle null safety
+      doctorId: json['doctor_id']?.toString() ?? '',
       doctorName: json['doctor_name'] ?? 'Unknown',
       visitTime: DateTime.parse(json['visit_time']),
       remarks: json['remarks'] ?? '',
       workedWith: colleagues,
       products: productList,
+      // Handle boolean sent as 1/0 or true/false
       isSubmitted: json['is_submitted'] == 1 || json['is_submitted'] == true,
     );
   }
@@ -46,10 +51,13 @@ class VisitReport {
   // To JSON (For API Request)
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
+      'doctor_id': doctorId,
       'doctor_name': doctorName,
       'visit_time': visitTime.toIso8601String(),
       'remarks': remarks,
       'worked_with': workedWith,
+      // Map product objects to JSON
       'products': products.map((e) => e.toJson()).toList(),
     };
   }
@@ -69,15 +77,15 @@ class ProductEntry {
 
   factory ProductEntry.fromJson(Map<String, dynamic> json) {
     return ProductEntry(
-      productName: json['product_name'],
-      pobQty: json['pob_qty'] ?? 0,
-      sampleQty: json['sample_qty'] ?? 0,
+      productName: json['product_name'] ?? '',
+      pobQty: int.tryParse(json['pob_qty']?.toString() ?? '0') ?? 0,
+      sampleQty: int.tryParse(json['sample_qty']?.toString() ?? '0') ?? 0,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'name': productName,
+      'name': productName, // Ensure keys match your API expectation
       'pob': pobQty,
       'sample': sampleQty,
     };

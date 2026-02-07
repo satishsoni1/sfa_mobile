@@ -1,24 +1,46 @@
+import 'package:flutter/foundation.dart'; // For kIsWeb check
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class SupportScreen extends StatelessWidget {
-  const SupportScreen({super.key}); 
+  const SupportScreen({super.key});
 
   // --- CONFIGURATION ---
-  final String _supportPhone = "+919876543210"; // Replace with actual number
-  final String _supportEmail = "support@globalspace.com"; // Replace with actual email
-  final String _supportUrl = "https://globalspace.com/support-ticket"; // Replace with actual form URL
+  final String _supportPhone = "+919321962944";
+  final String _supportEmail = "gstsupport@globalspace.in";
+  final String _supportUrl = "https://globalspace.in/support-ticket";
 
-  Future<void> _launchAction(Uri uri) async {
+  Future<void> _launchAction(BuildContext context, Uri uri) async {
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
-        debugPrint("Could not launch $uri");
+      // 1. Try launching with external application mode (Best for Mobile & tel/mailto)
+      bool launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      // 2. Fallback for Web: If external mode fails (common for http links on some browsers),
+      // try platform default (which usually opens a new tab).
+      if (!launched) {
+        launched = await launchUrl(uri, mode: LaunchMode.platformDefault);
+      }
+
+      // 3. Error Handling
+      if (!launched && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Could not launch ${uri.scheme} link"),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     } catch (e) {
       debugPrint("Error launching URL: $e");
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -30,88 +52,109 @@ class SupportScreen extends StatelessWidget {
         backgroundColor: const Color(0xFF4A148C),
         title: Text(
           "Help & Support",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: Colors.white),
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
         ),
         leading: const BackButton(color: Colors.white),
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header Text
-            Text(
-              "Get in touch",
-              style: GoogleFonts.poppins(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "We are here to help you. Choose a method below to contact our support team.",
-              style: GoogleFonts.poppins(
-                fontSize: 14,
-                color: Colors.grey[600],
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // 1. CALL SUPPORT
-            _buildContactCard(
-              icon: Icons.phone_in_talk,
-              title: "Call Us",
-              subtitle: "Talk to a representative immediately",
-              actionText: "Call Now",
-              color: Colors.green,
-              onTap: () => _launchAction(Uri.parse("tel:$_supportPhone")),
-            ),
-
-            const SizedBox(height: 16),
-
-            // 2. EMAIL SUPPORT
-            _buildContactCard(
-              icon: Icons.email_outlined,
-              title: "Email Support",
-              subtitle: "Send us a detailed query",
-              actionText: "Send Email",
-              color: Colors.orange,
-              onTap: () => _launchAction(Uri.parse("mailto:$_supportEmail?subject=App Support Request")),
-            ),
-
-            const SizedBox(height: 16),
-
-            // 3. SUBMIT TICKET (WEB)
-            _buildContactCard(
-              icon: Icons.assignment_outlined,
-              title: "Submit an Issue",
-              subtitle: "Fill out a form regarding bugs or technical issues",
-              actionText: "Open Form",
-              color: const Color(0xFF4A148C),
-              onTap: () => _launchAction(Uri.parse(_supportUrl)),
-            ),
-            
-            const SizedBox(height: 40),
-            
-            // Footer Info
-            Center(
-              child: Column(
-                children: [
-                  Text(
-                    "Available Mon-Sat, 9 AM - 6 PM",
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+      body: Center(
+        child: Container(
+          // Constrain width for Web to prevent cards stretching too wide
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header Text
+                Text(
+                  "Get in touch",
+                  style: GoogleFonts.poppins(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    "v1.0.0",
-                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[400]),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "We are here to help you. Choose a method below to contact our support team.",
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.grey[600],
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 32),
+
+                // 1. CALL SUPPORT
+                _buildContactCard(
+                  icon: Icons.phone_in_talk,
+                  title: "Call Us",
+                  subtitle: "Talk to a representative immediately",
+                  actionText: "Call Now",
+                  color: Colors.green,
+                  onTap: () =>
+                      _launchAction(context, Uri.parse("tel:$_supportPhone")),
+                ),
+
+                const SizedBox(height: 16),
+
+                // 2. EMAIL SUPPORT
+                _buildContactCard(
+                  icon: Icons.email_outlined,
+                  title: "Email Support",
+                  subtitle: "Send us a detailed query",
+                  actionText: "Send Email",
+                  color: Colors.orange,
+                  onTap: () => _launchAction(
+                    context,
+                    Uri.parse(
+                      "mailto:$_supportEmail?subject=App Support Request",
+                    ),
+                  ),
+                ),
+
+                // const SizedBox(height: 16),
+
+                // // 3. SUBMIT TICKET (WEB)
+                // _buildContactCard(
+                //   icon: Icons.assignment_outlined,
+                //   title: "Submit an Issue",
+                //   subtitle:
+                //       "Fill out a form regarding bugs or technical issues",
+                //   actionText: "Open Form",
+                //   color: const Color(0xFF4A148C),
+                //   onTap: () => _launchAction(context, Uri.parse(_supportUrl)),
+                // ),
+                const SizedBox(height: 40),
+
+                // Footer Info
+                Center(
+                  child: Column(
+                    children: [
+                      Text(
+                        "Available Mon-Fri, 10 AM - 6 PM",
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "v1.0.0",
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          color: Colors.grey[400],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -179,7 +222,12 @@ class SupportScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                // Hide arrow on web if you want, or keep it. Keeping it for consistency.
+                const Icon(
+                  Icons.arrow_forward_ios,
+                  size: 16,
+                  color: Colors.grey,
+                ),
               ],
             ),
           ),

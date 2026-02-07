@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:zforce/data/models/visit_report.dart';
-import '../models/leave_models.dart' show LeaveBalance;
+import '../models/doctor.dart' show Doctor;
+import '../models/tour_plan.dart' show TourPlan;
 import '../models/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -105,18 +107,6 @@ class ApiService {
     );
     if (response.statusCode != 200 && response.statusCode != 201) {
       throw Exception('Failed to add TP: ${response.body}');
-    }
-  }
-
-  // --- 2. LEAVES ---
-  Future<void> addLeave(Map<String, dynamic> leaveData) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/app/leaves'),
-      headers: await _getHeaders(),
-      body: jsonEncode(leaveData),
-    );
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Failed to request leave');
     }
   }
 
@@ -236,20 +226,6 @@ class ApiService {
     }
   }
 
-  // --- LEAVES ---
-  Future<List<dynamic>> getMyLeaves() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/app/leaves'),
-      headers: await _getHeaders(),
-    );
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    } else {
-      throw Exception('Failed to fetch leaves');
-    }
-  }
-
   Future<List<dynamic>> getProducts() async {
     try {
       final response = await http.get(
@@ -290,20 +266,6 @@ class ApiService {
     }
     return [];
   }
-
-  // Future<void> applyLeave(Map<String, dynamic> leaveData) async {
-  //   // leaveData should match:
-  //   // {'start_date': '2026-02-01', 'end_date': '2026-02-02', 'leave_type': 'Sick', 'reason': 'Fever'}
-  //   final response = await http.post(
-  //     Uri.parse('$baseUrl/app/leaves'),
-  //     headers: await _getHeaders(),
-  //     body: jsonEncode(leaveData),
-  //   );
-
-  //   if (response.statusCode != 201) {
-  //     throw Exception('Failed to submit leave request');
-  //   }
-  // }
 
   // Get current status on app load (to restore state)
   Future<Map<String, dynamic>> getAttendanceStatus() async {
@@ -390,7 +352,7 @@ class ApiService {
       "Gen. Practitioner",
       "Gynaecologist",
       "Cardiologist",
-      "Diabetologist", 
+      "Diabetologist",
       "Endocrinologist",
       "Gen. Surgeon",
       "INTSV/ ANESTH.",
@@ -409,14 +371,14 @@ class ApiService {
       "GASTRO PHY/SUR",
       "PAIN SPECIALIST",
       "SPINE SURGEON",
-      "Others (BAMS / BHMS)"
+      "Others (BAMS / BHMS)",
     ];
   }
 
-  Future<List<VisitReport>> getDoctorHistory(String doctorName) async {
+  Future<List<VisitReport>> getDoctorHistory(String doctorId) async {
     // Encode the doctor name to handle spaces properly
     final url = Uri.parse(
-      '$baseUrl/app/visits/history?doctor_name=${Uri.encodeComponent(doctorName)}',
+      '$baseUrl/app/visits/history?doctorId=${Uri.encodeComponent(doctorId)}',
     );
 
     try {
@@ -435,107 +397,18 @@ class ApiService {
     }
   }
 
-  Future<List<LeaveBalance>> getLeaveBalances() async {
-    final url = Uri.parse('$baseUrl/app/leaves/balances');
-
-    final response = await http.get(
-      url,
-      headers: await _getHeaders(),
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      // Assuming API returns { "balances": [...] }
-      final List<dynamic> list = data['balances'];
-      return list.map((e) => LeaveBalance.fromJson(e)).toList();
-    } else {
-      throw Exception("Failed to load balances");
-    }
-  }
-  // --- LEAVE MODULE ---
-  
-  Future<List<dynamic>> getLeaves() async {
-    final url = Uri.parse('$baseUrl/app/leaves');
-    
-    final response = await http.get(url, headers: await _getHeaders());
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['data']; // Returns list of leaves
-    } else {
-      throw Exception("Failed to fetch leaves");
-    }
-  }
-
-  Future<void> applyLeave(String type, DateTime from, DateTime to, String reason) async {
-    
-    final url = Uri.parse('$baseUrl/app/leaves/apply');
-
-    final response = await http.post(
-      url,
-      headers: await _getHeaders(),
-      body: jsonEncode({
-        'leave_type': type,
-        'from_date': from.toIso8601String().split('T')[0], // YYYY-MM-DD
-        'to_date': to.toIso8601String().split('T')[0],
-        'reason': reason,
-      }),
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception("Failed to apply leave: ${response.body}");
-    }
-  }
-  Future<void> submitLeaveRaw(Map<String, dynamic> payload) async {
-   
-    final url = Uri.parse('$baseUrl/app/leaves'); // Matches Route::post('/leaves', ...)
-
-    try {
-      final response = await http.post(
-        url,
-        headers: await _getHeaders(),
-        body: jsonEncode(payload), // Encodes the nested 'leave' array correctly
-      );
-
-      if (response.statusCode != 200 && response.statusCode != 201) {
-        // Parse error message from Laravel if available
-        final resp = jsonDecode(response.body);
-        throw Exception(resp['message'] ?? "Failed to submit leave request");
-      }
-    } catch (e) {
-      throw Exception("Network Error: $e");
-    }
-  }
-
-  // 2. Get Leave Details (for View Screen)
-  Future<Map<String, dynamic>> getLeaveDetails(int id) async {
-    
-    final url = Uri.parse('$baseUrl/app/leaves/$id'); // Matches Route::get('/leaves/{id}', ...)
-
-    final response = await http.get(
-      url,
-      headers: await _getHeaders(),
-    );
-
-    if (response.statusCode == 200) {
-      // Laravel returns { "leave": {...}, "details": [...] }
-      return jsonDecode(response.body); 
-    } else {
-      throw Exception("Failed to load leave details");
-    }
-  }
   // --- CHANGE PASSWORD ---
-  
+
   Future<void> changePassword(String newPassword) async {
-    final url = Uri.parse('$baseUrl/app/change-password'); // Ensure this route exists in Laravel
+    final url = Uri.parse(
+      '$baseUrl/app/change-password',
+    ); // Ensure this route exists in Laravel
 
     try {
       final response = await http.post(
         url,
         headers: await _getHeaders(),
-        body: jsonEncode({
-          'new_password': newPassword,
-        }),
+        body: jsonEncode({'new_password': newPassword}),
       );
 
       if (response.statusCode != 200) {
@@ -544,6 +417,210 @@ class ApiService {
       }
     } catch (e) {
       throw Exception("Network Error: $e");
+    }
+  }
+
+  Future<List<TourPlan>> getTourPlans(DateTime month) async {
+    final monthStr = DateFormat('yyyy-MM').format(month);
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/tour-plans?month=$monthStr'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body)['data'] as List;
+      return data.map((e) => TourPlan.fromJson(e)).toList();
+    } else {
+      throw Exception("Failed to load plans");
+    }
+  }
+
+  Future<void> saveTourPlan(DateTime date, List<int> doctorIds) async {
+    await http.post(
+      Uri.parse('$baseUrl/app/tour-plans'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'plan_date': DateFormat('yyyy-MM-dd').format(date),
+        'doctor_ids': doctorIds,
+      }),
+    );
+  }
+
+  Future<void> duplicatePlan(
+    DateTime source,
+    DateTime target,
+    String action,
+  ) async {
+    await http.post(
+      Uri.parse('$baseUrl/app/tour-plans/duplicate'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'source_date': DateFormat('yyyy-MM-dd').format(source),
+        'target_date': DateFormat('yyyy-MM-dd').format(target),
+        'action': action,
+      }),
+    );
+  }
+
+  Future<void> deletePlan(DateTime date) async {
+    final dateStr = DateFormat('yyyy-MM-dd').format(date);
+    await http.delete(
+      Uri.parse('$baseUrl/app/tour-plans/$dateStr'),
+      headers: await _getHeaders(),
+    );
+  }
+
+  Future<void> submitNfwReport(
+    DateTime date,
+    String activity,
+    String location,
+    String remarks,
+  ) async {
+    final url = Uri.parse('$baseUrl/app/nfw-submit');
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ${await getToken()}',
+      },
+      body: jsonEncode({
+        'report_date': DateFormat('yyyy-MM-dd').format(date),
+        'activity': activity,
+        'location': location,
+        'remarks': remarks,
+      }),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception("Failed to submit NFW Report");
+    }
+  }
+
+  Future<List<dynamic>> getSubordinates() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/manager/subordinates'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    return jsonDecode(response.body)['data'];
+  }
+
+  Future<List<Doctor>> getDoctorsForUser(int userId) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/manager/doctors/$userId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body)['data'];
+      return data.map((e) => Doctor.fromJson(e)).toList();
+    }
+    return [];
+  }
+
+  Future<List<dynamic>> getJointWorkRequests() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/manager/joint-requests'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    return jsonDecode(response.body)['data'];
+  }
+
+  Future<void> approveJointWork(String reportId, String remark) async {
+    final token = await getToken();
+    await http.post(
+      Uri.parse('$baseUrl/app/manager/approve-joint'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'report_id': reportId, 'manager_remark': remark}),
+    );
+  }
+
+  Future<List<dynamic>> getNfwHistory() async {
+    final token = await getToken(); // your logic to get token
+    final response = await http.get(
+      Uri.parse(
+        '$baseUrl/app/nfw-history',
+      ), // or /nfw-history depending on backend
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json['data']; // Assuming backend returns { "data": [...] }
+    } else {
+      throw Exception("Failed to load history");
+    }
+  }
+  // --- LEAVE MANAGEMENT ---
+
+  // 1. Get Leave Types & Balances (For Apply Screen)
+  Future<Map<String, dynamic>> getLeaveMeta() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/leave/meta'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load leave types');
+    }
+  }
+
+  // 2. Apply for Leave
+  Future<void> applyLeave(Map<String, dynamic> data) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/leave/apply'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode(data),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final error = jsonDecode(response.body);
+      throw Exception(error['message'] ?? 'Failed to submit leave');
+    }
+  }
+
+  // 3. Get Leave History List
+  Future<List<dynamic>> getLeaves() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/leaves'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json['data'];
+    } else {
+      throw Exception('Failed to load leave history');
+    }
+  }
+
+  // 4. Get Single Leave Details
+  Future<Map<String, dynamic>> getLeaveDetails(int id) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/leaves/$id'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception('Failed to load details');
     }
   }
 }

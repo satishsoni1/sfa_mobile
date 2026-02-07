@@ -50,6 +50,7 @@ class Doctor {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'doctor_name':
           name, // Changed to match API expectations if used for sending
       'mobile_no': mobile,
@@ -74,9 +75,12 @@ class Doctor {
 
   static String _toTitleCase(String? text) {
     if (text == null || text.isEmpty) return '';
-    return text.split(' ').map((word) {
-      if (word.isEmpty) return '';
-      return word[0].toUpperCase() + word.substring(1).toLowerCase();
-    }).join(' ');
+    return text
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return '';
+          return word[0].toUpperCase() + word.substring(1).toLowerCase();
+        })
+        .join(' ');
   }
 }

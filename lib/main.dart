@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
-import 'providers/leave_provider.dart' show LeaveProvider;
 import 'providers/report_provider.dart';
 import 'providers/auth_provider.dart'; // Ensure this file exists
 import 'presentation/dashboard/dashboard_screen.dart';
@@ -15,8 +14,9 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => ReportProvider()),
         // We initialize AuthProvider and immediately check login status
-        ChangeNotifierProvider(create: (_) => AuthProvider()..checkLoginStatus()),
-        ChangeNotifierProvider(create: (_) => LeaveProvider()),
+        ChangeNotifierProvider(
+          create: (_) => AuthProvider()..checkLoginStatus(),
+        ),
       ],
       child: const ZForceApp(),
     ),
@@ -35,13 +35,14 @@ class ZForceApp extends StatelessWidget {
           title: 'ZForce',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme, // Uses your theme file
-          
           // 3. Smart Navigation based on Auth State
-          home: auth.isLoading 
-              ? const Scaffold(body: Center(child: CircularProgressIndicator())) // Splash Screen
-              : auth.isAuthenticated 
-                  ? const DashboardScreen() 
-                  : const LoginScreen(),
+          home: auth.isLoading
+              ? const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                ) // Splash Screen
+              : auth.isAuthenticated
+              ? const DashboardScreen()
+              : const LoginScreen(),
         );
       },
     );

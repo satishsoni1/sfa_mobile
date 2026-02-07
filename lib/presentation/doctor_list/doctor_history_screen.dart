@@ -6,9 +6,14 @@ import '../../data/services/api_service.dart';
 import '../../data/models/visit_report.dart';
 
 class DoctorHistoryScreen extends StatefulWidget {
+  final String doctorId; // Changed from doctorName
   final String doctorName;
 
-  const DoctorHistoryScreen({required this.doctorName, super.key});
+  const DoctorHistoryScreen({
+    required this.doctorId,
+    required this.doctorName,
+    super.key,
+  });
 
   @override
   State<DoctorHistoryScreen> createState() => _DoctorHistoryScreenState();
@@ -29,7 +34,7 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
     try {
       final apiService = ApiService();
       // We will add this method to ApiService shortly
-      final data = await apiService.getDoctorHistory(widget.doctorName);
+      final data = await apiService.getDoctorHistory(widget.doctorId);
       if (mounted) {
         setState(() {
           _history = data;
@@ -55,7 +60,13 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("Visit History", style: GoogleFonts.poppins(fontSize: 14)),
-            Text(widget.doctorName, style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              widget.doctorName,
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ],
         ),
         backgroundColor: const Color(0xFF4A148C),
@@ -63,26 +74,34 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _errorMessage.isNotEmpty
-              ? Center(child: Text(_errorMessage, style: const TextStyle(color: Colors.red)))
-              : _history.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.history, size: 60, color: Colors.grey[400]),
-                          const SizedBox(height: 10),
-                          Text("No history found for this doctor.", style: GoogleFonts.poppins(color: Colors.grey)),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: _history.length,
-                      itemBuilder: (context, index) {
-                        final visit = _history[index];
-                        return _buildHistoryCard(visit);
-                      },
-                    ),
+          ? Center(
+              child: Text(
+                _errorMessage,
+                style: const TextStyle(color: Colors.red),
+              ),
+            )
+          : _history.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.history, size: 60, color: Colors.grey[400]),
+                  const SizedBox(height: 10),
+                  Text(
+                    "No history found for this doctor.",
+                    style: GoogleFonts.poppins(color: Colors.grey),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: _history.length,
+              itemBuilder: (context, index) {
+                final visit = _history[index];
+                return _buildHistoryCard(visit);
+              },
+            ),
     );
   }
 
@@ -102,11 +121,18 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.calendar_today, size: 16, color: Color(0xFF4A148C)),
+                    const Icon(
+                      Icons.calendar_today,
+                      size: 16,
+                      color: Color(0xFF4A148C),
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       DateFormat('dd MMM yyyy').format(visit.visitTime),
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16),
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
                   ],
                 ),
@@ -119,11 +145,20 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Remark: ", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                const Text(
+                  "Remark: ",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
                 Expanded(
                   child: Text(
-                    visit.remarks, 
-                    style: GoogleFonts.poppins(color: Colors.black87, fontWeight: FontWeight.w500)
+                    visit.remarks,
+                    style: GoogleFonts.poppins(
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -132,7 +167,14 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
 
             // Products Section
             if (visit.products.isNotEmpty) ...[
-              Text("Products Discussed:", style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+              Text(
+                "Products Discussed:",
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
+              ),
               const SizedBox(height: 8),
               Container(
                 decoration: BoxDecoration(
@@ -141,24 +183,31 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
                 ),
                 padding: const EdgeInsets.all(8),
                 child: Column(
-                  children: visit.products.map((p) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(p.productName, style: GoogleFonts.poppins(fontSize: 13)),
-                        Row(
-                          children: [
-                            if (p.pobQty > 0)
-                              _tag("POB: ${p.pobQty}", Colors.green),
-                            const SizedBox(width: 4),
-                            if (p.sampleQty > 0)
-                              _tag("Spl: ${p.sampleQty}", Colors.orange),
-                          ],
-                        )
-                      ],
-                    ),
-                  )).toList(),
+                  children: visit.products
+                      .map(
+                        (p) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                p.productName,
+                                style: GoogleFonts.poppins(fontSize: 13),
+                              ),
+                              Row(
+                                children: [
+                                  if (p.pobQty > 0)
+                                    _tag("POB: ${p.pobQty}", Colors.green),
+                                  const SizedBox(width: 4),
+                                  if (p.sampleQty > 0)
+                                    _tag("Spl: ${p.sampleQty}", Colors.orange),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
             ],
@@ -168,17 +217,24 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Icon(Icons.people_outline, size: 16, color: Colors.grey),
+                  const Icon(
+                    Icons.people_outline,
+                    size: 16,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       "Worked with: ${visit.workedWith.join(', ')}",
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[700]),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        color: Colors.grey[700],
+                      ),
                     ),
                   ),
                 ],
               ),
-            ]
+            ],
           ],
         ),
       ),
@@ -195,7 +251,11 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
       ),
       child: Text(
         text,
-        style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold),
+        style: TextStyle(
+          fontSize: 10,
+          color: color,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

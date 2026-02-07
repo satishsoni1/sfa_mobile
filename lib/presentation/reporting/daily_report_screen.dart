@@ -24,7 +24,10 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
   }
 
   void _fetchReportsForDate() {
-    Provider.of<ReportProvider>(context, listen: false).fetchReportsByDate(_selectedDate);
+    Provider.of<ReportProvider>(
+      context,
+      listen: false,
+    ).fetchReportsByDate(_selectedDate);
   }
 
   Future<void> _pickDate() async {
@@ -65,9 +68,13 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         backgroundColor: const Color(0xFFF8F9FD),
-        resizeToAvoidBottomInset: true, // IMPORTANT: Allows UI to resize when keyboard opens
+        resizeToAvoidBottomInset:
+            true, // IMPORTANT: Allows UI to resize when keyboard opens
         appBar: AppBar(
-          title: Text('Daily Summary', style: GoogleFonts.poppins(fontSize: 18)),
+          title: Text(
+            'Daily Summary',
+            style: GoogleFonts.poppins(fontSize: 18),
+          ),
           backgroundColor: const Color(0xFF4A148C),
           elevation: 0,
         ),
@@ -83,17 +90,33 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text("Total Visits", style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
-                      Text("${reports.length}", style: GoogleFonts.poppins(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                      Text(
+                        "Total Visits",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        "${reports.length}",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
-                  
+
                   // Date Picker Button
                   InkWell(
                     onTap: _pickDate,
                     borderRadius: BorderRadius.circular(20),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(20),
@@ -102,33 +125,44 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                       child: Row(
                         children: [
                           Text(
-                            DateFormat('dd MMM yyyy').format(_selectedDate), 
-                            style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)
+                            DateFormat('dd MMM yyyy').format(_selectedDate),
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                           const SizedBox(width: 8),
-                          const Icon(Icons.calendar_today, color: Colors.white, size: 16),
+                          const Icon(
+                            Icons.calendar_today,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ],
                       ),
                     ),
-                  )
+                  ),
                 ],
               ),
             ),
 
             // 2. REPORT LIST (Flexible area)
             Expanded(
-              child: reportProvider.isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : reports.isEmpty
+              child: reportProvider.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : reports.isEmpty
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.assignment_outlined, size: 60, color: Colors.grey[300]),
+                          Icon(
+                            Icons.assignment_outlined,
+                            size: 60,
+                            color: Colors.grey[300],
+                          ),
                           const SizedBox(height: 10),
                           Text(
-                            "No visits found for ${DateFormat('dd MMM').format(_selectedDate)}", 
-                            style: GoogleFonts.poppins(color: Colors.grey)
+                            "No visits found for ${DateFormat('dd MMM').format(_selectedDate)}",
+                            style: GoogleFonts.poppins(color: Colors.grey),
                           ),
                         ],
                       ),
@@ -151,15 +185,23 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                             onTap: () {
                               if (reportProvider.isDaySubmitted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text("Cannot edit. Day is already submitted."))
+                                  const SnackBar(
+                                    content: Text(
+                                      "Cannot edit. Day is already submitted.",
+                                    ),
+                                  ),
                                 );
                               } else {
-                                Navigator.push(context, MaterialPageRoute(
-                                  builder: (_) => ReportingScreen(
-                                    doctorName: r.doctorName,
-                                    existingReport: r,
-                                  )
-                                )).then((_) => _fetchReportsForDate());
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => ReportingScreen(
+                                      doctorId: r.id.toString(),
+                                      doctorName: r.doctorName,
+                                      existingReport: r,
+                                    ),
+                                  ),
+                                ).then((_) => _fetchReportsForDate());
                               }
                             },
                             child: Padding(
@@ -168,36 +210,83 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                                 children: [
                                   Container(
                                     padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(color: Colors.purple[50], shape: BoxShape.circle),
-                                    child: const Icon(Icons.person, color: Color(0xFF4A148C)),
+                                    decoration: BoxDecoration(
+                                      color: Colors.purple[50],
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.person,
+                                      color: Color(0xFF4A148C),
+                                    ),
                                   ),
                                   const SizedBox(width: 15),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        Text(r.doctorName, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15)),
+                                        Text(
+                                          r.doctorName,
+                                          style: GoogleFonts.poppins(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15,
+                                          ),
+                                        ),
                                         const SizedBox(height: 4),
                                         Row(
                                           children: [
-                                            Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
+                                            Icon(
+                                              Icons.access_time,
+                                              size: 12,
+                                              color: Colors.grey[600],
+                                            ),
                                             const SizedBox(width: 4),
-                                            Text(DateFormat('h:mm a').format(r.visitTime), style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                                            Text(
+                                              DateFormat(
+                                                'h:mm a',
+                                              ).format(r.visitTime),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
+                                            ),
                                             const SizedBox(width: 10),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
-                                              child: Text(r.remarks, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                                            )
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[100],
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                r.remarks,
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ],
                                     ),
                                   ),
                                   if (!reportProvider.isDaySubmitted)
-                                    const Icon(Icons.edit_outlined, color: Colors.grey, size: 20)
-                                  else 
-                                    const Icon(Icons.lock_outline, color: Colors.grey, size: 20)
+                                    const Icon(
+                                      Icons.edit_outlined,
+                                      color: Colors.grey,
+                                      size: 20,
+                                    )
+                                  else
+                                    const Icon(
+                                      Icons.lock_outline,
+                                      color: Colors.grey,
+                                      size: 20,
+                                    ),
                                 ],
                               ),
                             ),
@@ -214,42 +303,75 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 10, offset: const Offset(0, -5))],
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black12,
+                      blurRadius: 10,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
                 ),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: reportProvider.isDaySubmitted ? Colors.grey : const Color(0xFF4A148C),
+                      backgroundColor: reportProvider.isDaySubmitted
+                          ? Colors.grey
+                          : const Color(0xFF4A148C),
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
-                    onPressed: (reports.isEmpty || reportProvider.isDaySubmitted)
+                    onPressed:
+                        (reports.isEmpty || reportProvider.isDaySubmitted)
                         ? null
                         : () async {
                             bool? confirm = await showDialog(
-                              context: context, 
+                              context: context,
                               builder: (ctx) => AlertDialog(
                                 title: const Text("Submit Final Report?"),
-                                content: Text("Submitting for ${DateFormat('dd MMM').format(_selectedDate)}. You cannot edit after this."),
+                                content: Text(
+                                  "Submitting for ${DateFormat('dd MMM').format(_selectedDate)}. You cannot edit after this.",
+                                ),
                                 actions: [
-                                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
-                                  TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text("Confirm")),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text("Cancel"),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text("Confirm"),
+                                  ),
                                 ],
-                              )
+                              ),
                             );
 
                             if (confirm == true) {
-                               await reportProvider.submitDayReports(date: _selectedDate);
-                               if (context.mounted) {
-                                 Navigator.pop(context); 
-                                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Day Submitted Successfully!')));
-                               }
+                              await reportProvider.submitDayReports(
+                                date: _selectedDate,
+                              );
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'Day Submitted Successfully!',
+                                    ),
+                                  ),
+                                );
+                              }
                             }
                           },
                     child: Text(
-                      reportProvider.isDaySubmitted ? "SUBMITTED" : "SUBMIT FINAL REPORT",
-                      style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      reportProvider.isDaySubmitted
+                          ? "SUBMITTED"
+                          : "SUBMIT FINAL REPORT",
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
                     ),
                   ),
                 ),
