@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:zforce/presentation/chat/chat_screen.dart';
 
 // --- SCREENS ---
 import 'package:zforce/presentation/expense/ExpenseScreen.dart';
@@ -197,6 +198,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       key: _scaffoldKey,
       backgroundColor: bgColor,
       drawer: _buildDrawer(user),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ChatScreen()),
+          );
+        },
+        backgroundColor: const Color(0xFF4A148C),
+        child: const Icon(Icons.auto_awesome, color: Colors.white),
+      ),
       body: RefreshIndicator(
         onRefresh: _loadInitialData,
         child: SingleChildScrollView(
