@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:zforce/data/models/visit_report.dart';
@@ -520,27 +521,6 @@ class ApiService {
     return [];
   }
 
-  Future<List<dynamic>> getJointWorkRequests() async {
-    final token = await getToken();
-    final response = await http.get(
-      Uri.parse('$baseUrl/app/manager/joint-requests'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    return jsonDecode(response.body)['data'];
-  }
-
-  Future<void> approveJointWork(String reportId, String remark) async {
-    final token = await getToken();
-    await http.post(
-      Uri.parse('$baseUrl/app/manager/approve-joint'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({'report_id': reportId, 'manager_remark': remark}),
-    );
-  }
-
   Future<List<dynamic>> getNfwHistory() async {
     final token = await getToken(); // your logic to get token
     final response = await http.get(
@@ -621,6 +601,104 @@ class ApiService {
       return jsonDecode(response.body);
     } else {
       throw Exception('Failed to load details');
+    }
+  }
+
+  Future<List<dynamic>> getJointWorkRequests() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/manager/joint-requests'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      return json['data'] ?? [];
+    } else {
+      throw Exception('Failed to load requests');
+    }
+  }
+
+  // 2. Approve Request (Create Manager Report)
+  Future<void> approveJointWork(String reportId, String remark) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/manager/approve-joint'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode({'report_id': reportId, 'remark': remark}),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final error = jsonDecode(response.body);
+      throw Exception(error['message'] ?? 'Failed to approve');
+    }
+  }
+
+  Future<Map<String, dynamic>> calculateExpense(DateTime date) async {
+    final token = await getToken();
+    final dateStr = DateFormat('yyyy-MM-dd').format(date);
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/expense/calculate?date=$dateStr'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['data'];
+    } else if (response.statusCode == 404) {
+      throw Exception("No visits found for this date.");
+    } else {
+      throw Exception("Calculation failed");
+    }
+  }
+
+  // Submit Expense (Multipart for Image)
+  Future<void> submitExpense(
+    Map<String, String> fields,
+    File? imageFile,
+  ) async {
+    final token = await getToken();
+
+    var request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/app/expense/submit'),
+    );
+    request.headers['Authorization'] = 'Bearer $token';
+
+    // This line is where it was crashing before
+    request.fields.addAll(fields);
+
+    if (imageFile != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath('image', imageFile.path),
+      );
+    }
+
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString(); // Read response
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception("Failed: $responseBody");
+    }
+  }
+
+  Future<Map<String, dynamic>> getMonthlyExpenses(DateTime date) async {
+    final token = await getToken();
+    final monthStr = DateFormat('yyyy-MM').format(date); // Send '2026-02'
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/expense/monthly?month=$monthStr'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load summary");
     }
   }
 }

@@ -44,7 +44,7 @@ class _ManagerJointWorkScreenState extends State<ManagerJointWorkScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "MR: ${report['user']['name']}",
+              "MR: ${report['user']['first_name']}",
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             Text("Doctor: ${report['doctor_name']}"),
@@ -127,7 +127,7 @@ class _ManagerJointWorkScreenState extends State<ManagerJointWorkScreen> {
                     leading: CircleAvatar(
                       backgroundColor: Colors.purple.shade50,
                       child: Text(
-                        r['user']['name'][0],
+                        r['user']['first_name'][0],
                         style: const TextStyle(color: Color(0xFF4A148C)),
                       ),
                     ),
@@ -139,11 +139,11 @@ class _ManagerJointWorkScreenState extends State<ManagerJointWorkScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "MR: ${r['user']['name']} (${r['user']['designation'] ?? 'MR'})",
+                          "MR: ${r['user']['first_name']} (${r['user']['designation'] ?? 'MR'})",
                         ),
                         Text(
                           DateFormat(
-                            'dd MMM h:mm a',
+                            'dd MMM',
                           ).format(DateTime.parse(r['visit_time'])),
                         ),
                         Text(

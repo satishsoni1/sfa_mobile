@@ -38,18 +38,20 @@ class _TeamTerritoryScreenState extends State<TeamTerritoryScreen> {
     setState(() {
       _selectedMr = mr;
       _isLoading = true;
-      _mrDoctors = []; // Clear previous
+      _mrDoctors = [];
     });
 
     try {
+      // Ensure we are passing the correct ID field expected by the API route
       final doctors = await ApiService().getDoctorsForUser(mr['id']);
       setState(() => _mrDoctors = doctors);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error fetching doctors: $e")));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -73,10 +75,14 @@ class _TeamTerritoryScreenState extends State<TeamTerritoryScreen> {
                 prefixIcon: Icon(Icons.person_search),
               ),
               value: _selectedMr,
-              items: _subordinates.map((mr) {
+              items: _subordinates.map<DropdownMenuItem<dynamic>>((mr) {
+                // Add <DropdownMenuItem<dynamic>>
                 return DropdownMenuItem(
                   value: mr,
-                  child: Text("${mr['name']} (${mr['designation'] ?? 'MR'})"),
+                  child: Text(
+                    "${mr['name']}",
+                    overflow: TextOverflow.ellipsis, // Add overflow handling
+                  ),
                 );
               }).toList(),
               onChanged: _onMrSelected,

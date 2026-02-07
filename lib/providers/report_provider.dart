@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:zforce/data/models/product.dart';
 import '../data/services/api_service.dart';
 import '../data/models/visit_report.dart'; // Ensure you have this model
-import '../data/models/doctor.dart';       // Ensure you have this model
-import '../data/models/tour_plan.dart';    // Ensure you have this model
+import '../data/models/doctor.dart'; // Ensure you have this model
+import '../data/models/tour_plan.dart'; // Ensure you have this model
 
 class ReportProvider with ChangeNotifier {
   // Service Injection
@@ -36,9 +36,11 @@ class ReportProvider with ChangeNotifier {
     try {
       // 1. Fetch Visits from API
       final List<dynamic> visitData = await _apiService.getTodayVisits();
-      
+
       // 2. Convert to Model List
-      _dailyReports = visitData.map((json) => VisitReport.fromJson(json)).toList();
+      _dailyReports = visitData
+          .map((json) => VisitReport.fromJson(json))
+          .toList();
 
       // 3. Check if any report marks the day as submitted
       // (Assuming the API returns an 'is_submitted' flag in the visit object)
@@ -47,7 +49,6 @@ class ReportProvider with ChangeNotifier {
         // You might check: _isDaySubmitted = _dailyReports.any((r) => r.isSubmitted);
         // For now, let's assume if we have data, we check the first one or a specific API flag
       }
-      
     } catch (e) {
       print("Error fetching daily data: $e");
       // Optionally handle error state
@@ -72,20 +73,20 @@ class ReportProvider with ChangeNotifier {
   // ===============================================
   // 2. REPORTING LOGIC (VISITS)
   // ===============================================
-// ===============================================
+  // ===============================================
   // 2. REPORTING ACTIONS
   // ===============================================
 
   /// RENAMED: Checks if the doctor exists in the CURRENTLY LOADED list.
-  /// Since '_dailyReports' is refreshed when you change the date, 
+  /// Since '_dailyReports' is refreshed when you change the date,
   /// this logic automatically allows the same doctor on different dates.
   bool hasVisitForSelectedDate(String doctorName) {
     return _dailyReports.any((r) => r.doctorName == doctorName);
   }
 
-Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
+  Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
     if (_isDaySubmitted) throw Exception("Day is locked.");
-    
+
     // Check locally
     if (hasVisitForSelectedDate(report.doctorName)) {
       throw Exception("Report already exists for this date.");
@@ -94,14 +95,14 @@ Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
     try {
       // Create a map to send to API
       Map<String, dynamic> data = report.toJson();
-      
+
       // Explicitly add the date if we are backdating
       if (selectedDate != null) {
         data['date'] = selectedDate.toIso8601String().split('T')[0];
       }
 
       await _apiService.saveVisit(data);
-      
+
       // Refresh list to sync ID and details
       if (selectedDate != null) {
         await fetchReportsByDate(selectedDate);
@@ -120,7 +121,7 @@ Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
   //   try {
   //     // 1. Send Update to API (Assuming you have an update endpoint)
   //     // await _apiService.updateVisit(updatedReport.id, updatedReport.toJson());
-      
+
   //     // For now, re-saving or handling via specific API logic
   //     // Note: If ID is needed, ensure API supports PUT/PATCH
 
@@ -136,18 +137,18 @@ Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
   // }
 
   /// Final Submit - Locks the day
- Future<void> submitDayReports({DateTime? date}) async {
+  Future<void> submitDayReports({DateTime? date}) async {
     try {
       String? dateStr;
-      
+
       // If a specific date is passed, format it to YYYY-MM-DD
       if (date != null) {
         dateStr = date.toIso8601String().split('T')[0];
       }
-      
+
       // Pass the date string to the API service
       await _apiService.submitDayFinal(date: dateStr);
-      
+
       _isDaySubmitted = true;
       notifyListeners();
     } catch (e) {
@@ -163,8 +164,10 @@ Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
   Future<void> addDoctor(Doctor doctor) async {
     try {
       // 1. API Call
-      await _apiService.addDoctor(doctor.toJson()); // Ensure Doctor model has toJson()
-      
+      await _apiService.addDoctor(
+        doctor.toJson(),
+      ); // Ensure Doctor model has toJson()
+
       // 2. Local Update
       _doctors.add(doctor);
       notifyListeners();
@@ -180,7 +183,9 @@ Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
   Future<void> addTourPlan(TourPlan tp) async {
     try {
       // 1. API Call
-      await _apiService.addTourPlan(tp.toJson()); // Ensure TourPlan model has toJson()
+      await _apiService.addTourPlan(
+        tp.toJson(),
+      ); // Ensure TourPlan model has toJson()
 
       // 2. Local Update
       _tourPlans.add(tp);
@@ -199,14 +204,16 @@ Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
     _isDaySubmitted = false;
     notifyListeners();
   }
-List<Product> _masterProductList = [];
-  
+
+  List<Product> _masterProductList = [];
+
   List<Product> get masterProducts => _masterProductList;
 
   // FETCH ACTION
   Future<void> fetchProducts() async {
-    if (_masterProductList.isNotEmpty) return; // Cache: Don't fetch if already loaded
-    
+    if (_masterProductList.isNotEmpty)
+      return; // Cache: Don't fetch if already loaded
+
     try {
       final List<dynamic> data = await _apiService.getProducts();
       _masterProductList = data.map((json) => Product.fromJson(json)).toList();
@@ -215,16 +222,18 @@ List<Product> _masterProductList = [];
       print("Error fetching products: $e");
     }
   }
+
   List<Map<String, dynamic>> _colleagues = [];
   List<Map<String, dynamic>> get colleagues => _colleagues;
 
   Future<void> fetchJointWorkList() async {
     // Don't fetch if already loaded (unless you want refresh logic)
-    if (_colleagues.isNotEmpty) return; 
+    if (_colleagues.isNotEmpty) return;
 
     try {
-      final response = await _apiService.getJointWorkList(); // We will create this in ApiService
-      
+      final response = await _apiService
+          .getJointWorkList(); // We will create this in ApiService
+
       // Expected format: [{'name': 'Amit', 'role': 'ASM', 'id': 101}, ...]
       _colleagues = List<Map<String, dynamic>>.from(response);
       notifyListeners();
@@ -232,6 +241,7 @@ List<Product> _masterProductList = [];
       print("Error fetching team: $e");
     }
   }
+
   Future<void> updateReport(VisitReport report) async {
     if (_isDaySubmitted) throw Exception("Day is locked.");
 
@@ -239,7 +249,7 @@ List<Product> _masterProductList = [];
       // 1. API Call (We need to pass the ID)
       // Ensure your VisitReport model has the correct ID from the API
       await _apiService.updateVisit(report.id!, report.toJson());
-      
+
       // 2. Local Update
       // Find the index of the report with this ID and replace it
       final index = _dailyReports.indexWhere((r) => r.id == report.id);
@@ -251,6 +261,7 @@ List<Product> _masterProductList = [];
       throw Exception("Failed to update report.");
     }
   }
+
   List<String> _specialities = [];
   List<String> get specialities => _specialities;
 
@@ -263,6 +274,7 @@ List<Product> _masterProductList = [];
       print("Error fetching specs: $e");
     }
   }
+
   Future<void> fetchReportsByDate(DateTime date) async {
     _isLoading = true;
     notifyListeners();
@@ -274,23 +286,26 @@ List<Product> _masterProductList = [];
 
       // 2. Call the API Service
       // Ensure your ApiService has the 'getVisitsByDate' method defined!
-      final List<dynamic> visitData = await _apiService.getVisitsByDate(dateStr);
-      
+      final List<dynamic> visitData = await _apiService.getVisitsByDate(
+        dateStr,
+      );
+
       // 3. Map JSON response to VisitReport models
-      _dailyReports = visitData.map((json) => VisitReport.fromJson(json)).toList();
+      _dailyReports = visitData
+          .map((json) => VisitReport.fromJson(json))
+          .toList();
 
       // 4. Update "Submitted" Status
       // We check if the reports fetched for this specific date are marked as submitted.
-      _isDaySubmitted = false; 
+      _isDaySubmitted = false;
       if (_dailyReports.isNotEmpty) {
         // If the first report is submitted, we assume the whole day is locked.
-        _isDaySubmitted = _dailyReports.first.isSubmitted; 
+        _isDaySubmitted = _dailyReports.first.isSubmitted;
       }
-
     } catch (e) {
       print("Error fetching reports for $date: $e");
       // On error (or 404), assume empty list and not submitted
-      _dailyReports = []; 
+      _dailyReports = [];
       _isDaySubmitted = false;
     } finally {
       _isLoading = false;

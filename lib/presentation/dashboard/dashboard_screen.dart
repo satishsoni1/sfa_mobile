@@ -1,15 +1,15 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-// Import your screens
-import 'package:zforce/presentation/leave/apply_leave_screen.dart';
+// --- SCREENS ---
+import 'package:zforce/presentation/expense/ExpenseScreen.dart';
+import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
-// Make sure this path matches where you saved the ChangePasswordScreen
 import 'package:zforce/presentation/login/change_password_screen.dart';
-
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
@@ -18,7 +18,7 @@ import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
 
-// Providers & Services
+// --- PROVIDERS & SERVICES ---
 import '../../providers/report_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/services/api_service.dart';
@@ -32,18 +32,25 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // --- STATE VARIABLES ---
+  // --- STATE ---
   bool _isCheckedIn = false;
   DateTime? _checkInTime;
   String _statusText = "Loading...";
   bool _isLoadingAction = false;
+  bool _isRefreshing = false;
 
-  // Colors
+  // Expense Data
+  String _expClaimed = "0";
+  String _expPending = "0";
+
+  Timer? _timer;
+  String _elapsedTime = "00:00";
+
+  // --- COLORS ---
   final Color primaryColor = const Color(0xFF4A148C);
-  final Color accentColor = const Color(0xFF7C43BD);
+  final Color accentColor = const Color(0xFF7B1FA2);
   final Color bgColor = const Color(0xFFF3F4F6);
 
-  // Global Key for Scaffold
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
@@ -52,19 +59,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
     });
+    _timer = Timer.periodic(
+      const Duration(minutes: 1),
+      (timer) => _updateElapsed(),
+    );
   }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  // --- LOGIC ---
 
   Future<void> _loadInitialData() async {
     if (!mounted) return;
+    setState(() => _isRefreshing = true);
+
     final reportProvider = Provider.of<ReportProvider>(context, listen: false);
     final apiService = ApiService();
 
-    reportProvider.fetchTodayData();
-
     try {
-      final statusData = await apiService.getAttendanceStatus();
-      if (!mounted) return;
+      // 1. Parallel Data Fetching
+      await Future.wait([
+        reportProvider.fetchTodayData(),
+        _fetchAttendance(apiService),
+        _fetchExpenseSummary(apiService),
+      ]);
+    } catch (e) {
+      if (mounted) setState(() => _statusText = "Offline");
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
+  }
 
+  Future<void> _fetchAttendance(ApiService api) async {
+    try {
+      final statusData = await api.getAttendanceStatus();
+      if (!mounted) return;
       final status = statusData['status'];
       final data = statusData['data'];
 
@@ -84,9 +117,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _checkInTime = null;
           _statusText = "Not Started";
         }
+        _updateElapsed();
       });
     } catch (e) {
-      if (mounted) setState(() => _statusText = "Offline");
+      // Handle silently
+    }
+  }
+
+  Future<void> _fetchExpenseSummary(ApiService api) async {
+    try {
+      // Fetch for current month
+      final data = await api.getMonthlyExpenses(DateTime.now());
+      if (!mounted) return;
+
+      final summary = data['summary'];
+      setState(() {
+        // Convert numbers to formatted strings (e.g. 5000 -> 5,000)
+        final fmt = NumberFormat("#,##0");
+        _expClaimed = fmt.format(summary['total_claimed'] ?? 0);
+        _expPending = fmt.format(summary['total_pending'] ?? 0);
+      });
+    } catch (e) {
+      // Handle silently or set to error state
+    }
+  }
+
+  void _updateElapsed() {
+    if (_isCheckedIn && _checkInTime != null) {
+      final duration = DateTime.now().difference(_checkInTime!);
+      final hours = duration.inHours;
+      final minutes = duration.inMinutes.remainder(60);
+      setState(() {
+        _elapsedTime = "${hours}h ${minutes}m";
+      });
+    } else {
+      setState(() => _elapsedTime = "00:00");
     }
   }
 
@@ -101,13 +166,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         await apiService.checkOut();
       }
       await Future.delayed(const Duration(milliseconds: 500));
-      await _loadInitialData();
+      await _loadInitialData(); // Reload all data
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Action failed: $e")));
-      }
+      if (mounted) _showSnack("Action failed: $e");
     } finally {
       if (mounted) setState(() => _isLoadingAction = false);
     }
@@ -117,93 +178,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Provider.of<AuthProvider>(context, listen: false).logout();
   }
 
-  // --- SHOW SETTINGS SHEET (New) ---
-  void _showSettingsSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "Settings",
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Change Password Option
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.lock_reset, color: Colors.blue),
-              ),
-              title: Text(
-                "Change Password",
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-              ),
-              trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-              onTap: () {
-                Navigator.pop(ctx); // Close sheet
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ChangePasswordScreen(isForced: false),
-                  ),
-                );
-              },
-            ),
-
-            // Add other settings here later (e.g., Notifications, Language)
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- SHOW INSTALL INSTRUCTIONS ---
-  void _showInstallInstructions() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Install App"),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text("To install this app on your device:"),
-            SizedBox(height: 10),
-            Text("1. Tap the Share button (iOS) or Menu dots (Android)."),
-            SizedBox(height: 4),
-            Text("2. Select 'Add to Home Screen'."),
-            SizedBox(height: 4),
-            Text("3. Tap 'Add' to confirm."),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              "Got it",
-              style: TextStyle(color: Color(0xFF4A148C)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _getZoneLogo(String? division) {
     final zone = division?.toLowerCase() ?? "";
     if (zone.contains("1")) return "assets/images/3.png";
@@ -211,139 +185,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return "assets/images/5.png";
   }
 
+  // --- UI BUILDER ---
+
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
-
-    // Layout Calculations
-    const double headerHeight = 380;
-    const double cardTopPos = 220;
-    const double totalStackHeight = 460;
+    const double headerHeight = 340;
+    const double cardOverlap = 60;
 
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: bgColor,
-
-      // --- DRAWER ---
-      drawer: Drawer(
-        child: ListView(
-          padding: EdgeInsets.zero,
-          children: [
-            UserAccountsDrawerHeader(
-              decoration: BoxDecoration(color: primaryColor),
-              accountName: Text(user?.firstName ?? "User"),
-              accountEmail: Text(user?.division ?? "Employee"),
-              currentAccountPicture: CircleAvatar(
-                backgroundColor: Colors.white,
-                child: Text(
-                  (user?.firstName ?? "U")[0].toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: primaryColor,
-                  ),
-                ),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.install_mobile),
-              title: const Text("Install App"),
-              onTap: () {
-                Navigator.pop(context);
-                _showInstallInstructions();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.support_agent),
-              title: const Text("Help & Support"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SupportScreen()),
-                );
-              },
-            ),
-            // --- NEW DRAWER ITEM: Change Password ---
-            ListTile(
-              leading: const Icon(Icons.vpn_key_outlined),
-              title: const Text("Change Password"),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ChangePasswordScreen(isForced: false),
-                  ),
-                );
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text("Logout", style: TextStyle(color: Colors.red)),
-              onTap: _handleLogout,
-            ),
-          ],
-        ),
-      ),
-
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // ================= HEADER & ATTENDANCE CARD =================
-            SizedBox(
-              height: totalStackHeight,
-              child: Stack(
+      drawer: _buildDrawer(user),
+      body: RefreshIndicator(
+        onRefresh: _loadInitialData,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              // HEADER
+              Stack(
                 clipBehavior: Clip.none,
+                alignment: Alignment.topCenter,
                 children: [
                   _buildHeaderBackground(user, headerHeight),
-                  Positioned(
-                    top: cardTopPos,
-                    left: 20,
-                    right: 20,
+                  Container(
+                    margin: const EdgeInsets.only(
+                      top: headerHeight - cardOverlap,
+                      left: 20,
+                      right: 20,
+                    ),
                     child: _buildAttendanceCard(),
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 20),
 
-            // ================= BODY CONTENT =================
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  const SizedBox(height: 10),
-                  _buildVisitsOverview(),
-                  const SizedBox(height: 24),
-                  _buildQuickActions(),
-                  const SizedBox(height: 40),
-                ],
+              // BODY
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildVisitsOverview(),
+                    const SizedBox(height: 24),
+                    _buildQuickActions(),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // --- WIDGET BUILDERS ---
+  // --- WIDGETS ---
+
   Widget _buildHeaderBackground(User? user, double height) {
     return Container(
       height: height,
       width: double.infinity,
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [primaryColor, accentColor],
-          begin: Alignment.bottomLeft,
-          end: Alignment.topRight,
+          colors: [primaryColor, const Color(0xFF6A1B9A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(36)),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -352,63 +267,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     icon: const Icon(Icons.menu, color: Colors.white),
                     onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          "Welcome back,",
-                          style: GoogleFonts.poppins(
-                            color: Colors.white70,
-                            fontSize: 12,
-                          ),
-                        ),
-                        Text(
-                          user?.firstName ?? "Employee",
-                          style: GoogleFonts.poppins(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: Colors.white.withOpacity(0.2),
-                    backgroundImage: NetworkImage(
-                      "https://ui-avatars.com/api/?name=${user?.firstName ?? 'User'}&background=random&color=fff",
+                  InkWell(
+                    onTap: _loadInitialData,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.refresh,
+                        color: Colors.white,
+                        size: 20,
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(8),
-                width: 250,
-                decoration: BoxDecoration(
+              Text(
+                "Welcome back,",
+                style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13),
+              ),
+              Text(
+                user?.firstName ?? "Employee",
+                style: GoogleFonts.poppins(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                height: 80,
+                padding: const EdgeInsets.all(10),
+
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      _getZoneLogo(user?.division),
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => Text(
+                        user?.division ?? "ZONE",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                child: Image.asset(
-                  _getZoneLogo(user?.division),
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => const Center(
-                    child: Icon(Icons.image_not_supported, color: Colors.grey),
-                  ),
-                ),
               ),
-              const SizedBox(height: 10),
             ],
           ),
         ),
@@ -421,45 +332,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: _isCheckedIn ? Colors.green.shade50 : Colors.grey.shade50,
-              borderRadius: BorderRadius.circular(30),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.fiber_manual_record,
-                  size: 12,
-                  color: _isCheckedIn ? Colors.green : Colors.grey,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  _statusText.toUpperCase(),
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    color: _isCheckedIn
-                        ? Colors.green.shade800
-                        : Colors.grey.shade700,
-                    letterSpacing: 1,
-                  ),
+                decoration: BoxDecoration(
+                  color: _isCheckedIn
+                      ? Colors.green.shade50
+                      : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(20),
                 ),
-              ],
-            ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.circle,
+                      size: 10,
+                      color: _isCheckedIn ? Colors.green : Colors.red,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _statusText.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: _isCheckedIn
+                            ? Colors.green.shade700
+                            : Colors.red.shade700,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Text(
@@ -467,13 +387,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ? DateFormat('h:mm a').format(_checkInTime!)
                 : "--:--",
             style: GoogleFonts.poppins(
-              fontSize: 36,
+              fontSize: 40,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
             ),
           ),
           Text(
-            _isCheckedIn ? "Checked In Time" : "Start your day",
+            _isCheckedIn ? "Checked In Time" : "Ready to Start?",
             style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
           ),
           const SizedBox(height: 24),
@@ -486,11 +406,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 backgroundColor: _isCheckedIn
                     ? const Color(0xFFEF5350)
                     : const Color(0xFF66BB6A),
-                foregroundColor: Colors.white,
-                elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
+                elevation: 0,
               ),
               child: _isLoadingAction
                   ? const SizedBox(
@@ -504,9 +423,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   : Text(
                       _isCheckedIn ? "CHECK OUT" : "CHECK IN",
                       style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
                         fontSize: 16,
-                        letterSpacing: 0.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        letterSpacing: 1,
                       ),
                     ),
             ),
@@ -517,80 +437,184 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildVisitsOverview() {
-    final reportProvider = Provider.of<ReportProvider>(context);
+    final visitCount = Provider.of<ReportProvider>(context).visitCount;
     return Row(
       children: [
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.shade200),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.shade100,
-                  blurRadius: 5,
-                  offset: const Offset(0, 3),
+        _buildSummaryItem(
+          "Visits",
+          "$visitCount",
+          Icons.people_outline,
+          Colors.blue,
+        ),
+        const SizedBox(width: 12),
+        _buildSummaryItem(
+          "Online",
+          _elapsedTime,
+          Icons.timer_outlined,
+          Colors.orange,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.shade100,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpenseSummaryCard() {
+    final String currentMonth = DateFormat('MMMM').format(DateTime.now());
+
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ExpenseSummaryScreen()),
+        );
+        _loadInitialData(); // Refresh on return
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF3F51B5), Color(0xFF5C6BC0)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.indigo.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Expense Summary ($currentMonth)",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward,
+                  color: Colors.white70,
+                  size: 18,
                 ),
               ],
             ),
-            child: Row(
+            const SizedBox(height: 20),
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "Today's Visits",
+                      "₹$_expClaimed",
                       style: GoogleFonts.poppins(
-                        color: Colors.grey[600],
-                        fontSize: 13,
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
                     Text(
-                      "${reportProvider.visitCount}",
+                      "Total Claimed",
                       style: GoogleFonts.poppins(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: primaryColor,
+                        color: Colors.white70,
+                        fontSize: 11,
                       ),
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: primaryColor.withOpacity(0.05),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.people_alt_outlined,
-                    color: primaryColor,
-                    size: 28,
+                Container(width: 1, height: 40, color: Colors.white24),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "₹$_expPending",
+                      style: GoogleFonts.poppins(
+                        color: const Color(0xFFFFCC80),
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      "Pending",
+                      style: GoogleFonts.poppins(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                InkWell(
+                  onTap: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ExpenseScreen()),
+                    );
+                    _loadInitialData(); // Refresh on return
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.add, color: Colors.indigo),
                   ),
                 ),
               ],
             ),
-          ),
+          ],
         ),
-        const SizedBox(width: 16),
-        InkWell(
-          onTap: _loadInitialData,
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
-            height: 90,
-            width: 60,
-            decoration: BoxDecoration(
-              color: Colors.purple.shade50,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.purple.shade100),
-            ),
-            child: const Icon(Icons.refresh, color: Color(0xFF4A148C)),
-          ),
-        ),
-      ],
+      ),
     );
   }
 
@@ -598,159 +622,258 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          "Quick Actions",
-          style: GoogleFonts.poppins(
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
+        _buildExpenseSummaryCard(),
+        const SizedBox(height: 30),
+
+        _buildSectionTitle("Field Operations"),
+        _buildMenuGrid([
+          _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
+            if (_isCheckedIn)
+              _navigateTo(const DoctorListScreen());
+            else
+              _showSnack("Please Check In first!");
+          }),
+          _MenuAction(
+            Icons.map,
+            "Tour Plan",
+            Colors.teal,
+            () => _navigateTo(const TourPlanScreen()),
           ),
-        ),
-        const SizedBox(height: 16),
-        GridView.count(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          crossAxisCount: 4,
-          childAspectRatio: 0.75,
-          mainAxisSpacing: 20,
-          crossAxisSpacing: 16,
-          children: [
-            // --- ROW 1: DAILY CORE TASKS ---
-            _buildActionItem(
-              Icons.medical_services,
-              "Dr. Call",
-              Colors.purple,
-              () {
-                if (_isCheckedIn) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const DoctorListScreen()),
-                  );
-                } else {
-                  _showSnack("Check In first!");
-                }
-              },
-            ),
-            _buildActionItem(Icons.map, "Tour Plan", Colors.teal, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TourPlanScreen()),
-              );
-            }),
-            _buildActionItem(Icons.assignment, "Report", Colors.orange, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DailyReportScreen()),
-              );
-            }),
-            _buildActionItem(
-              Icons.business_center,
-              "NFW Report",
-              Colors.brown,
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const NfwReportScreen()),
-                );
-              },
-            ),
+          _MenuAction(
+            Icons.assignment_turned_in,
+            "Daily Report",
+            Colors.orange,
+            () => _navigateTo(const DailyReportScreen()),
+          ),
+          _MenuAction(
+            Icons.business_center,
+            "NFW Report",
+            Colors.brown,
+            () => _navigateTo(const NfwReportScreen()),
+          ),
+        ]),
+        const SizedBox(height: 24),
 
-            // --- ROW 2: HR / ADMIN ---
-            _buildActionItem(Icons.calendar_month, "Leave", Colors.red, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LeaveListScreen()),
-              );
-            }),
-            _buildActionItem(
-              Icons.receipt_long,
-              "Expense",
-              Colors.indigo,
-              () {},
-            ),
+        _buildSectionTitle("HR & Management"),
+        _buildMenuGrid([
+          _MenuAction(
+            Icons.receipt_long,
+            "Expense",
+            Colors.indigo,
+            () => _navigateTo(const ExpenseSummaryScreen()),
+          ),
+          _MenuAction(
+            Icons.calendar_month,
+            "Leave",
+            Colors.redAccent,
+            () => _navigateTo(const LeaveListScreen()),
+          ),
+          _MenuAction(
+            Icons.groups,
+            "Team View",
+            Colors.blue,
+            () => _navigateTo(const TeamTerritoryScreen()),
+          ),
+          _MenuAction(
+            Icons.approval,
+            "Approvals",
+            Colors.green,
+            () => _navigateTo(const ManagerJointWorkScreen()),
+          ),
+        ]),
+        const SizedBox(height: 24),
 
-            // --- ROW 3: MANAGERIAL ---
-            _buildActionItem(Icons.approval, "Approvals", Colors.teal, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const ManagerJointWorkScreen(),
-                ),
-              );
-            }),
-            _buildActionItem(Icons.groups, "Team Report", Colors.indigo, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TeamTerritoryScreen()),
-              );
-            }),
-
-            // --- ROW 4: MASTER DATA ---
-            _buildActionItem(Icons.person_add_alt_1, "Add Dr", Colors.blue, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const AddDoctorScreen()),
-              );
-            }),
-
-            // --- ROW 5: UTILITIES ---
-            _buildActionItem(Icons.support_agent, "Support", Colors.cyan, () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SupportScreen()),
-              );
-            }),
-            // --- SETTINGS (Now opens Bottom Sheet with Change Password) ---
-            _buildActionItem(Icons.settings, "Settings", Colors.grey, () {
-              _showSettingsSheet();
-            }),
-          ],
-        ),
+        _buildSectionTitle("Utilities"),
+        _buildMenuGrid([
+          _MenuAction(
+            Icons.person_add_alt_1,
+            "Add Doctor",
+            Colors.deepPurple,
+            () => _navigateTo(const AddDoctorScreen()),
+          ),
+          _MenuAction(
+            Icons.support_agent,
+            "Support",
+            Colors.cyan,
+            () => _navigateTo(const SupportScreen()),
+          ),
+          _MenuAction(
+            Icons.settings,
+            "Settings",
+            Colors.blueGrey,
+            _showSettingsSheet,
+          ),
+        ]),
+        const SizedBox(height: 40),
       ],
     );
   }
 
-  Widget _buildActionItem(
-    IconData icon,
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Container(
-            height: 56,
-            width: 56,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(
+        title,
+        style: GoogleFonts.poppins(
+          fontSize: 16,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuGrid(List<_MenuAction> actions) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4,
+        childAspectRatio: 0.8,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: actions.length,
+      itemBuilder: (context, index) {
+        final action = actions[index];
+        return Column(
+          children: [
+            InkWell(
+              onTap: action.onTap,
               borderRadius: BorderRadius.circular(18),
+              child: Container(
+                height: 56,
+                width: 56,
+                decoration: BoxDecoration(
+                  color: action.color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Icon(action.icon, color: action.color, size: 26),
+              ),
             ),
-            child: Icon(icon, color: color, size: 26),
+            const SizedBox(height: 8),
+            Text(
+              action.label,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.poppins(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildDrawer(User? user) {
+    return Drawer(
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [primaryColor, accentColor]),
+            ),
+            accountName: Text(
+              user?.firstName ?? "User",
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+            accountEmail: Text(
+              user?.division ?? "Employee",
+              style: GoogleFonts.poppins(),
+            ),
+            currentAccountPicture: CircleAvatar(
+              backgroundColor: Colors.white,
+              child: Text(
+                (user?.firstName ?? "U")[0],
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: primaryColor,
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 10),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.poppins(
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: Colors.black87,
-            ),
+          ListTile(
+            leading: const Icon(Icons.install_mobile),
+            title: const Text("Install App"),
+            onTap: _showInstallInstructions,
+          ),
+          ListTile(
+            leading: const Icon(Icons.support_agent),
+            title: const Text("Help & Support"),
+            onTap: () => _navigateTo(const SupportScreen()),
+          ),
+          ListTile(
+            leading: const Icon(Icons.lock_reset),
+            title: const Text("Change Password"),
+            onTap: () =>
+                _navigateTo(const ChangePasswordScreen(isForced: false)),
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: const Text("Logout", style: TextStyle(color: Colors.red)),
+            onTap: _handleLogout,
           ),
         ],
       ),
     );
   }
 
-  void _showSnack(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+  void _navigateTo(Widget screen) =>
+      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  void _showSnack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+  );
+  void _showSettingsSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Wrap(
+        children: [
+          ListTile(
+            leading: const Icon(Icons.lock_reset),
+            title: const Text("Change Password"),
+            onTap: () {
+              Navigator.pop(ctx);
+              _navigateTo(const ChangePasswordScreen(isForced: false));
+            },
+          ),
+        ],
+      ),
     );
   }
+
+  void _showInstallInstructions() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Install App"),
+        content: const Text(
+          "1. Tap Share/Menu.\n2. Select 'Add to Home Screen'.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuAction {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  _MenuAction(this.icon, this.label, this.color, this.onTap);
 }
