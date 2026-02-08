@@ -28,31 +28,29 @@ class ChatService {
             .transform(const LineSplitter());
 
         await for (final line in stream) {
-          // Check if the line contains data
-          if (line.startsWith('data:')) {
-            final jsonString = line
-                .substring(5)
-                .trim(); // Remove 'data:' prefix
+          // 1. Ignore "ping" lines which start with ": ping"
+          if (line.trim().startsWith(':')) continue;
 
-            // Skip empty data or keep-alive messages
+          // 2. Process data lines
+          if (line.startsWith('data:')) {
+            final jsonString = line.substring(5).trim();
             if (jsonString.isEmpty) continue;
 
             try {
               final Map<String, dynamic> data = jsonDecode(jsonString);
 
-              // Extract the actual content text
+              // 3. Extract content
               if (data.containsKey('content') && data['content'] != null) {
                 yield data['content'].toString();
               }
 
-              // Handle stream completion signal if your API sends it
+              // 4. Handle Close Event
               if (data.containsKey('message') &&
                   data['message'] == 'Stream completed') {
-                break;
+                break; // Stop listening
               }
             } catch (e) {
-              // Ignore parsing errors for non-JSON lines (like simple keep-alives)
-              print("Error parsing line: $e");
+              // Ignore parse errors for keep-alive packets
             }
           }
         }
