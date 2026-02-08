@@ -9,6 +9,7 @@ import 'package:zforce/presentation/chat/chat_screen.dart';
 import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
+import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
@@ -661,6 +662,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "NFW Report",
             Colors.brown,
             () => _navigateTo(const NfwReportScreen()),
+          ),
+          _MenuAction(
+            Icons.business_center,
+            "Sample Distribution",
+            Colors.cyan,
+            () => _navigateTo(const SampleDistributionScreen()),
           ),
         ]),
         const SizedBox(height: 24),

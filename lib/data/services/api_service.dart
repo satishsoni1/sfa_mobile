@@ -701,4 +701,22 @@ class ApiService {
       throw Exception("Failed to load summary");
     }
   }
+
+  // 3. Update Plan Status (The missing method causing your error)
+  Future<void> updatePlanStatus(int planId, String status) async {
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    /* REAL API IMPLEMENTATION:
+    final response = await http.patch(
+      Uri.parse('$baseUrl/tour-plans/$planId/status'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'status': status}),
+    );
+    
+    if (response.statusCode != 200) {
+      throw Exception('Failed to update status');
+    }
+    */
+    print("Plan $planId status updated to $status");
+  }
 }
