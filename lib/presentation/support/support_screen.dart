@@ -9,7 +9,7 @@ class SupportScreen extends StatelessWidget {
   // --- CONFIGURATION ---
   final String _supportPhone = "+919321962944";
   final String _supportEmail = "gstsupport@globalspace.in";
-  final String _supportUrl = "https://globalspace.in/support-ticket";
+  final String _supportUrl = "https://crm.globalspace.in/forms/ticket?styled=1";
 
   Future<void> _launchAction(BuildContext context, Uri uri) async {
     try {
@@ -116,18 +116,18 @@ class SupportScreen extends StatelessWidget {
                   ),
                 ),
 
-                // const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-                // // 3. SUBMIT TICKET (WEB)
-                // _buildContactCard(
-                //   icon: Icons.assignment_outlined,
-                //   title: "Submit an Issue",
-                //   subtitle:
-                //       "Fill out a form regarding bugs or technical issues",
-                //   actionText: "Open Form",
-                //   color: const Color(0xFF4A148C),
-                //   onTap: () => _launchAction(context, Uri.parse(_supportUrl)),
-                // ),
+                // 3. SUBMIT TICKET (WEB)
+                _buildContactCard(
+                  icon: Icons.assignment_outlined,
+                  title: "Submit an Issue",
+                  subtitle:
+                      "Fill out a form regarding bugs or technical issues",
+                  actionText: "Open Form",
+                  color: const Color(0xFF4A148C),
+                  onTap: () => _launchAction(context, Uri.parse(_supportUrl)),
+                ),
                 const SizedBox(height: 40),
 
                 // Footer Info

@@ -60,7 +60,7 @@ class ReportProvider with ChangeNotifier {
 
   /// Loads the doctor list (usually cached or fetched once)
   Future<void> fetchDoctors() async {
-    if (_doctors.isNotEmpty) return; // Don't refetch if we have data
+    //if (_doctors.isNotEmpty) return; // Don't refetch if we have data
     try {
       final List<dynamic> doctorData = await _apiService.getDoctors();
       _doctors = doctorData.map((json) => Doctor.fromJson(json)).toList();

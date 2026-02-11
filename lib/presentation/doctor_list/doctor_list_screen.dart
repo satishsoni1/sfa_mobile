@@ -38,21 +38,16 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
   Future<void> _loadInitialData() async {
     final provider = Provider.of<ReportProvider>(context, listen: false);
 
-    // Load data if empty
-    if (provider.doctors.isEmpty) {
-      await provider.fetchDoctors();
-    }
+    // 1. ALWAYS FETCH FRESH DATA (No isEmpty check)
+    await provider.fetchDoctors();
     await provider.fetchTodayData();
 
     try {
       final api = ApiService();
-      // Fetch plans for the current month/date
       final plans = await api.getTourPlans(DateTime.now());
 
-      // Find plan specifically for Today
       final todayPlan = plans.firstWhere(
         (p) => DateUtils.isSameDay(p.date, DateTime.now()),
-        // FIX: Provide all required fields for the dummy fallback
         orElse: () => TourPlan(
           id: -1,
           date: DateTime.now(),
@@ -82,14 +77,12 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
     final searchResults = _searchQuery.isEmpty
         ? allDoctors
         : allDoctors
-              .where(
-                (doc) =>
-                    doc.name.toLowerCase().contains(
-                      _searchQuery.toLowerCase(),
-                    ) ||
-                    doc.area.toLowerCase().contains(_searchQuery.toLowerCase()),
-              )
-              .toList();
+            .where(
+              (doc) =>
+                  doc.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                  doc.area.toLowerCase().contains(_searchQuery.toLowerCase()),
+            )
+            .toList();
 
     // Separate Planned vs Unplanned
     final plannedSet = _todayPlannedIds.map((e) => e.toString()).toSet();
@@ -102,7 +95,6 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
         .where((d) => !plannedSet.contains(d.id.toString()))
         .toList();
 
-    // Calculate Progress
     int visitedCount = plannedDoctors
         .where(
           (doc) => reportProvider.reports.any((r) => r.doctorName == doc.name),
@@ -133,16 +125,25 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person_add_alt_1),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const AddDoctorScreen()),
-            ),
+            // --- REFRESH LOGIC FOR ADDING NEW DOCTOR ---
+            onPressed: () async {
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AddDoctorScreen()),
+              );
+
+              // If AddScreen returned 'true' (meaning saved successfully)
+              if (result == true && mounted) {
+                Provider.of<ReportProvider>(context, listen: false)
+                    .fetchDoctors();
+              }
+            },
           ),
         ],
       ),
       body: Column(
         children: [
-          // --- HEADER SECTION ---
+          // --- HEADER ---
           Container(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             decoration: const BoxDecoration(
@@ -183,14 +184,13 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
             ),
           ),
 
-          // --- LIST SECTION ---
+          // --- LIST ---
           Expanded(
             child: reportProvider.isLoading || _isLoadingPlan
                 ? const Center(child: CircularProgressIndicator())
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
                     children: [
-                      // PLANNED VISITS
                       if (plannedDoctors.isNotEmpty) ...[
                         _buildSectionHeader(
                           "PLANNED VISITS",
@@ -203,7 +203,6 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                         const SizedBox(height: 24),
                       ],
 
-                      // OTHER DOCTORS
                       _buildSectionHeader(
                         plannedDoctors.isEmpty
                             ? "ALL DOCTORS"
@@ -309,7 +308,6 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
   }
 
   Widget _buildDoctorCard(dynamic doc, {required bool isPlanned}) {
-    // Check if reported using string conversion for safety
     final isReported = Provider.of<ReportProvider>(
       context,
       listen: false,
@@ -335,13 +333,14 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
         child: IntrinsicHeight(
           child: Row(
             children: [
-              // Left Accent Strip
+              // 1. Left Accent Strip
               if (isPlanned)
                 Container(
                   width: 4,
                   color: isReported ? Colors.green : const Color(0xFFCE93D8),
                 ),
 
+              // 2. MAIN CONTENT
               Expanded(
                 child: InkWell(
                   onTap: () {
@@ -365,7 +364,6 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                     padding: const EdgeInsets.all(12),
                     child: Row(
                       children: [
-                        // AVATAR
                         Stack(
                           children: [
                             CircleAvatar(
@@ -373,8 +371,8 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                               backgroundColor: isReported
                                   ? Colors.green.shade50
                                   : (isPlanned
-                                        ? Colors.purple.shade50
-                                        : Colors.grey.shade100),
+                                      ? Colors.purple.shade50
+                                      : Colors.grey.shade100),
                               child: isReported
                                   ? const Icon(Icons.check, color: Colors.green)
                                   : Text(
@@ -406,8 +404,6 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                           ],
                         ),
                         const SizedBox(width: 14),
-
-                        // DETAILS
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -445,29 +441,38 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                                 ],
                               ),
                               const SizedBox(height: 8),
-
-                              // SPECIALIZATION & TAGS
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 4,
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  if (doc.specialization != null)
+                                  if (doc.specialization.isNotEmpty)
                                     Text(
-                                      doc.specialization!,
+                                      doc.specialization,
                                       style: GoogleFonts.poppins(
                                         fontSize: 11,
                                         color: const Color(0xFF4A148C),
                                         fontWeight: FontWeight.w500,
                                       ),
                                     ),
-
-                                  // FIX: Use 'type' field from new model
-                                  if (doc.type != null && doc.type!.isNotEmpty)
+                                  if (doc.territoryType != null &&
+                                      doc.territoryType!.isNotEmpty)
                                     _buildTag(
-                                      doc.type!,
+                                      doc.territoryType!,
                                       const Color(0xFFE3F2FD),
                                       const Color(0xFF1565C0),
+                                    ),
+                                  if (doc.isKbl)
+                                    _buildTag(
+                                      "KBL",
+                                      const Color(0xFFF3E5F5),
+                                      const Color(0xFF7B1FA2),
+                                    ),
+                                  if (doc.isFrd)
+                                    _buildTag(
+                                      "FRD",
+                                      const Color(0xFFFFF3E0),
+                                      const Color(0xFFE65100),
                                     ),
                                 ],
                               ),
@@ -480,44 +485,71 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                 ),
               ),
 
-              // SEPARATOR & HISTORY BUTTON
+              // 3. SEPARATOR
               Container(
                 width: 1,
-                color: Colors.grey.shade100,
-                margin: const EdgeInsets.symmetric(vertical: 10),
+                color: Colors.grey.shade200,
+                margin: const EdgeInsets.symmetric(vertical: 8),
               ),
-              InkWell(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => DoctorHistoryScreen(
-                        doctorId: doc.id.toString(),
-                        doctorName: doc.name,
-                      ),
-                    ),
-                  );
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.history,
-                        color: Colors.blueGrey.shade300,
-                        size: 22,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "Hist",
-                        style: GoogleFonts.poppins(
-                          fontSize: 10,
-                          color: Colors.blueGrey.shade300,
+
+              // 4. ACTIONS COLUMN
+              SizedBox(
+                width: 50,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    // --- REFRESH LOGIC FOR EDITING ---
+                    InkWell(
+                      onTap: () async {
+                        final result = await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => AddDoctorScreen(doctorToEdit: doc),
+                          ),
+                        );
+
+                        // If EditScreen returned 'true' (saved)
+                        if (result == true && mounted) {
+                          Provider.of<ReportProvider>(context, listen: false)
+                              .fetchDoctors();
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Icon(
+                          Icons.edit_outlined,
+                          size: 20,
+                          color: Colors.blue.shade600,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                    Container(
+                      height: 1,
+                      width: 20,
+                      color: Colors.grey.shade100,
+                    ),
+                    InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => DoctorHistoryScreen(
+                              doctorId: doc.id.toString(),
+                              doctorName: doc.name,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Icon(
+                          Icons.history,
+                          size: 20,
+                          color: Colors.orange.shade600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],

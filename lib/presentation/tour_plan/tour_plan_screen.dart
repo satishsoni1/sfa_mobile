@@ -7,6 +7,7 @@ import '../../data/services/api_service.dart';
 import '../../data/models/tour_plan.dart';
 import '../../data/models/doctor.dart';
 import 'create_tour_plan_screen.dart';
+import '../doctor_list/add_doctor_screen.dart';
 
 class TourPlanScreen extends StatefulWidget {
   const TourPlanScreen({super.key});
@@ -16,51 +17,66 @@ class TourPlanScreen extends StatefulWidget {
 }
 
 class _TourPlanScreenState extends State<TourPlanScreen> {
+  // State
   DateTime _selectedDate = DateTime.now();
   List<TourPlan> _monthlyPlans = [];
-  bool _isPlansLoading = false;
-  bool _isDoctorsLoading = true;
+  List<dynamic> _subordinates = [];
+  dynamic _selectedSubordinate; // Null = Myself
+
+  bool _isLoading = false;
   final ApiService _api = ApiService();
 
-  // Professional Color Palette
-  final Color _primaryColor = const Color(0xFF5E35B1); // Deep Purple
-  final Color _bgColor = const Color(0xFFF5F7FA); // Light Blue-Grey
-  final Color _cardColor = Colors.white;
+  // UX Colors
+  final Color _primaryColor = const Color(0xFF4A148C);
+  final Color _accentColor = const Color(0xFF7B1FA2);
+  final Color _bgColor = const Color(0xFFF5F7FA);
 
   @override
   void initState() {
     super.initState();
-    _fetchPlans();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkAndLoadDoctors();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+    try {
+      final subs = await _api.getSubordinates();
+      await _fetchPlans();
+      
+      // Always fetch latest doctor list for "Myself" to ensure cache is fresh
+      if (mounted) {
+        final provider = Provider.of<ReportProvider>(context, listen: false);
+        await provider.fetchDoctors();
+      }
+
+      if (mounted) setState(() => _subordinates = subs);
+    } catch (e) {
+      debugPrint("Error loading data: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchPlans() async {
+    setState(() => _isLoading = true);
+    try {
+      // If viewing subordinate, pass their ID. Else pass null (for Self).
+      int? targetUserId = _selectedSubordinate?['id'];
+      final plans = await _api.getTourPlans(_selectedDate, userId: targetUserId);
+      if (mounted) setState(() => _monthlyPlans = plans);
+    } catch (e) {
+      debugPrint("Fetch Error: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _onSubordinateChanged(dynamic sub) {
+    setState(() {
+      _selectedSubordinate = sub;
+      _monthlyPlans = []; // Clear view immediately
     });
-  }
-
-  Future<void> _checkAndLoadDoctors() async {
-    final reportProvider = Provider.of<ReportProvider>(context, listen: false);
-    if (reportProvider.doctors.isNotEmpty) {
-      if (mounted) setState(() => _isDoctorsLoading = false);
-      return;
-    }
-    try {
-      await reportProvider.fetchDoctors();
-    } catch (e) {
-      debugPrint("Error loading doctors: $e");
-    } finally {
-      if (mounted) setState(() => _isDoctorsLoading = false);
-    }
-  }
-
-  void _fetchPlans() async {
-    setState(() => _isPlansLoading = true);
-    try {
-      final plans = await _api.getTourPlans(_selectedDate);
-      setState(() => _monthlyPlans = plans);
-    } catch (e) {
-      // Handle error
-    } finally {
-      setState(() => _isPlansLoading = false);
-    }
+    _fetchPlans();
   }
 
   TourPlan? get _currentPlan {
@@ -73,199 +89,149 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
     }
   }
 
-  // --- SUBMIT WORKFLOW ---
-  void _submitForApproval() async {
+  Future<void> _submitForApproval() async {
     if (_currentPlan == null) return;
 
     bool? confirm = await showDialog(
       context: context,
-      builder: (c) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          "Submit Plan?",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        content: const Text(
-          "Once submitted, the plan will be locked for approval. You cannot edit it afterwards.",
-        ),
+      builder: (ctx) => AlertDialog(
+        title: const Text("Confirm Submission"),
+        content: const Text("Once submitted, the plan will be locked for approval."),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: Text("Cancel", style: TextStyle(color: Colors.grey[600])),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text("Cancel")),
           ElevatedButton(
-            onPressed: () => Navigator.pop(c, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primaryColor,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: _primaryColor),
             child: const Text("Submit", style: TextStyle(color: Colors.white)),
-          ),
+          )
         ],
       ),
     );
 
-    if (confirm == true) {
-      setState(() => _isPlansLoading = true);
-      try {
-        await _api.updatePlanStatus(_currentPlan!.id, 'Pending');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Plan submitted successfully!"),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-        _fetchPlans();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _isPlansLoading = false);
-      }
+    if (confirm != true) return;
+    
+    setState(() => _isLoading = true);
+    try {
+      await _api.updatePlanStatus(_currentPlan!.id, 'Pending'); // Ensure your API supports this
+      await _fetchPlans(); 
+      if(mounted) _showSnack("Plan submitted successfully!", Colors.green);
+    } catch (e) {
+      if(mounted) _showSnack("Failed to submit: $e", Colors.red);
+      setState(() => _isLoading = false);
     }
   }
 
-  void _deleteCurrentPlan() async {
-    if (_currentPlan?.status != 'Draft' && _currentPlan?.status != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Locked plans cannot be deleted."),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-
-    bool? confirm = await showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          "Delete Plan",
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        content: const Text("Are you sure you want to delete this plan?"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c, false),
-            child: const Text("No"),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text("Yes", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      setState(() => _isPlansLoading = true);
-      await _api.deletePlan(_selectedDate);
-      _fetchPlans();
-    }
-  }
-
-  void _handleAction(String action) {
+  void _showSnack(String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("$action functionality coming soon")),
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final doctors = Provider.of<ReportProvider>(context).doctors;
+    final totalDoctorsCount = Provider.of<ReportProvider>(context).doctors.length;
     final plan = _currentPlan;
-    final bool isLoading = _isPlansLoading || _isDoctorsLoading;
-    final bool isLocked = plan != null && (plan.status ?? 'Draft') != 'Draft';
+
+    // --- LOCK LOGIC ---
+    // 1. View Only: If viewing a Subordinate
+    // 2. Locked: If Plan status is Pending, Approved, or Rejected
+    bool isViewingSubordinate = _selectedSubordinate != null;
+    bool isStatusLocked = false;
+    
+    if (plan != null && plan.status != null) {
+      final s = plan.status!.trim().toLowerCase();
+      if (s == 'pending' || s == 'approved' || s == 'rejected') isStatusLocked = true;
+    }
+
+    bool isReadOnly = isViewingSubordinate || isStatusLocked;
 
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: AppBar(
-        title: Text(
-          "Tour Planner",
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
-        backgroundColor: Colors.white,
+        backgroundColor: _primaryColor,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black87),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.calendar_month_outlined, color: _primaryColor),
-            onPressed: () async {
-              final d = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2023),
-                lastDate: DateTime(2030),
-                builder: (context, child) {
-                  return Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: ColorScheme.light(primary: _primaryColor),
-                    ),
-                    child: child!,
-                  );
-                },
-              );
-              if (d != null) {
-                setState(() => _selectedDate = d);
-                _fetchPlans();
-              }
-            },
-          ),
-        ],
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Tour Planner", style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 18)),
+            Text(
+              isViewingSubordinate ? "Viewing: ${_selectedSubordinate['name']}" : "Planning for: Myself",
+              style: GoogleFonts.poppins(fontSize: 12, color: Colors.white70),
+            )
+          ],
+        ),
       ),
+      
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: isLocked ? Colors.blueGrey : _primaryColor,
+        backgroundColor: isReadOnly ? Colors.grey : _primaryColor,
         icon: Icon(
-          isLocked ? Icons.visibility : Icons.edit,
-          color: Colors.white,
+          isViewingSubordinate ? Icons.visibility : (isStatusLocked ? Icons.lock : (plan == null ? Icons.add : Icons.edit)), 
+          color: Colors.white
         ),
         label: Text(
-          isLocked ? "View" : (plan == null ? "Create Plan" : "Edit"),
-          style: GoogleFonts.poppins(
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
+          isViewingSubordinate 
+              ? "View Plan" 
+              : (isStatusLocked ? "Locked" : (plan == null ? "Create Plan" : "Edit Plan")),
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         onPressed: () async {
-          await Navigator.push(
+          // Navigate to Create/View Screen
+          final result = await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) => CreateTourPlanScreen(
                 initialDate: _selectedDate,
                 existingPlan: plan,
-                isReadOnly: isLocked,
+                isReadOnly: isReadOnly, 
+                // Pass subordinate info to load correct context
+                targetUserId: _selectedSubordinate?['id'],
+                targetUserName: _selectedSubordinate?['name'] ?? "Myself",
               ),
             ),
           );
-          _fetchPlans();
+          
+          // Refresh list if save occurred
+          if (result == true) {
+            _fetchPlans();
+          }
         },
       ),
+
       body: Column(
         children: [
-          // 1. STATS HEADER
-          _buildSummarySection(),
+          // 1. SUBORDINATE DROPDOWN
+          if (_subordinates.isNotEmpty)
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: DropdownButtonFormField<dynamic>(
+                decoration: const InputDecoration(
+                  labelText: "Select View",
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                value: _selectedSubordinate,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text("Myself (Edit Mode)")),
+                  ..._subordinates.map((sub) => DropdownMenuItem(value: sub, child: Text("${sub['name']} (View Only)"))),
+                ],
+                onChanged: _onSubordinateChanged,
+              ),
+            ),
 
-          // 2. CALENDAR STRIP
+          // 2. SUMMARY DASHBOARD
+          _buildMonthlySummary(totalDoctorsCount),
+
+          // 3. CALENDAR STRIP
           _buildDateStrip(),
 
-          // 3. MAIN CONTENT AREA
+          // 4. PLAN DETAILS
           Expanded(
-            child: isLoading
+            child: _isLoading
                 ? Center(child: CircularProgressIndicator(color: _primaryColor))
                 : plan == null
-                ? _buildEmptyState()
-                : _buildPlanDetails(plan, doctors, isLocked),
+                    ? _buildEmptyState()
+                    : _buildPlanDetails(plan, isReadOnly),
           ),
         ],
       ),
@@ -274,110 +240,72 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
 
   // --- WIDGETS ---
 
-  Widget _buildSummarySection() {
-    int draft = _monthlyPlans.where((p) => p.status == 'Draft').length;
-    int pending = _monthlyPlans.where((p) => p.status == 'Pending').length;
-    int approved = _monthlyPlans.where((p) => p.status == 'Approved').length;
+  Widget _buildMonthlySummary(int totalDocs) {
+    Set<int> uniqueDocs = {};
+    int plannedDays = 0;
+    
+    for (var p in _monthlyPlans) {
+      if (p.doctorIds.isNotEmpty) {
+        uniqueDocs.addAll(p.doctorIds);
+        plannedDays++;
+      }
+    }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-      color: Colors.white,
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: [_primaryColor, _accentColor]),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: _primaryColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 5))],
+      ),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildStatCard(
-            "Draft",
-            draft,
-            Colors.grey.shade100,
-            Colors.grey.shade700,
-            Icons.edit_note,
-          ),
-          const SizedBox(width: 12),
-          _buildStatCard(
-            "Pending",
-            pending,
-            const Color(0xFFFFF3E0),
-            Colors.orange.shade800,
-            Icons.hourglass_top,
-          ),
-          const SizedBox(width: 12),
-          _buildStatCard(
-            "Approved",
-            approved,
-            const Color(0xFFE8F5E9),
-            Colors.green.shade800,
-            Icons.check_circle_outline,
-          ),
+          _buildStatItem("Planned\nDays", "$plannedDays", Icons.calendar_today),
+          Container(width: 1, height: 40, color: Colors.white24),
+          _buildStatItem("Unique\nDoctors", "${uniqueDocs.length}", Icons.pie_chart),
+          Container(width: 1, height: 40, color: Colors.white24),
+          _buildStatItem("Total\nVisits", "${_monthlyPlans.fold(0, (sum, p) => sum + p.doctorIds.length)}", Icons.directions_walk),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(
-    String label,
-    int count,
-    Color bg,
-    Color textCol,
-    IconData icon,
-  ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, size: 20, color: textCol),
-            const SizedBox(height: 4),
-            Text(
-              "$count",
-              style: GoogleFonts.poppins(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: textCol,
-              ),
-            ),
-            Text(
-              label,
-              style: GoogleFonts.poppins(fontSize: 11, color: textCol),
-            ),
-          ],
-        ),
-      ),
+  Widget _buildStatItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: Colors.white70, size: 20),
+        const SizedBox(height: 6),
+        Text(value, style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+        Text(label, textAlign: TextAlign.center, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 10, height: 1.2)),
+      ],
     );
   }
 
   Widget _buildDateStrip() {
     return Container(
       height: 90,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-      ),
+      color: Colors.white,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         itemCount: DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day,
         itemBuilder: (context, index) {
-          final date = DateTime(
-            _selectedDate.year,
-            _selectedDate.month,
-            index + 1,
-          );
+          final date = DateTime(_selectedDate.year, _selectedDate.month, index + 1);
           final isSelected = DateUtils.isSameDay(date, _selectedDate);
-
-          final dayPlan = _monthlyPlans.firstWhere(
+          
+          final plan = _monthlyPlans.firstWhere(
             (p) => DateUtils.isSameDay(p.date, date),
-            orElse: () =>
-                TourPlan(id: -1, date: date, doctorIds: [], status: 'None'),
+            orElse: () => TourPlan(id: -1, date: date, doctorIds: [], status: null),
           );
 
-          Color statusColor = Colors.transparent;
-          if (dayPlan.status == 'Draft') statusColor = Colors.grey;
-          if (dayPlan.status == 'Pending') statusColor = Colors.orange;
-          if (dayPlan.status == 'Approved') statusColor = Colors.green;
-          if (dayPlan.status == 'Rejected') statusColor = Colors.red;
+          Color dotColor = Colors.transparent;
+          String s = (plan.status ?? '').toLowerCase();
+          if (s == 'draft') dotColor = Colors.grey;
+          if (s == 'pending') dotColor = Colors.orange;
+          if (s == 'approved') dotColor = Colors.green;
+          if (s == 'rejected') dotColor = Colors.red;
 
           return InkWell(
             onTap: () => setState(() => _selectedDate = date),
@@ -386,42 +314,18 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
               width: 55,
               margin: const EdgeInsets.symmetric(horizontal: 4),
               decoration: BoxDecoration(
-                color: isSelected ? _primaryColor : Colors.transparent,
+                color: isSelected ? _primaryColor : Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: isSelected
-                    ? null
-                    : Border.all(color: Colors.grey.shade200),
+                border: isSelected ? null : Border.all(color: Colors.grey.shade200),
+                boxShadow: isSelected ? [BoxShadow(color: _primaryColor.withOpacity(0.3), blurRadius: 5)] : [],
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    DateFormat('EEE').format(date).toUpperCase(),
-                    style: GoogleFonts.poppins(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? Colors.white70 : Colors.grey,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    DateFormat('dd').format(date),
-                    style: GoogleFonts.poppins(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: isSelected ? Colors.white : Colors.black87,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  if (dayPlan.doctorIds.isNotEmpty)
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: isSelected ? Colors.white : statusColor,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
+                  Text(DateFormat('EEE').format(date).toUpperCase(), style: TextStyle(fontSize: 10, color: isSelected ? Colors.white70 : Colors.grey)),
+                  Text(DateFormat('dd').format(date), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.black87)),
+                  if (plan.status != null)
+                    Container(width: 6, height: 6, margin: const EdgeInsets.only(top: 4), decoration: BoxDecoration(color: isSelected ? Colors.white : dotColor, shape: BoxShape.circle)),
                 ],
               ),
             ),
@@ -436,342 +340,163 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.event_note_outlined,
-            size: 80,
-            color: Colors.grey.shade300,
-          ),
+          Icon(Icons.edit_calendar, size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          Text(
-            "No Plan for ${DateFormat('dd MMM').format(_selectedDate)}",
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            "Tap + to create a new tour plan",
-            style: GoogleFonts.poppins(
-              fontSize: 13,
-              color: Colors.grey.shade400,
-            ),
-          ),
+          Text("No Plan Set", style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.grey.shade600)),
         ],
       ),
     );
   }
 
-  Widget _buildPlanDetails(TourPlan plan, List<Doctor> doctors, bool isLocked) {
-    return SingleChildScrollView(
+  Widget _buildPlanDetails(TourPlan plan, bool isReadOnly) {
+    return ListView(
       padding: const EdgeInsets.all(16),
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // STATUS BANNER
-          _buildStatusBanner(plan.status ?? 'Draft', isLocked),
-
-          const SizedBox(height: 16),
-
-          // ACTIONS (Only if Draft)
-          if (!isLocked)
-            Row(
-              children: [
-                Expanded(
-                  child: _buildActionCard(
-                    Icons.copy,
-                    "Copy",
-                    Colors.blue,
-                    () => _handleAction('copy'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildActionCard(
-                    Icons.delete_outline,
-                    "Delete",
-                    Colors.red,
-                    _deleteCurrentPlan,
-                  ),
-                ),
-              ],
-            ),
-
-          if (!isLocked) const SizedBox(height: 16),
-
-          // SUBMIT BUTTON (Only if Draft)
-          if (!isLocked)
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _submitForApproval,
-                icon: const Icon(
-                  Icons.send_rounded,
-                  size: 18,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  "SUBMIT FOR APPROVAL",
-                  style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange.shade700,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 2,
-                ),
-              ),
-            ),
-
-          const SizedBox(height: 24),
-
-          // DOCTOR LIST HEADER
-          Row(
-            children: [
-              Text(
-                "Planned Visits",
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black87,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _primaryColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  "${plan.doctorIds.length} Doctors",
-                  style: TextStyle(
-                    color: _primaryColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // LIST
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: plan.doctorIds.length,
-            itemBuilder: (context, index) {
-              final id = plan.doctorIds[index];
-              Doctor? doc;
-              try {
-                doc = doctors.firstWhere(
-                  (d) => d.id.toString() == id.toString(),
-                );
-              } catch (e) {
-                doc = null;
-              }
-
-              return _buildDoctorCard(doc, index, id);
-            },
-          ),
-          const SizedBox(height: 80), // Space for FAB
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusBanner(String status, bool isLocked) {
-    Color color = Colors.grey;
-    IconData icon = Icons.edit_note;
-
-    if (status == 'Pending') {
-      color = Colors.orange;
-      icon = Icons.hourglass_top;
-    }
-    if (status == 'Approved') {
-      color = Colors.green;
-      icon = Icons.check_circle;
-    }
-    if (status == 'Rejected') {
-      color = Colors.red;
-      icon = Icons.cancel;
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Plan Status",
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
-              ),
-              Text(
-                status.toUpperCase(),
-                style: GoogleFonts.poppins(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          const Spacer(),
-          if (isLocked)
-            Chip(
-              label: const Text(
-                "LOCKED",
-                style: TextStyle(fontSize: 10, color: Colors.white),
-              ),
-              backgroundColor: Colors.grey,
-              padding: EdgeInsets.zero,
-              visualDensity: VisualDensity.compact,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionCard(
-    IconData icon,
-    String label,
-    Color color,
-    VoidCallback onTap,
-  ) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.02),
-              blurRadius: 5,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Column(
+      children: [
+        // Status & Submit Button
+        Row(
           children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: GoogleFonts.poppins(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(plan.status).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _getStatusColor(plan.status).withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(_getStatusIcon(plan.status), size: 18, color: _getStatusColor(plan.status)),
+                    const SizedBox(width: 8),
+                    Text(
+                      plan.status ?? "Draft", 
+                      style: TextStyle(fontWeight: FontWeight.bold, color: _getStatusColor(plan.status)),
+                    ),
+                  ],
+                ),
               ),
             ),
+            const SizedBox(width: 12),
+            if (!isReadOnly)
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _submitForApproval,
+                  icon: const Icon(Icons.send, size: 16, color: Colors.white),
+                  label: const Text("Submit Plan", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
           ],
         ),
-      ),
+        
+        const SizedBox(height: 20),
+        Text("Planned Doctors (${plan.doctorIds.length})", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 16)),
+        const SizedBox(height: 10),
+
+        // List logic: Use embedded doctors if available, otherwise ID fallback
+        if (plan.doctors.isNotEmpty)
+          ...plan.doctors.map((doc) => _buildDoctorRow(doc, isReadOnly))
+        else
+          ...plan.doctorIds.map((id) => Card(child: ListTile(title: Text("Doctor ID: $id (Details Loading...)")))),
+        
+        const SizedBox(height: 80),
+      ],
     );
   }
 
-  Widget _buildDoctorCard(Doctor? doc, int index, int id) {
-    if (doc == null) {
-      return Container(
-        margin: const EdgeInsets.only(bottom: 10),
+  Widget _buildDoctorRow(Doctor doc, bool isReadOnly) {
+  // We use a high-contrast border and a slight background tint to highlight
+  // doctors that were returned as part of the employee's plan.
+  final bool isHighlighted = doc.isPlanned ?? false;
+
+  return Card(
+    elevation: isHighlighted ? 4 : 0,
+    margin: const EdgeInsets.only(bottom: 12),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(12),
+      side: BorderSide(
+        color: isHighlighted ? Colors.orange.shade700 : Colors.grey.shade200,
+        width: isHighlighted ? 2.0 : 1.0,
+      ),
+    ),
+    child: Container(
+      decoration: BoxDecoration(
+        color: isHighlighted ? Colors.orange.withOpacity(0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.red.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.red.shade100),
-        ),
         child: Row(
           children: [
-            const Icon(Icons.warning, color: Colors.red, size: 20),
+            CircleAvatar(
+              backgroundColor: isHighlighted ? Colors.orange : _primaryColor.withOpacity(0.1),
+              child: Icon(
+                isHighlighted ? Icons.star : Icons.person,
+                size: 18,
+                color: isHighlighted ? Colors.white : _primaryColor,
+              ),
+            ),
             const SizedBox(width: 12),
-            Text(
-              "Unknown Doctor (ID: $id)",
-              style: TextStyle(color: Colors.red.shade900),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        leading: CircleAvatar(
-          backgroundColor: _primaryColor.withOpacity(0.1),
-          child: Text(
-            "${index + 1}",
-            style: TextStyle(color: _primaryColor, fontWeight: FontWeight.bold),
-          ),
-        ),
-        title: Text(
-          doc.name,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15),
-        ),
-        subtitle: Row(
-          children: [
-            Icon(
-              Icons.location_on_outlined,
-              size: 14,
-              color: Colors.grey.shade500,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              doc.area,
-              style: GoogleFonts.poppins(
-                fontSize: 13,
-                color: Colors.grey.shade600,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        doc.name,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: isHighlighted ? Colors.orange.shade900 : Colors.black,
+                        ),
+                      ),
+                      if (isHighlighted) ...[
+                        const SizedBox(width: 8),
+                        _buildTag("PLANNED", Colors.orange, Colors.white),
+                      ]
+                    ],
+                  ),
+                  Text(
+                    "${doc.area} • ${doc.specialization}",
+                    style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 14,
-          color: Colors.grey.shade300,
-        ),
       ),
+    ),
+  );
+}
+
+  Widget _buildTag(String text, Color bg, Color textCol) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(4)),
+      child: Text(text, style: GoogleFonts.poppins(fontSize: 9, fontWeight: FontWeight.bold, color: textCol)),
     );
+  }
+
+  Color _getStatusColor(String? status) {
+    if (status == null) return Colors.grey;
+    String s = status.toLowerCase();
+    if (s == 'approved') return Colors.green;
+    if (s == 'pending') return Colors.orange;
+    if (s == 'rejected') return Colors.red;
+    return Colors.grey;
+  }
+
+  IconData _getStatusIcon(String? status) {
+    if (status == null) return Icons.edit_note;
+    String s = status.toLowerCase();
+    if (s == 'approved') return Icons.check_circle;
+    if (s == 'pending') return Icons.hourglass_top;
+    if (s == 'rejected') return Icons.cancel;
+    return Icons.edit_note;
   }
 }

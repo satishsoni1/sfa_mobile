@@ -226,6 +226,18 @@ class ApiService {
       throw Exception('Failed to add doctor');
     }
   }
+  Future<void> updateDoctor(Map<String, dynamic> doctorData) async {
+    // CHANGED TO DYNAMIC
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/doctors'),
+      headers: await _getHeaders(),
+      body: jsonEncode(doctorData),
+    );
+
+    if (response.statusCode != 201) {
+      throw Exception('Failed to add doctor');
+    }
+  }
 
   Future<List<dynamic>> getProducts() async {
     try {
@@ -421,10 +433,19 @@ class ApiService {
     }
   }
 
-  Future<List<TourPlan>> getTourPlans(DateTime month) async {
+  Future<List<TourPlan>> getTourPlans(DateTime month, {int? userId}) async {
     final monthStr = DateFormat('yyyy-MM').format(month);
+    
+    // Construct URL with month
+    String url = '$baseUrl/app/tour-plans?month=$monthStr';
+
+    // Append user_id if provided (Manager viewing Subordinate)
+    if (userId != null) {
+      url += '&user_id=$userId';
+    }
+
     final response = await http.get(
-      Uri.parse('$baseUrl/app/tour-plans?month=$monthStr'),
+      Uri.parse(url),
       headers: await _getHeaders(),
     );
 
@@ -436,15 +457,28 @@ class ApiService {
     }
   }
 
-  Future<void> saveTourPlan(DateTime date, List<int> doctorIds) async {
-    await http.post(
+  Future<void> saveTourPlan(DateTime date, List<int> doctorIds, {int? userId}) async {
+    // 1. Prepare base data
+    final Map<String, dynamic> bodyData = {
+      'plan_date': DateFormat('yyyy-MM-dd').format(date),
+      'doctor_ids': doctorIds,
+    };
+
+    // 2. Add userId if planning for a subordinate
+    if (userId != null) {
+      bodyData['user_id'] = userId;
+    }
+
+    // 3. Send Request
+    final response = await http.post(
       Uri.parse('$baseUrl/app/tour-plans'),
       headers: await _getHeaders(),
-      body: jsonEncode({
-        'plan_date': DateFormat('yyyy-MM-dd').format(date),
-        'doctor_ids': doctorIds,
-      }),
+      body: jsonEncode(bodyData),
     );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception('Failed to save tour plan: ${response.body}');
+    }
   }
 
   Future<void> duplicatePlan(

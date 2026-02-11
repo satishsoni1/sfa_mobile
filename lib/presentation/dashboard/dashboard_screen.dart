@@ -66,7 +66,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (timer) => _updateElapsed(),
     );
   }
-
   @override
   void dispose() {
     _timer?.cancel();
@@ -199,16 +198,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       key: _scaffoldKey,
       backgroundColor: bgColor,
       drawer: _buildDrawer(user),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ChatScreen()),
-          );
-        },
-        backgroundColor: const Color(0xFF4A148C),
-        child: const Icon(Icons.auto_awesome, color: Colors.white),
-      ),
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: () {
+      //     Navigator.push(
+      //       context,
+      //       MaterialPageRoute(builder: (_) => const ChatScreen()),
+      //     );
+      //   },
+      //   backgroundColor: const Color(0xFF4A148C),
+      //   child: const Icon(Icons.auto_awesome, color: Colors.white),
+      // ),
       body: RefreshIndicator(
         onRefresh: _loadInitialData,
         child: SingleChildScrollView(
@@ -634,7 +633,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildExpenseSummaryCard(),
+        // _buildExpenseSummaryCard(),
         const SizedBox(height: 30),
 
         _buildSectionTitle("Field Operations"),
@@ -663,23 +662,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.brown,
             () => _navigateTo(const NfwReportScreen()),
           ),
-          _MenuAction(
-            Icons.business_center,
-            "Sample Distribution",
-            Colors.cyan,
-            () => _navigateTo(const SampleDistributionScreen()),
-          ),
-        ]),
-        const SizedBox(height: 24),
+          // _MenuAction(
+          //   Icons.business_center,
+          //   "Sample Distribution",
+          //   Colors.cyan,
+          //   () => _navigateTo(const SampleDistributionScreen()),
+          // ),
+        // ]),
+        // const SizedBox(height: 24),
 
-        _buildSectionTitle("HR & Management"),
-        _buildMenuGrid([
-          _MenuAction(
-            Icons.receipt_long,
-            "Expense",
-            Colors.indigo,
-            () => _navigateTo(const ExpenseSummaryScreen()),
-          ),
+        // _buildSectionTitle("HR & Management"),
+        // _buildMenuGrid([
+        //   _MenuAction(
+        //     Icons.receipt_long,
+        //     "Expense",
+        //     Colors.indigo,
+        //     () => _navigateTo(const ExpenseSummaryScreen()),
+        //   ),
           _MenuAction(
             Icons.calendar_month,
             "Leave",

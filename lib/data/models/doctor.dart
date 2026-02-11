@@ -3,22 +3,26 @@ class Doctor {
   final String name;
   final String mobile;
   final String area;
+  final String? pincode;
   final String specialization;
   final String? territoryType;
   final bool isKbl;
   final bool isFrd;
   final bool isOther;
+  final bool isPlanned;
 
   Doctor({
     this.id,
     required this.name,
     required this.mobile,
     required this.area,
+    this.pincode,
     required this.specialization,
     this.territoryType,
     this.isKbl = false,
     this.isFrd = false,
     this.isOther = false,
+    this.isPlanned = false,
   });
 
   // --- FIX: Match Keys exactly with API JSON ---
@@ -34,6 +38,7 @@ class Doctor {
 
       // API sends 'geo_name' (from join). Fallback to 'area' if null.
       area: _toTitleCase(json['area'] ?? ''),
+      pincode: json['pincode']?.toString(),
 
       // API sends 'speciality', not 'specialization'
       specialization: _toTitleCase(json['speciality'] ?? ''),
@@ -55,6 +60,7 @@ class Doctor {
           name, // Changed to match API expectations if used for sending
       'mobile_no': mobile,
       'area': area,
+      'pincode': pincode,
       'speciality': specialization,
       'territory_type': territoryType,
       'is_kbl': isKbl ? 1 : 0,
