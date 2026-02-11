@@ -66,6 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (timer) => _updateElapsed(),
     );
   }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -634,22 +635,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // _buildExpenseSummaryCard(),
-        const SizedBox(height: 30),
+        const SizedBox(height: 10),
 
         _buildSectionTitle("Field Operations"),
         _buildMenuGrid([
-          _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
-            if (_isCheckedIn)
-              _navigateTo(const DoctorListScreen());
-            else
-              _showSnack("Please Check In first!");
-          }),
           _MenuAction(
             Icons.map,
             "Tour Plan",
             Colors.teal,
             () => _navigateTo(const TourPlanScreen()),
           ),
+          _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
+            if (_isCheckedIn)
+              _navigateTo(const DoctorListScreen());
+            else
+              _showSnack("Please Check In first!");
+          }),
+
           _MenuAction(
             Icons.assignment_turned_in,
             "Daily Report",
@@ -668,17 +670,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           //   Colors.cyan,
           //   () => _navigateTo(const SampleDistributionScreen()),
           // ),
-        // ]),
-        // const SizedBox(height: 24),
+          // ]),
+          // const SizedBox(height: 24),
 
-        // _buildSectionTitle("HR & Management"),
-        // _buildMenuGrid([
-        //   _MenuAction(
-        //     Icons.receipt_long,
-        //     "Expense",
-        //     Colors.indigo,
-        //     () => _navigateTo(const ExpenseSummaryScreen()),
-        //   ),
+          // _buildSectionTitle("HR & Management"),
+          // _buildMenuGrid([
+          //   _MenuAction(
+          //     Icons.receipt_long,
+          //     "Expense",
+          //     Colors.indigo,
+          //     () => _navigateTo(const ExpenseSummaryScreen()),
+          //   ),
           _MenuAction(
             Icons.calendar_month,
             "Leave",
@@ -728,7 +730,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      padding: const EdgeInsets.only(bottom: 4, left: 4),
       child: Text(
         title,
         style: GoogleFonts.poppins(

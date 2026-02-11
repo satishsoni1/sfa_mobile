@@ -100,13 +100,20 @@ class ApiService {
   }
 
   // --- 1. TOUR PLANS ---
-  Future<void> addTourPlan(Map<String, dynamic> tpData) async {
+  // Update this method to return 'TourPlan' instead of 'void'
+  Future<TourPlan> addTourPlan(Map<String, dynamic> tpData) async {
     final response = await http.post(
       Uri.parse('$baseUrl/app/tour-plans'),
       headers: await _getHeaders(),
       body: jsonEncode(tpData),
     );
-    if (response.statusCode != 200 && response.statusCode != 201) {
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      // Parse the response to get the ID back from the server
+      final data = jsonDecode(response.body);
+      // Assuming your API returns the created plan in a 'data' key or directly
+      return TourPlan.fromJson(data['data'] ?? data);
+    } else {
       throw Exception('Failed to add TP: ${response.body}');
     }
   }
@@ -226,6 +233,7 @@ class ApiService {
       throw Exception('Failed to add doctor');
     }
   }
+
   Future<void> updateDoctor(Map<String, dynamic> doctorData) async {
     // CHANGED TO DYNAMIC
     final response = await http.post(
@@ -435,7 +443,7 @@ class ApiService {
 
   Future<List<TourPlan>> getTourPlans(DateTime month, {int? userId}) async {
     final monthStr = DateFormat('yyyy-MM').format(month);
-    
+
     // Construct URL with month
     String url = '$baseUrl/app/tour-plans?month=$monthStr';
 
@@ -457,7 +465,11 @@ class ApiService {
     }
   }
 
-  Future<void> saveTourPlan(DateTime date, List<int> doctorIds, {int? userId}) async {
+  Future<void> saveTourPlan(
+    DateTime date,
+    List<int> doctorIds, {
+    int? userId,
+  }) async {
     // 1. Prepare base data
     final Map<String, dynamic> bodyData = {
       'plan_date': DateFormat('yyyy-MM-dd').format(date),
@@ -737,20 +749,88 @@ class ApiService {
   }
 
   // 3. Update Plan Status (The missing method causing your error)
-  Future<void> updatePlanStatus(int planId, String status) async {
-    await Future.delayed(const Duration(milliseconds: 500));
+  Future<void> updatePlanStatus(
+    int planId,
+    String status, {
+    String? remark,
+  }) async {
+    // 1. Get the current Auth Token
+    final token = await getToken();
 
-    /* REAL API IMPLEMENTATION:
-    final response = await http.patch(
-      Uri.parse('$baseUrl/tour-plans/$planId/status'),
-      headers: {'Content-Type': 'application/json'},
-      body: json.encode({'status': status}),
-    );
-    
-    if (response.statusCode != 200) {
-      throw Exception('Failed to update status');
+    final url = Uri.parse('$baseUrl/app/tour-plans/$planId/status');
+
+    // 2. Prepare the Request Body
+    final Map<String, dynamic> body = {'status': status};
+
+    // If a remark is provided (e.g., for Rejection), add it to the body
+    if (remark != null && remark.isNotEmpty) {
+      body['manager_remark'] = remark;
     }
-    */
-    print("Plan $planId status updated to $status");
+
+    try {
+      final response = await http.patch(
+        // or http.post depending on your backend routes
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token', // standard auth header
+        },
+        body: json.encode(body),
+      );
+
+      // 3. Handle the Response
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        print("Success: Plan $planId updated to $status");
+      } else {
+        // Parse error message from backend if available
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to update plan status');
+      }
+    } catch (e) {
+      print("API Error: $e");
+      throw Exception('Network error: Could not update status');
+    }
+  }
+
+  Future<List<Doctor>> getDoctorsWithPlanStatus(
+    int userId,
+    DateTime date,
+  ) async {
+    final dateStr = date.toIso8601String().split('T').first;
+
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/subordinate-doctors-plan/$userId?date=$dateStr'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return (data['data'] as List).map((x) => Doctor.fromJson(x)).toList();
+    } else {
+      throw Exception('Failed to load doctor plan status');
+    }
+  }
+
+  Future<void> bulkActionPlan({
+    required int planId,
+    required String action,
+    List<String>? dates,
+    String? remark,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/tour-plan/bulk-action'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'plan_id': planId,
+        'action': action,
+        'dates':
+            dates, // List of date strings like ['2023-10-12', '2023-10-13']
+        'remark': remark,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Failed to perform bulk action: ${response.body}');
+    }
   }
 }

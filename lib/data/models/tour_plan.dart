@@ -5,50 +5,63 @@ class TourPlan {
   final DateTime date;
   final List<int> doctorIds;
   final String? status;
+  final String? remark; // Added: Manager's rejection remark
   final List<Doctor> doctors;
+  final bool isActivity;
+  final String? activityType;
 
   TourPlan({
     required this.id,
     required this.date,
     required this.doctorIds,
     this.status,
+    this.remark,
+    this.isActivity = false,
+    this.activityType,
     this.doctors = const [],
   });
 
   factory TourPlan.fromJson(Map<String, dynamic> json) {
-    // 1. Parse full doctor objects
+    // 1. Parse full doctor objects safely
     var docList = json['doctors'] as List? ?? [];
-    List<Doctor> parsedDoctors = docList.map((d) => Doctor.fromJson(d)).toList();
+    List<Doctor> parsedDoctors = docList
+        .map((d) => Doctor.fromJson(d))
+        .toList();
 
     // 2. Parse IDs safely
     List<int> parsedIds = [];
     if (json['doctor_ids'] != null) {
       parsedIds = List<int>.from(json['doctor_ids']);
     } else {
-      // FIX 2: Handle potentially nullable IDs by defaulting to 0
-      parsedIds = parsedDoctors
-          .map((d) => d.id ?? 0) // Explicitly handle nulls
-          .toList();
+      // Fallback: Extract IDs from the doctor objects if the direct ID list is missing
+      parsedIds = parsedDoctors.map((d) => d.id ?? 0).toList();
     }
 
     return TourPlan(
       id: json['id'] ?? 0,
+      // Handle date parsing safely (backend might send '2023-10-25' or ISO string)
       date: DateTime.parse(json['plan_date']),
       doctorIds: parsedIds,
       status: json['status'],
+      remark: json['manager_remark'], // Map JSON field to class property
+      isActivity: json['is_activity'] == 1 || json['is_activity'] == true,
+      activityType: json['activity_type'],
       doctors: parsedDoctors,
     );
   }
 
-  // FIX 1: Add the missing toJson method
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'plan_date': date.toIso8601String(), // Or format as 'yyyy-MM-dd' if backend requires
+      // Format to simplified YYYY-MM-DD for backend consistency
+      'plan_date': date.toIso8601String().split('T').first,
       'doctor_ids': doctorIds,
       'status': status,
-      // Ensure Doctor model also has toJson, otherwise remove this line
-      'doctors': doctors.map((d) => d.toJson()).toList(), 
+      'is_activity': isActivity,
+      'activity_type': activityType,
+      'manager_remark': remark,
+      // Only include if your backend expects full doctor objects in the payload
+      'doctors': doctors.map((d) => d.toJson()).toList(),
     };
   }
 }

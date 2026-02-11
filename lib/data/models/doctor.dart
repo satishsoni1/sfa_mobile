@@ -50,6 +50,7 @@ class Doctor {
       isKbl: (json['is_kbl'] == 1 || json['is_kbl'] == true),
       isFrd: (json['is_frd'] == 1 || json['is_frd'] == true),
       isOther: (json['is_other'] == 1 || json['is_other'] == true),
+      isPlanned: json['is_planned'] == true || json['is_planned'] == 1,
     );
   }
 
