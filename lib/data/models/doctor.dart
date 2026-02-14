@@ -10,6 +10,8 @@ class Doctor {
   final bool isFrd;
   final bool isOther;
   final bool isPlanned;
+  final String? email;
+
 
   Doctor({
     this.id,
@@ -23,6 +25,7 @@ class Doctor {
     this.isFrd = false,
     this.isOther = false,
     this.isPlanned = false,
+    this.email,
   });
 
   // --- FIX: Match Keys exactly with API JSON ---
@@ -35,6 +38,7 @@ class Doctor {
 
       // API sends 'mobile_no', not 'mobile'
       mobile: json['mobile_no']?.toString() ?? '',
+      email: json['email']?.toString(),
 
       // API sends 'geo_name' (from join). Fallback to 'area' if null.
       area: _toTitleCase(json['area'] ?? ''),
@@ -60,6 +64,7 @@ class Doctor {
       'doctor_name':
           name, // Changed to match API expectations if used for sending
       'mobile_no': mobile,
+      'email': email,
       'area': area,
       'pincode': pincode,
       'speciality': specialization,

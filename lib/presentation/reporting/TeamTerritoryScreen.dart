@@ -76,7 +76,7 @@ class _TeamTerritoryScreenState extends State<TeamTerritoryScreen> {
             ),
             child: DropdownButtonFormField<dynamic>(
               decoration: InputDecoration(
-                labelText: "Select Subordinate (MR)",
+                labelText: "Select Subordinate (BD)",
                 labelStyle: GoogleFonts.poppins(color: Colors.grey[700]),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

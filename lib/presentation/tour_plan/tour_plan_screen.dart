@@ -551,7 +551,7 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
                   _buildCategoryCard("FRD", frdCount, Colors.orangeAccent),
                   _buildCategoryCard("KBL", kblCount, Colors.purpleAccent),
                   _buildCategoryCard(
-                    "Core/Other",
+                    "Other",
                     otherCount,
                     Colors.lightBlueAccent,
                   ),

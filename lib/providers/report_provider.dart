@@ -85,7 +85,7 @@ class ReportProvider with ChangeNotifier {
   }
 
   Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
-    if (_isDaySubmitted) throw Exception("Day is locked.");
+   // if (_isDaySubmitted) throw Exception("Day is locked.");
 
     // Check locally
     if (hasVisitForSelectedDate(report.doctorName)) {
@@ -243,7 +243,7 @@ class ReportProvider with ChangeNotifier {
   }
 
   Future<void> updateReport(VisitReport report) async {
-    if (_isDaySubmitted) throw Exception("Day is locked.");
+    //if (_isDaySubmitted) throw Exception("Day is locked.");
 
     try {
       // 1. API Call (We need to pass the ID)

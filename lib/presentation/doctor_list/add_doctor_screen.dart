@@ -19,9 +19,10 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
   
   // Controllers
   final _nameController = TextEditingController();
-  final _mobileController = TextEditingController(); 
+  final _mobileController = TextEditingController();
+  final _emailController = TextEditingController(); // NEW: Email Controller
   final _areaController = TextEditingController();
-  final _pincodeController = TextEditingController(); // NEW: Pincode Controller
+  final _pincodeController = TextEditingController();
   
   String? _selectedSpecialization;
   String? _selectedTerritoryType; 
@@ -44,6 +45,17 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
     });
   }
 
+  // Best Practice: Dispose controllers to prevent memory leaks
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _mobileController.dispose();
+    _emailController.dispose();
+    _areaController.dispose();
+    _pincodeController.dispose();
+    super.dispose();
+  }
+
   Future<void> _loadInitialData() async {
     // 1. Load Specializations
     await Provider.of<ReportProvider>(context, listen: false).fetchSpecialities();
@@ -52,9 +64,11 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
     if (widget.doctorToEdit != null) {
       final doc = widget.doctorToEdit!;
       _nameController.text = doc.name;
-      _mobileController.text = doc.mobile; 
+      _mobileController.text = doc.mobile;
+      // NEW: Pre-fill Email (Assuming Doctor model has an 'email' field)
+      _emailController.text = doc.email ?? ''; 
       _areaController.text = doc.area;
-      _pincodeController.text = doc.pincode ?? ''; // NEW: Pre-fill Pincode
+      _pincodeController.text = doc.pincode ?? '';
       
       _selectedSpecialization = doc.specialization;
       
@@ -98,8 +112,9 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
         id: widget.doctorToEdit?.id,
         name: _nameController.text.trim(),
         mobile: _mobileController.text.trim(),
+        email: _emailController.text.trim(), // NEW: Save Email
         area: _areaController.text.trim(),
-        pincode: _pincodeController.text.trim(), // NEW: Save Pincode
+        pincode: _pincodeController.text.trim(),
         specialization: _selectedSpecialization!,
         territoryType: _selectedTerritoryType,
         isKbl: _isKbl,
@@ -214,6 +229,22 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
                     }
                   ),
                   const SizedBox(height: 15),
+
+                  // NEW: Email Field
+                  _buildTextField(
+                    controller: _emailController, 
+                    label: "Email ID *", 
+                    icon: Icons.email_outlined, 
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return "Email is required";
+                      // Regex for Email Validation
+                      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+                      if (!emailRegex.hasMatch(v)) return "Enter a valid email address";
+                      return null;
+                    }
+                  ),
+                  const SizedBox(height: 15),
                   
                   // Area
                   _buildTextField(
@@ -224,22 +255,16 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
                   ),
                   const SizedBox(height: 15),
 
-                  // NEW: Pincode Field
+                  // Pincode Field
                   _buildTextField(
                     controller: _pincodeController, 
-                    label: "Pincode *", // Visual indicator
+                    label: "Pincode *", 
                     icon: Icons.pin_drop_outlined,
                     keyboardType: TextInputType.number,
-                    maxLength: 6, // Restrict input length
+                    maxLength: 6,
                     validator: (v) {
-                      // 1. Check if empty
-                      if (v == null || v.isEmpty) {
-                        return "Pincode is required";
-                      }
-                      // 2. Check strict length
-                      if (v.length != 6) {
-                        return "Enter valid 6-digit Pincode";
-                      }
+                      if (v == null || v.isEmpty) return "Pincode is required";
+                      if (v.length != 6) return "Enter valid 6-digit Pincode";
                       return null;
                     }
                   ),
