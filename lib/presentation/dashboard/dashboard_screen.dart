@@ -16,6 +16,7 @@ import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
 import '../reporting/TeamTerritoryScreen.dart';
+import '../reporting/daily_call_report_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
@@ -634,7 +635,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // _buildExpenseSummaryCard(),
+        _buildExpenseSummaryCard(),
         const SizedBox(height: 10),
 
         _buildSectionTitle("Field Operations"),
@@ -670,17 +671,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
           //   Colors.cyan,
           //   () => _navigateTo(const SampleDistributionScreen()),
           // ),
-          // ]),
-          // const SizedBox(height: 24),
+          _MenuAction(
+            Icons.assignment_turned_in,
+            "Reports",
+            Colors.orange,
+            () => _navigateTo(const DailyCallReportScreen()),
+          ),
+          ]),
+          const SizedBox(height: 24),
 
-          // _buildSectionTitle("HR & Management"),
-          // _buildMenuGrid([
-          //   _MenuAction(
-          //     Icons.receipt_long,
-          //     "Expense",
-          //     Colors.indigo,
-          //     () => _navigateTo(const ExpenseSummaryScreen()),
-          //   ),
+          _buildSectionTitle("HR & Management"),
+          _buildMenuGrid([
+            _MenuAction(
+              Icons.receipt_long,
+              "Expense",
+              Colors.indigo,
+              () => _navigateTo(const ExpenseSummaryScreen()),
+            ),
           _MenuAction(
             Icons.calendar_month,
             "Leave",

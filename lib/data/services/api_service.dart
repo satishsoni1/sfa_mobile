@@ -56,6 +56,34 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> loginadmin(String empId, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/loginadmin'), // Adjust endpoint if needed
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'username': empId, 'password': password}),
+      );
+
+      final responseData = jsonDecode(response.body);
+
+      // Check logic based on your JSON structure
+      if (response.statusCode == 200 && responseData['error'] == false) {
+        // 1. Extract the 'data' object
+        final data = responseData['data'];
+
+        // 2. Return the needed parts
+        return {
+          'token': data['token'],
+          'user': data['user'], // This is the raw Map
+        };
+      } else {
+        throw Exception(responseData['message'] ?? 'Login Failed');
+      }
+    } catch (e) {
+      throw Exception('Network Error: $e');
+    }
+  }
+
   // --- SAVE SESSION ---
   Future<void> saveSession(String token, User user) async {
     final prefs = await SharedPreferences.getInstance();
@@ -831,6 +859,82 @@ class ApiService {
 
     if (response.statusCode != 200) {
       throw Exception('Failed to perform bulk action: ${response.body}');
+    }
+  }
+
+  Future<void> sendPasswordResetOtp(String email) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/forgot-password/send-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email}),
+    );
+
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? "Failed to send OTP");
+    }
+  }
+
+  Future<void> verifyPasswordResetOtp(String email, String otp) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/forgot-password/verify-otp'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'otp': otp}),
+    );
+
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? "Invalid OTP");
+    }
+  }
+
+  Future<void> resetPasswordWithOtp(
+    String email,
+    String otp,
+    String newPassword,
+  ) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/forgot-password/reset'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'otp': otp, 'password': newPassword}),
+    );
+
+    if (response.statusCode != 200) {
+      final body = jsonDecode(response.body);
+      throw Exception(body['message'] ?? "Failed to reset password");
+    }
+  }
+ Future<Map<String, dynamic>> getDailyCallReport(DateTime date, {int? userId}) async {
+    try {
+      // Format date to YYYY-MM-DD
+      final dateString = date.toIso8601String().split('T').first;
+      
+      // Build URL with query parameters
+      String url = '$baseUrl/app/reports/daily-call?date=$dateString';
+      if (userId != null) {
+        url += '&user_id=$userId';
+      }
+
+      // Fetch from Laravel backend
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(), // Assuming you have a method attaching the Bearer Token
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        
+        if (jsonResponse['success'] == true) {
+          // Return the 'data' object which contains 'summary' and 'details'
+          return jsonResponse['data']; 
+        } else {
+          throw Exception(jsonResponse['message'] ?? 'Failed to load report');
+        }
+      } else {
+        throw Exception('Server Error: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('API Error: $e');
     }
   }
 }

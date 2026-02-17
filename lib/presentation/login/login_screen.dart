@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zforce/presentation/dashboard/dashboard_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
+// Add the import for your new Forgot Password Screen (adjust path as needed)
+import 'forgot_password_screen.dart'; 
 import '../../providers/auth_provider.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -112,17 +114,14 @@ class _LoginScreenState extends State<LoginScreen> {
           FocusManager.instance.primaryFocus?.unfocus(),
       child: Scaffold(
         backgroundColor: Colors.white,
-
-        // On Web this has no effect, but kept for mobile compatibility
         resizeToAvoidBottomInset: true,
-
         body: Center(
           child: SingleChildScrollView(
             padding: const EdgeInsets.symmetric(
                 horizontal: 24, vertical: 20),
             child: ConstrainedBox(
               constraints: const BoxConstraints(
-                maxWidth: 450, // Web friendly width
+                maxWidth: 450, 
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -169,7 +168,29 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 24),
+                  // --- NEW: Forgot Password Button ---
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const ForgotPasswordScreen(),
+                          ),
+                        );
+                      },
+                      child: Text(
+                        "Forgot Password?",
+                        style: GoogleFonts.poppins(
+                          color: Colors.blueAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
 
                   SizedBox(
                     height: 52,
