@@ -14,6 +14,7 @@ import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
+import '../doctor_list/doctor_master_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
 import '../reporting/TeamTerritoryScreen.dart';
 import '../reporting/daily_call_report_screen.dart';
@@ -52,7 +53,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // --- COLORS ---
   final Color primaryColor = const Color(0xFF4A148C);
   final Color accentColor = const Color(0xFF7B1FA2);
-  final Color bgColor = const Color(0xFFF3F4F6);
+  final Color bgColor = const Color(0xFFF4F6F9); // Slightly softer background
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -200,16 +201,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       key: _scaffoldKey,
       backgroundColor: bgColor,
       drawer: _buildDrawer(user),
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: () {
-      //     Navigator.push(
-      //       context,
-      //       MaterialPageRoute(builder: (_) => const ChatScreen()),
-      //     );
-      //   },
-      //   backgroundColor: const Color(0xFF4A148C),
-      //   child: const Icon(Icons.auto_awesome, color: Colors.white),
-      // ),
       body: RefreshIndicator(
         onRefresh: _loadInitialData,
         child: SingleChildScrollView(
@@ -315,7 +306,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 width: double.infinity,
                 height: 80,
                 padding: const EdgeInsets.all(10),
-
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -636,7 +626,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildExpenseSummaryCard(),
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
 
         _buildSectionTitle("Field Operations"),
         _buildMenuGrid([
@@ -647,12 +637,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             () => _navigateTo(const TourPlanScreen()),
           ),
           _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
-            if (_isCheckedIn)
+            if (_isCheckedIn) {
               _navigateTo(const DoctorListScreen());
-            else
+            } else {
               _showSnack("Please Check In first!");
+            }
           }),
-
           _MenuAction(
             Icons.assignment_turned_in,
             "Daily Report",
@@ -665,29 +655,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.brown,
             () => _navigateTo(const NfwReportScreen()),
           ),
-          // _MenuAction(
-          //   Icons.business_center,
-          //   "Sample Distribution",
-          //   Colors.cyan,
-          //   () => _navigateTo(const SampleDistributionScreen()),
-          // ),
           _MenuAction(
-            Icons.assignment_turned_in,
+            Icons.analytics_outlined,
             "Reports",
-            Colors.orange,
+            Colors.indigoAccent,
             () => _navigateTo(const DailyCallReportScreen()),
           ),
-          ]),
-          const SizedBox(height: 24),
+        ]),
+        const SizedBox(height: 24),
 
-          _buildSectionTitle("HR & Management"),
-          _buildMenuGrid([
-            _MenuAction(
-              Icons.receipt_long,
-              "Expense",
-              Colors.indigo,
-              () => _navigateTo(const ExpenseSummaryScreen()),
-            ),
+        _buildSectionTitle("HR & Management"),
+        _buildMenuGrid([
+          _MenuAction(
+            Icons.receipt_long,
+            "Expense",
+            Colors.indigo,
+            () => _navigateTo(const ExpenseSummaryScreen()),
+          ),
           _MenuAction(
             Icons.calendar_month,
             "Leave",
@@ -711,10 +695,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         _buildSectionTitle("Utilities"),
         _buildMenuGrid([
+          // --- NEW: Doctor Master Added Here ---
+          _MenuAction(
+            Icons.folder_shared,
+            "Dr. Master",
+            Colors.deepPurple,
+            () => _navigateTo(const DoctorMasterScreen()),
+          ),
           _MenuAction(
             Icons.person_add_alt_1,
             "Add Doctor",
-            Colors.deepPurple,
+            Colors.pinkAccent,
             () => _navigateTo(const AddDoctorScreen()),
           ),
           _MenuAction(
@@ -737,11 +728,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildSectionTitle(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4, left: 4),
+      padding: const EdgeInsets.only(bottom: 8, left: 4),
       child: Text(
         title,
         style: GoogleFonts.poppins(
-          fontSize: 16,
+          fontSize: 15,
           fontWeight: FontWeight.bold,
           color: Colors.black87,
         ),
@@ -853,9 +844,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _navigateTo(Widget screen) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+      
   void _showSnack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
   );
+  
   void _showSettingsSheet() {
     showModalBottomSheet(
       context: context,

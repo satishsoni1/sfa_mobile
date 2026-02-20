@@ -937,4 +937,33 @@ class ApiService {
       throw Exception('API Error: $e');
     }
   }
+  // Fetch Doctors for Master List (Supports Subordinate Filtering)
+  Future<List<dynamic>> getDoctorsMaster({int? userId}) async {
+    try {
+      String url = '$baseUrl/app/doctors/master';
+      
+      // Append the userId to the query string if a subordinate is selected
+      if (userId != null) {
+        url += '?user_id=$userId';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
+        if (jsonResponse['success'] == true) {
+          return jsonResponse['data'];
+        } else {
+          throw Exception(jsonResponse['message'] ?? 'Failed to load doctors');
+        }
+      } else {
+        throw Exception('Server Error: ${response.statusCode}');
+      }
+    } catch (e) {
+      throw Exception('API Error: $e');
+    }
+  }
 }
