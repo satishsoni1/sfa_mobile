@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,8 +8,70 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
-import '../../data/services/chat_service.dart';
+import 'package:http/http.dart' as http;
 
+// ==========================================
+// CHAT SERVICE (With Memory Leak Fix)
+// ==========================================
+class ChatService {
+  static const String _baseUrl = 'https://py-patgpt.globalspace.in/ask';
+
+  Stream<String> streamResponse(String query) async* {
+    final uri = Uri.parse('$_baseUrl?question=${Uri.encodeComponent(query)}');
+    final client = http.Client();
+    final request = http.Request('GET', uri);
+
+    request.headers.addAll({
+      'Accept': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+    });
+
+    try {
+      final response = await client.send(request);
+
+      if (response.statusCode == 200) {
+        final stream = response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter());
+
+        await for (final line in stream) {
+          if (line.trim().startsWith(':')) continue;
+
+          if (line.startsWith('data:')) {
+            final jsonString = line.substring(5).trim();
+            if (jsonString.isEmpty) continue;
+
+            try {
+              final Map<String, dynamic> data = jsonDecode(jsonString);
+
+              if (data.containsKey('content') && data['content'] != null) {
+                yield data['content'].toString();
+              }
+
+              if (data.containsKey('message') &&
+                  data['message'] == 'Stream completed') {
+                break;
+              }
+            } catch (e) {
+              // Ignore parse errors for keep-alive packets
+            }
+          }
+        }
+      } else {
+        yield "Error: Server responded with status ${response.statusCode}";
+      }
+    } catch (e) {
+      yield "Error: Connection failed ($e)";
+    } finally {
+      // CRITICAL FIX: Close the client to prevent connection/memory leaks
+      client.close();
+    }
+  }
+}
+
+// ==========================================
+// CHAT SCREEN UI
+// ==========================================
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
 
@@ -170,8 +234,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     try {
       await for (final chunk in _chatService.streamResponse(text)) {
-        if (!mounted) return;
-        if (_stopRequested) break;
+        // CRITICAL FIX: Break out of the loop cleanly if stopped or unmounted
+        if (!mounted || _stopRequested) break;
 
         fullResponse += chunk;
 
@@ -221,7 +285,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       SnackBar(
         content: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 20),
+            const Icon(Icons.check_circle, color: Colors.white, size: 20),
             const SizedBox(width: 12),
             Text(
               "Copied to clipboard!",
@@ -289,11 +353,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       body: Stack(
         children: [
           Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [Colors.white, const Color(0xFFF5F7FA)],
+                colors: [Colors.white, Color(0xFFF5F7FA)],
               ),
             ),
           ),
@@ -390,7 +454,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                "PatGPT Pro",
+                "PATGPT Pro",
                 style: GoogleFonts.poppins(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
@@ -576,7 +640,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   height: 44,
                   decoration: BoxDecoration(
                     gradient: _isListening
-                        ? LinearGradient(colors: [Colors.red, Colors.redAccent])
+                        ? const LinearGradient(
+                            colors: [Colors.red, Colors.redAccent],
+                          )
                         : LinearGradient(
                             colors: [
                               Colors.grey.shade200,
@@ -651,7 +717,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                     : [],
               ),
               child: IconButton(
-                icon: Icon(
+                icon: const Icon(
                   Icons.arrow_upward_rounded,
                   color: Colors.white,
                   size: 22,
@@ -699,7 +765,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
-                    child: Icon(
+                    child: const Icon(
                       Icons.psychology_outlined,
                       size: 64,
                       color: Colors.white,
@@ -925,6 +991,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                   : MarkdownBody(
                       data: text.isEmpty ? "..." : text,
                       selectable: true,
+                      extensionSet: md.ExtensionSet.gitHubFlavored,
                       builders: {'table': CustomTableBuilder()},
                       styleSheet: MarkdownStyleSheet(
                         p: GoogleFonts.poppins(
@@ -1028,7 +1095,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 }
 
-// --- CUSTOM TABLE BUILDER WITH PROPER HORIZONTAL SCROLL ---
+// ==========================================
+// UPGRADED CUSTOM TABLE BUILDER
+// ==========================================
 class CustomTableBuilder extends MarkdownElementBuilder {
   @override
   Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
@@ -1037,6 +1106,7 @@ class CustomTableBuilder extends MarkdownElementBuilder {
     List<List<String>> headerRows = [];
     List<List<String>> bodyRows = [];
 
+    // 1. Parse Markdown AST into Rows and Columns
     for (var child in element.children!) {
       if (child is md.Element) {
         if (child.tag == 'thead') {
@@ -1078,88 +1148,108 @@ class CustomTableBuilder extends MarkdownElementBuilder {
             (i) => 'Col ${i + 1}',
           );
 
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade300, width: 1.5),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: DataTable(
-            headingRowHeight: 50,
-            dataRowHeight: 48,
-            columnSpacing: 20,
-            horizontalMargin: 16,
-            headingRowColor: MaterialStateProperty.all(const Color(0xFFF8F9FA)),
-            dataRowColor: MaterialStateProperty.resolveWith((states) {
-              return Colors.white;
-            }),
-            border: TableBorder(
-              horizontalInside: BorderSide(
-                color: Colors.grey.shade200,
-                width: 1,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300, width: 1.5),
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
               ),
-              verticalInside: BorderSide(color: Colors.grey.shade200, width: 1),
-            ),
-            columns: headers.map((header) {
-              return DataColumn(
-                label: Container(
-                  constraints: const BoxConstraints(minWidth: 100),
-                  child: Text(
-                    header,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: const Color(0xFF6200EA),
-                    ),
-                    overflow: TextOverflow.visible,
-                    softWrap: false,
-                  ),
-                ),
-              );
-            }).toList(),
-            rows: bodyRows.map((row) {
-              while (row.length < headers.length) {
-                row.add('');
-              }
-              if (row.length > headers.length) {
-                row = row.sublist(0, headers.length);
-              }
-
-              return DataRow(
-                cells: row.map((cell) {
-                  return DataCell(
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 100),
-                      child: Text(
-                        cell,
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: Colors.black87,
-                        ),
-                        overflow: TextOverflow.visible,
-                        softWrap: false,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              );
-            }).toList(),
+            ],
           ),
-        ),
-      ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Theme(
+              data: Theme.of(
+                context,
+              ).copyWith(dividerColor: Colors.transparent),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(
+                  parent: AlwaysScrollableScrollPhysics(),
+                ),
+                child: DataTable(
+                  headingRowHeight: 48,
+                  dataRowMinHeight: 48,
+                  dataRowMaxHeight:
+                      double.infinity, // Allows cells to expand vertically
+                  columnSpacing: 24,
+                  horizontalMargin: 16,
+                  headingRowColor: MaterialStateProperty.all(
+                    const Color(0xFFF1F3F5),
+                  ),
+
+                  // Zebra striping for better readability
+                  dataRowColor: MaterialStateProperty.resolveWith((states) {
+                    return null;
+                  }),
+
+                  columns: headers.map((header) {
+                    return DataColumn(
+                      label: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Text(
+                          header,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: const Color(0xFF6200EA),
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+
+                  rows: bodyRows.asMap().entries.map((entry) {
+                    int index = entry.key;
+                    List<String> row = entry.value;
+
+                    while (row.length < headers.length) {
+                      row.add('');
+                    }
+                    if (row.length > headers.length) {
+                      row = row.sublist(0, headers.length);
+                    }
+
+                    return DataRow(
+                      color: MaterialStateProperty.all(
+                        index.isEven ? Colors.white : Colors.grey.shade50,
+                      ),
+                      cells: row.map((cell) {
+                        return DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            constraints: BoxConstraints(
+                              minWidth: 80,
+                              maxWidth: constraints.maxWidth * 0.7,
+                            ),
+                            child: SelectableText(
+                              cell,
+                              style: GoogleFonts.poppins(
+                                fontSize: 13,
+                                color: Colors.black87,
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.left,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
