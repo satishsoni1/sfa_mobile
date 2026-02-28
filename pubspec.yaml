@@ -46,6 +46,7 @@ dependencies:
   flutter_tts: ^4.2.5
   signature: ^6.3.0
   keyboard_visibility_pro: ^0.0.1
+  file_picker: ^10.3.10
 
 dev_dependencies:
   flutter_test:

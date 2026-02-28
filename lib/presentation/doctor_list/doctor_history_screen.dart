@@ -190,17 +190,28 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                p.productName,
-                                style: GoogleFonts.poppins(fontSize: 13),
+                              // Added Expanded to prevent overflow with long product names
+                              Expanded(
+                                child: Text(
+                                  p.productName,
+                                  style: GoogleFonts.poppins(fontSize: 13),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Row(
                                 children: [
                                   if (p.pobQty > 0)
                                     _tag("POB: ${p.pobQty}", Colors.green),
-                                  const SizedBox(width: 4),
+                                  if (p.pobQty > 0) const SizedBox(width: 4),
+
                                   if (p.sampleQty > 0)
                                     _tag("Spl: ${p.sampleQty}", Colors.orange),
+                                  if (p.sampleQty > 0) const SizedBox(width: 4),
+
+                                  // --- NEW: Added Rx Tag ---
+                                  if (p.rxQty > 0)
+                                    _tag("Rx: ${p.rxQty}", Colors.blue),
                                 ],
                               ),
                             ],
@@ -216,6 +227,7 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
             if (visit.workedWith.isNotEmpty) ...[
               const SizedBox(height: 12),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(
                     Icons.people_outline,

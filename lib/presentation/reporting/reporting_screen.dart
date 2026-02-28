@@ -27,8 +27,7 @@ class ReportingScreen extends StatefulWidget {
 class _ReportingScreenState extends State<ReportingScreen> {
   // --- STATE VARIABLES ---
   List<Map<String, dynamic>> _uiProducts = [];
-  List<Map<String, dynamic>> _uiColleagues =
-      []; // Will store {id, name, isSelected}
+  List<Map<String, dynamic>> _uiColleagues = []; // {id, name, isSelected}
   bool _isLoading = true;
 
   DateTime _selectedDate = DateTime(
@@ -82,18 +81,25 @@ class _ReportingScreenState extends State<ReportingScreen> {
         _uiProducts = provider.masterProducts.map((p) {
           int initialPob = 0;
           int initialSample = 0;
+          int initialRx = 0; // NEW: Rx Qty
           bool initialSelect = false;
 
           if (widget.existingReport != null) {
             final existing = widget.existingReport!.products.firstWhere(
               (ep) => ep.productName == p.name,
-              orElse: () =>
-                  ProductEntry(productName: '', pobQty: 0, sampleQty: 0),
+              // Note: Ensure ProductEntry has rxQty in your model
+              orElse: () => ProductEntry(
+                productName: '',
+                pobQty: 0,
+                sampleQty: 0,
+                rxQty: 0,
+              ),
             );
 
             if (existing.productName.isNotEmpty) {
               initialPob = existing.pobQty;
               initialSample = existing.sampleQty;
+              initialRx = existing.rxQty;
               initialSelect = true;
             }
           }
@@ -104,22 +110,21 @@ class _ReportingScreenState extends State<ReportingScreen> {
             'isSelected': initialSelect,
             'pob': initialPob,
             'sample': initialSample,
+            'rx': initialRx, // NEW: Rx Qty
           };
         }).toList();
 
-        // 2. Setup Colleagues (NOW USING IDs)
+        // 2. Setup Colleagues
         _uiColleagues = provider.colleagues.map((c) {
           bool isSelected = false;
-          final String empId = c['id'].toString(); // Ensure ID is string
+          final String empId = c['id'].toString();
 
           if (widget.existingReport != null) {
-            // Check if this Emp ID exists in the saved report's list
-            // 'workedWith' in Report model should now be List<String> of IDs
             isSelected = widget.existingReport!.workedWith.contains(empId);
           }
 
           return {
-            'id': empId, // Store ID here
+            'id': empId,
             'name': c['name'],
             'role': c['role'],
             'isSelected': isSelected,
@@ -186,12 +191,26 @@ class _ReportingScreenState extends State<ReportingScreen> {
     _uiProducts[index][key] = newVal;
   }
 
+  void _showJointWorkPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _JointWorkSearchSheet(
+        colleagues: _uiColleagues,
+        onApply: () {
+          // Rebuild parent to update the count
+          setState(() {});
+        },
+      ),
+    );
+  }
+
   void _submitReport() async {
     final provider = Provider.of<ReportProvider>(context, listen: false);
 
-    // 1. Duplicate Check (Using IDs)
     bool isDuplicate = provider.reports.any((report) {
-      bool sameDoctor = report.doctorId == widget.doctorId; // Match ID
+      bool sameDoctor = report.doctorId == widget.doctorId;
       bool sameDate = _isSameDay(report.visitTime, _selectedDate);
 
       if (widget.existingReport != null &&
@@ -203,7 +222,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
 
     if (isDuplicate) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text(
             "Report for this doctor on selected date already exists!",
           ),
@@ -213,7 +232,6 @@ class _ReportingScreenState extends State<ReportingScreen> {
       return;
     }
 
-    // 2. Validate Remark
     String finalRemark = _selectedRemark ?? "Met";
     if (_selectedRemark == 'Other') {
       if (_otherRemarkController.text.trim().isEmpty) {
@@ -227,7 +245,6 @@ class _ReportingScreenState extends State<ReportingScreen> {
 
     setState(() => _isLoading = true);
 
-    // 3. Prepare Data
     List<ProductEntry> finalProductList = _uiProducts
         .where((p) => p['isSelected'] == true)
         .map(
@@ -235,24 +252,24 @@ class _ReportingScreenState extends State<ReportingScreen> {
             productName: p['name'],
             pobQty: p['pob'],
             sampleQty: p['sample'],
+            rxQty: p['rx'], // Uncomment when added to model
           ),
         )
         .toList();
 
-    // === SAVE JOINT WORK IDs ===
     List<String> selectedColleagueIds = _uiColleagues
         .where((c) => c['isSelected'] == true)
-        .map((c) => c['id'].toString()) // Map to ID string
+        .map((c) => c['id'].toString())
         .toList();
 
     final report = VisitReport(
       id: widget.existingReport?.id ?? "",
-      doctorId: widget.doctorId, // Use ID
-      doctorName: widget.doctorName, // Backup/Display
+      doctorId: widget.existingReport?.doctorId ?? widget.doctorId,
+      doctorName: widget.doctorName,
       visitTime: _selectedDate,
       remarks: finalRemark,
       products: finalProductList,
-      workedWith: selectedColleagueIds, // Now passing IDs ["101", "205"]
+      workedWith: selectedColleagueIds,
       isSubmitted: false,
     );
 
@@ -316,40 +333,43 @@ class _ReportingScreenState extends State<ReportingScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  widget.doctorName,
-                                  style: GoogleFonts.poppins(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.doctorName,
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                ),
-                                if (widget.isPlanned)
-                                  Container(
-                                    margin: const EdgeInsets.only(top: 4),
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.greenAccent.withOpacity(
-                                        0.2,
+                                  if (widget.isPlanned)
+                                    Container(
+                                      margin: const EdgeInsets.only(top: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 2,
                                       ),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: const Text(
-                                      "Planned Visit",
-                                      style: TextStyle(
-                                        color: Colors.greenAccent,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                                      decoration: BoxDecoration(
+                                        color: Colors.greenAccent.withOpacity(
+                                          0.2,
+                                        ),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        "Planned Visit",
+                                        style: TextStyle(
+                                          color: Colors.greenAccent,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             ),
                             InkWell(
                               onTap: _pickDate,
@@ -387,12 +407,12 @@ class _ReportingScreenState extends State<ReportingScreen> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        _buildJointWorkSelector(),
+                        _buildJointWorkSelectorButton(), // NEW SELECTION BUTTON
                       ],
                     ),
                   ),
 
-                  // === PRODUCTS HEADER ===
+                  // === PRODUCTS HEADER (NOW INCLUDES RX) ===
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Row(
@@ -404,7 +424,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
                               color: Colors.grey[700],
-                              fontSize: 12,
+                              fontSize: 11,
                             ),
                           ),
                         ),
@@ -416,7 +436,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
-                                fontSize: 12,
+                                fontSize: 11,
                               ),
                             ),
                           ),
@@ -429,7 +449,20 @@ class _ReportingScreenState extends State<ReportingScreen> {
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
-                                fontSize: 12,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 2,
+                          child: Center(
+                            child: Text(
+                              "RX",
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700],
+                                fontSize: 11,
                               ),
                             ),
                           ),
@@ -455,18 +488,21 @@ class _ReportingScreenState extends State<ReportingScreen> {
                               if (!val) {
                                 p['pob'] = 0;
                                 p['sample'] = 0;
+                                p['rx'] = 0; // Reset Rx too
                               }
                             });
                           },
                           onPobChanged: (val) => _updateQty(index, 'pob', val),
                           onSampleChanged: (val) =>
                               _updateQty(index, 'sample', val),
+                          onRxChanged: (val) =>
+                              _updateQty(index, 'rx', val), // Rx Handler
                         );
                       },
                     ),
                   ),
 
-                  // === BOTTOM SHEET ===
+                  // === BOTTOM SHEET (REMARKS & SUBMIT) ===
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -500,7 +536,6 @@ class _ReportingScreenState extends State<ReportingScreen> {
                                   child: Text(
                                     r,
                                     style: GoogleFonts.poppins(fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               )
@@ -574,97 +609,37 @@ class _ReportingScreenState extends State<ReportingScreen> {
     );
   }
 
-  // Joint Work Selector (Displays Names, but Logic handles IDs)
-  Widget _buildJointWorkSelector() {
+  // --- NEW SLEEK JOINT WORK BUTTON ---
+  Widget _buildJointWorkSelectorButton() {
     int count = _uiColleagues.where((c) => c['isSelected']).length;
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          collapsedIconColor: Colors.white70,
-          iconColor: Colors.white,
-          title: Row(
-            children: [
-              const Icon(Icons.group_add, color: Colors.white70, size: 20),
-              const SizedBox(width: 10),
-              Text(
-                "Joint Work",
-                style: GoogleFonts.poppins(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                ),
-              ),
-              if (count > 0)
-                Container(
-                  margin: const EdgeInsets.only(left: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    "$count",
-                    style: const TextStyle(
-                      color: Color(0xFF4A148C),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+
+    return InkWell(
+      onTap: _showJointWorkPicker,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
           children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: _uiColleagues.map((person) {
-                  final isSelected = person['isSelected'];
-                  return InkWell(
-                    onTap: () {
-                      setState(() {
-                        person['isSelected'] = !isSelected;
-                      });
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? Colors.white
-                            : Colors.black.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected ? Colors.white : Colors.white30,
-                        ),
-                      ),
-                      child: Text(
-                        "${person['name']}", // Display Name
-                        style: TextStyle(
-                          color: isSelected
-                              ? const Color(0xFF4A148C)
-                              : Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+            const Icon(Icons.group_add, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                count > 0
+                    ? "Joint Work: $count Selected"
+                    : "Tap to select Joint Work...",
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: count > 0 ? FontWeight.bold : FontWeight.w500,
+                  fontSize: 14,
+                ),
               ),
             ),
+            const Icon(Icons.search, color: Colors.white70, size: 18),
           ],
         ),
       ),
@@ -672,12 +647,16 @@ class _ReportingScreenState extends State<ReportingScreen> {
   }
 }
 
-// ... (ProductRowItem Widget remains unchanged) ...
+// =========================================================================
+// CUSTOM PRODUCT ROW WIDGET (UPDATED FOR RX)
+// =========================================================================
+
 class ProductRowItem extends StatefulWidget {
   final Map<String, dynamic> product;
   final Function(bool) onCheckChanged;
   final Function(String) onPobChanged;
   final Function(String) onSampleChanged;
+  final Function(String) onRxChanged; // NEW
 
   const ProductRowItem({
     required Key key,
@@ -685,6 +664,7 @@ class ProductRowItem extends StatefulWidget {
     required this.onCheckChanged,
     required this.onPobChanged,
     required this.onSampleChanged,
+    required this.onRxChanged, // NEW
   }) : super(key: key);
 
   @override
@@ -694,6 +674,7 @@ class ProductRowItem extends StatefulWidget {
 class _ProductRowItemState extends State<ProductRowItem> {
   late TextEditingController _pobController;
   late TextEditingController _sampleController;
+  late TextEditingController _rxController; // NEW
 
   @override
   void initState() {
@@ -706,6 +687,9 @@ class _ProductRowItemState extends State<ProductRowItem> {
           ? ''
           : widget.product['sample'].toString(),
     );
+    _rxController = TextEditingController(
+      text: widget.product['rx'] == 0 ? '' : widget.product['rx'].toString(),
+    ); // NEW
   }
 
   @override
@@ -714,6 +698,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
     if (!widget.product['isSelected']) {
       if (_pobController.text.isNotEmpty) _pobController.clear();
       if (_sampleController.text.isNotEmpty) _sampleController.clear();
+      if (_rxController.text.isNotEmpty) _rxController.clear(); // NEW
     }
   }
 
@@ -721,6 +706,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
   void dispose() {
     _pobController.dispose();
     _sampleController.dispose();
+    _rxController.dispose(); // NEW
     super.dispose();
   }
 
@@ -746,6 +732,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
       child: Row(
         children: [
+          // Name and Checkbox (Flex 4)
           Expanded(
             flex: 4,
             child: Row(
@@ -765,7 +752,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
                   child: Text(
                     widget.product['name'],
                     style: GoogleFonts.poppins(
-                      fontSize: 13,
+                      fontSize: 12, // Slightly smaller to fit better
                       fontWeight: isSelected
                           ? FontWeight.w600
                           : FontWeight.normal,
@@ -776,6 +763,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
               ],
             ),
           ),
+          // Three Inputs (Flex 2 each)
           Expanded(
             flex: 2,
             child: _buildMiniInput(
@@ -784,13 +772,22 @@ class _ProductRowItemState extends State<ProductRowItem> {
               widget.onPobChanged,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           Expanded(
             flex: 2,
             child: _buildMiniInput(
               _sampleController,
               isSelected,
               widget.onSampleChanged,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            flex: 2,
+            child: _buildMiniInput(
+              _rxController,
+              isSelected,
+              widget.onRxChanged,
             ),
           ),
         ],
@@ -825,6 +822,172 @@ class _ProductRowItemState extends State<ProductRowItem> {
           hintText: "-",
         ),
         onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// CUSTOM JOINT WORK SEARCH BOTTOM SHEET
+// =========================================================================
+
+class _JointWorkSearchSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> colleagues;
+  final VoidCallback onApply;
+
+  const _JointWorkSearchSheet({
+    required this.colleagues,
+    required this.onApply,
+  });
+
+  @override
+  State<_JointWorkSearchSheet> createState() => _JointWorkSearchSheetState();
+}
+
+class _JointWorkSearchSheetState extends State<_JointWorkSearchSheet> {
+  String _searchQuery = "";
+  late List<Map<String, dynamic>> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.colleagues;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredList = widget.colleagues.where((c) {
+        final name = c['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          // Header & Search
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Joint Work",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        widget.onApply();
+                        Navigator.pop(context);
+                      },
+                      child: Text(
+                        "Done",
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF4A148C),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search colleagues...",
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: Color(0xFF4A148C),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.shade50,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // List View
+          Expanded(
+            child: _filteredList.isEmpty
+                ? Center(
+                    child: Text(
+                      "No colleagues found",
+                      style: GoogleFonts.poppins(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: _filteredList.length,
+                    itemBuilder: (context, index) {
+                      var person = _filteredList[index];
+                      bool isSelected = person['isSelected'];
+
+                      return CheckboxListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 0,
+                        ),
+                        activeColor: const Color(0xFF4A148C),
+                        title: Text(
+                          person['name'],
+                          style: GoogleFonts.poppins(
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.w500,
+                          ),
+                        ),
+                        subtitle: person['role'] != null
+                            ? Text(
+                                person['role'],
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              )
+                            : null,
+                        value: isSelected,
+                        onChanged: (bool? val) {
+                          setState(() {
+                            person['isSelected'] = val ?? false;
+                          });
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }

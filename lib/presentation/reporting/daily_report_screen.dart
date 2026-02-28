@@ -64,26 +64,38 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     final reports = reportProvider.reports;
 
     return GestureDetector(
-      // Close keyboard if tapping outside (just in case)
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        backgroundColor: const Color(0xFFF8F9FD),
-        resizeToAvoidBottomInset:
-            true, // IMPORTANT: Allows UI to resize when keyboard opens
+        backgroundColor: const Color(0xFFF4F6F9), // Softer background color
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(
             'Daily Summary',
-            style: GoogleFonts.poppins(fontSize: 18),
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           backgroundColor: const Color(0xFF4A148C),
           elevation: 0,
         ),
         body: Column(
           children: [
-            // 1. HEADER SUMMARY (Fixed at top)
+            // 1. HEADER SUMMARY (Modern Curved Design)
             Container(
-              padding: const EdgeInsets.all(16),
-              color: const Color(0xFF4A148C),
+              padding: const EdgeInsets.only(
+                left: 20,
+                right: 20,
+                bottom: 30,
+                top: 10,
+              ),
+              decoration: const BoxDecoration(
+                color: Color(0xFF4A148C),
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(30),
+                  bottomRight: Radius.circular(30),
+                ),
+              ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -91,17 +103,19 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Total Visits",
+                        "Total Visits Executed",
                         style: GoogleFonts.poppins(
                           color: Colors.white70,
                           fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
+                      const SizedBox(height: 4),
                       Text(
                         "${reports.length}",
                         style: GoogleFonts.poppins(
                           color: Colors.white,
-                          fontSize: 24,
+                          fontSize: 28,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -115,12 +129,14 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 16,
-                        vertical: 8,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
+                        color: Colors.white.withOpacity(0.15),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white30),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                        ),
                       ),
                       child: Row(
                         children: [
@@ -129,11 +145,12 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                             style: GoogleFonts.poppins(
                               color: Colors.white,
                               fontWeight: FontWeight.w600,
+                              fontSize: 13,
                             ),
                           ),
                           const SizedBox(width: 8),
                           const Icon(
-                            Icons.calendar_today,
+                            Icons.calendar_month_rounded,
                             color: Colors.white,
                             size: 16,
                           ),
@@ -145,10 +162,14 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
               ),
             ),
 
-            // 2. REPORT LIST (Flexible area)
+            // 2. REPORT LIST
             Expanded(
               child: reportProvider.isLoading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF4A148C),
+                      ),
+                    )
                   : reports.isEmpty
                   ? Center(
                       child: Column(
@@ -157,38 +178,49 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                           Icon(
                             Icons.assignment_outlined,
                             size: 60,
-                            color: Colors.grey[300],
+                            color: Colors.grey[400],
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 16),
                           Text(
                             "No visits found for ${DateFormat('dd MMM').format(_selectedDate)}",
-                            style: GoogleFonts.poppins(color: Colors.grey),
+                            style: GoogleFonts.poppins(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                            ),
                           ),
                         ],
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      // Add extra padding at bottom so last card isn't hidden behind the button
+                      padding: const EdgeInsets.only(
+                        top: 20,
+                        left: 16,
+                        right: 16,
+                        bottom: 100,
+                      ), // Extra bottom padding for button
                       itemCount: reports.length,
                       itemBuilder: (context, index) {
                         final r = reports[index];
+                        final bool isSubmitted = reportProvider.isDaySubmitted;
+
                         return Card(
                           elevation: 0,
+                          color: Colors.white,
                           margin: const EdgeInsets.only(bottom: 12),
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
                             side: BorderSide(color: Colors.grey.shade200),
                           ),
                           child: InkWell(
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
                             onTap: () {
-                              if (reportProvider.isDaySubmitted) {
+                              if (isSubmitted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
                                       "Cannot edit. Day is already submitted.",
                                     ),
+                                    backgroundColor: Colors.redAccent,
                                   ),
                                 );
                               } else {
@@ -196,7 +228,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => ReportingScreen(
-                                      doctorId: r.id.toString(),
+                                      doctorId: r.doctorId,
                                       doctorName: r.doctorName,
                                       existingReport: r,
                                     ),
@@ -206,87 +238,83 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                             },
                             child: Padding(
                               padding: const EdgeInsets.all(16),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.purple[50],
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.person,
-                                      color: Color(0xFF4A148C),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 15),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
+                                  Row(
+                                    children: [
+                                      Container(
+                                        height: 45,
+                                        width: 45,
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.shade50,
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: Colors.purple.shade100,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.person_outline,
+                                          color: Color(0xFF4A148C),
+                                          size: 22,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Text(
                                           r.doctorName,
                                           style: GoogleFonts.poppins(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 15,
+                                            color: Colors.black87,
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              Icons.access_time,
-                                              size: 12,
-                                              color: Colors.grey[600],
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              DateFormat(
-                                                'h:mm a',
-                                              ).format(r.visitTime),
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey[600],
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 6,
-                                                    vertical: 2,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[100],
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                              ),
-                                              child: Text(
-                                                r.remarks,
-                                                style: const TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: isSubmitted
+                                              ? Colors.grey.shade100
+                                              : Colors.blue.shade50,
+                                          shape: BoxShape.circle,
                                         ),
-                                      ],
-                                    ),
+                                        child: Icon(
+                                          isSubmitted
+                                              ? Icons.lock_outline
+                                              : Icons.edit_outlined,
+                                          color: isSubmitted
+                                              ? Colors.grey
+                                              : Colors.blueAccent,
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  if (!reportProvider.isDaySubmitted)
-                                    const Icon(
-                                      Icons.edit_outlined,
-                                      color: Colors.grey,
-                                      size: 20,
-                                    )
-                                  else
-                                    const Icon(
-                                      Icons.lock_outline,
-                                      color: Colors.grey,
-                                      size: 20,
+
+                                  // REMARKS SECTION
+                                  if (r.remarks != null &&
+                                      r.remarks.toString().isNotEmpty) ...[
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade50,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: Colors.grey.shade100,
+                                        ),
+                                      ),
+                                      child: Text(
+                                        "Remark: ${r.remarks}",
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          fontStyle: FontStyle.italic,
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
                                     ),
+                                  ],
                                 ],
                               ),
                             ),
@@ -295,89 +323,260 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                       },
                     ),
             ),
+          ],
+        ),
 
-            // 3. FINAL SUBMIT BUTTON (Sticky Footer)
-            // SafeArea ensures it doesn't get hidden behind browser nav bars
-            SafeArea(
-              child: Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black12,
-                      blurRadius: 10,
-                      offset: const Offset(0, -5),
-                    ),
-                  ],
+        // 3. FINAL SUBMIT BUTTON
+        bottomNavigationBar: SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -5),
                 ),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: reportProvider.isDaySubmitted
-                          ? Colors.grey
-                          : const Color(0xFF4A148C),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    onPressed:
-                        (reports.isEmpty || reportProvider.isDaySubmitted)
-                        ? null
-                        : () async {
-                            bool? confirm = await showDialog(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: const Text("Submit Final Report?"),
-                                content: Text(
-                                  "Submitting for ${DateFormat('dd MMM').format(_selectedDate)}. You cannot edit after this.",
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, false),
-                                    child: const Text("Cancel"),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(ctx, true),
-                                    child: const Text("Confirm"),
-                                  ),
-                                ],
-                              ),
-                            );
+              ],
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: reportProvider.isDaySubmitted
+                      ? Colors.grey.shade400
+                      : const Color(0xFF4A148C),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: (reports.isEmpty || reportProvider.isDaySubmitted)
+                    ? null
+                    : () async {
+                        // Show customized dialog returning an integer (null if cancelled, >=0 if confirmed)
+                        int? finalChemistCount = await showDialog<int>(
+                          context: context,
+                          builder: (ctx) {
+                            bool visitedChemist = false;
+                            final TextEditingController chemistCountController =
+                                TextEditingController();
+                            String? errorText;
 
-                            if (confirm == true) {
-                              await reportProvider.submitDayReports(
-                                date: _selectedDate,
-                              );
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text(
-                                      'Day Submitted Successfully!',
+                            return StatefulBuilder(
+                              builder: (context, setDialogState) {
+                                return AlertDialog(
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  title: Text(
+                                    "Submit Final Report?",
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
                                     ),
                                   ),
+                                  content: SingleChildScrollView(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          "Submitting for ${DateFormat('dd MMM yyyy').format(_selectedDate)}. You cannot edit reports after submission.",
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 20),
+
+                                        // Chemist Toggle
+                                        Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.grey.shade50,
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.grey.shade200,
+                                            ),
+                                          ),
+                                          child: CheckboxListTile(
+                                            title: Text(
+                                              "Did you visit any chemists?",
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            value: visitedChemist,
+                                            activeColor: const Color(
+                                              0xFF4A148C,
+                                            ),
+                                            controlAffinity:
+                                                ListTileControlAffinity.leading,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                                  horizontal: 8,
+                                                ),
+                                            onChanged: (val) {
+                                              setDialogState(() {
+                                                visitedChemist = val ?? false;
+                                                if (!visitedChemist) {
+                                                  chemistCountController
+                                                      .clear();
+                                                  errorText = null;
+                                                }
+                                              });
+                                            },
+                                          ),
+                                        ),
+
+                                        // Chemist Count Input (Shown conditionally)
+                                        if (visitedChemist) ...[
+                                          const SizedBox(height: 16),
+                                          TextField(
+                                            controller: chemistCountController,
+                                            keyboardType: TextInputType.number,
+                                            decoration: InputDecoration(
+                                              labelText:
+                                                  "Number of chemists visited",
+                                              labelStyle: GoogleFonts.poppins(
+                                                fontSize: 14,
+                                              ),
+                                              errorText: errorText,
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                borderSide: const BorderSide(
+                                                  color: Color(0xFF4A148C),
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 12,
+                                                  ),
+                                              prefixIcon: const Icon(
+                                                Icons.storefront_outlined,
+                                              ),
+                                            ),
+                                            onChanged: (val) {
+                                              if (errorText != null) {
+                                                setDialogState(
+                                                  () => errorText = null,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(
+                                        ctx,
+                                        null,
+                                      ), // Returns null to cancel
+                                      child: Text(
+                                        "Cancel",
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(
+                                          0xFF4A148C,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                        ),
+                                      ),
+                                      onPressed: () {
+                                        int chemistCount = 0;
+                                        if (visitedChemist) {
+                                          chemistCount =
+                                              int.tryParse(
+                                                chemistCountController.text,
+                                              ) ??
+                                              0;
+                                          if (chemistCount <= 0) {
+                                            setDialogState(() {
+                                              errorText =
+                                                  "Please enter a valid number greater than 0.";
+                                            });
+                                            return;
+                                          }
+                                        }
+                                        // Returns the chemist count (0 if checkbox wasn't checked)
+                                        Navigator.pop(ctx, chemistCount);
+                                      },
+                                      child: Text(
+                                        "Confirm",
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 );
-                              }
-                            }
+                              },
+                            );
                           },
-                    child: Text(
-                      reportProvider.isDaySubmitted
-                          ? "SUBMITTED"
-                          : "SUBMIT FINAL REPORT",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
+                        );
+
+                        // If the user confirmed the dialog (returned an int instead of null)
+                        if (finalChemistCount != null) {
+                          await reportProvider.submitDayReports(
+                            date: _selectedDate,
+                            chemistCount:
+                                finalChemistCount ??
+                                0, // Falls back to 0 if not entered
+                          );
+
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Day Submitted Successfully!',
+                                  style: GoogleFonts.poppins(),
+                                ),
+                                backgroundColor: Colors.green,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                child: Text(
+                  reportProvider.isDaySubmitted
+                      ? "DAY SUBMITTED"
+                      : "SUBMIT FINAL REPORT",
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                    fontSize: 14,
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

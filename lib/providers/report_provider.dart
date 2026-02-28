@@ -85,7 +85,7 @@ class ReportProvider with ChangeNotifier {
   }
 
   Future<void> addReport(VisitReport report, {DateTime? selectedDate}) async {
-   // if (_isDaySubmitted) throw Exception("Day is locked.");
+    // if (_isDaySubmitted) throw Exception("Day is locked.");
 
     // Check locally
     if (hasVisitForSelectedDate(report.doctorName)) {
@@ -137,7 +137,10 @@ class ReportProvider with ChangeNotifier {
   // }
 
   /// Final Submit - Locks the day
-  Future<void> submitDayReports({DateTime? date}) async {
+  Future<void> submitDayReports({
+    DateTime? date,
+    required int chemistCount,
+  }) async {
     try {
       String? dateStr;
 
@@ -147,7 +150,10 @@ class ReportProvider with ChangeNotifier {
       }
 
       // Pass the date string to the API service
-      await _apiService.submitDayFinal(date: dateStr);
+      await _apiService.submitDayFinal(
+        date: dateStr,
+        chemistCount: chemistCount,
+      );
 
       _isDaySubmitted = true;
       notifyListeners();
