@@ -68,11 +68,13 @@ class ProductEntry {
   final String productName;
   final int pobQty;
   final int sampleQty;
+  final int rxQty; // NEW: Rx Quantity
 
   ProductEntry({
     required this.productName,
     this.pobQty = 0,
     this.sampleQty = 0,
+    this.rxQty = 0, // NEW: Default to 0
   });
 
   factory ProductEntry.fromJson(Map<String, dynamic> json) {
@@ -80,6 +82,9 @@ class ProductEntry {
       productName: json['product_name'] ?? '',
       pobQty: int.tryParse(json['pob_qty']?.toString() ?? '0') ?? 0,
       sampleQty: int.tryParse(json['sample_qty']?.toString() ?? '0') ?? 0,
+      rxQty:
+          int.tryParse(json['rx_qty']?.toString() ?? '0') ??
+          0, // NEW: Parse from JSON
     );
   }
 
@@ -88,6 +93,7 @@ class ProductEntry {
       'name': productName, // Ensure keys match your API expectation
       'pob': pobQty,
       'sample': sampleQty,
+      'rx': rxQty, // NEW: Send to API
     };
   }
 }

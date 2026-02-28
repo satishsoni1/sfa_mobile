@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:zforce/data/models/visit_report.dart';
@@ -219,14 +219,18 @@ class ApiService {
   //   }
   // }
   // Updated to accept an optional date string (YYYY-MM-DD)
-  Future<void> submitDayFinal({String? date}) async {
+  Future<void> submitDayFinal({String? date, required int chemistCount}) async {
     // Use your existing baseUrl variable mechanism
     // Ensure the endpoint path matches your Laravel route (e.g., /visits/submit-day)
     final url = Uri.parse('$baseUrl/app/visits/submit-day');
     final headers = await _getHeaders();
-
+    final Map<String, dynamic> requestData = {'chemist_count': chemistCount};
+    if (date != null) {
+      requestData['date'] = date;
+    }
+    final body = json.encode(requestData);
     // If date is provided, send it. Otherwise, send empty JSON (backend usually assumes 'today')
-    final body = date != null ? json.encode({'date': date}) : json.encode({});
+    // final body = date != null ? json.encode({'date': date}) : json.encode({});
 
     final response = await http.post(url, headers: headers, body: body);
 
@@ -581,6 +585,32 @@ class ApiService {
     return jsonDecode(response.body)['data'];
   }
 
+  Future<List<Map<String, String>>> getSubordinatesUpload() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/manager/subordinates'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+
+    if (response.statusCode == 200) {
+      // Decode the response
+      final decoded = jsonDecode(response.body);
+      final List<dynamic> data = decoded['data'] ?? [];
+
+      // Map the dynamic list to a strongly typed List<Map<String, String>>
+      return List<Map<String, String>>.from(
+        data.map(
+          (item) => {
+            'id': item['id'].toString(),
+            'name': item['name'].toString(),
+          },
+        ),
+      );
+    } else {
+      throw Exception('Failed to load subordinates');
+    }
+  }
+
   Future<List<Doctor>> getDoctorsForUser(int userId) async {
     final token = await getToken();
     final response = await http.get(
@@ -733,7 +763,7 @@ class ApiService {
   // Submit Expense (Multipart for Image)
   Future<void> submitExpense(
     Map<String, String> fields,
-    File? imageFile,
+    // File? imageFile,
   ) async {
     final token = await getToken();
 
@@ -746,11 +776,11 @@ class ApiService {
     // This line is where it was crashing before
     request.fields.addAll(fields);
 
-    if (imageFile != null) {
-      request.files.add(
-        await http.MultipartFile.fromPath('image', imageFile.path),
-      );
-    }
+    // if (imageFile != null) {
+    //   request.files.add(
+    //     await http.MultipartFile.fromPath('image', imageFile.path),
+    //   );
+    // }
 
     final response = await request.send();
     final responseBody = await response.stream.bytesToString(); // Read response
@@ -904,11 +934,15 @@ class ApiService {
       throw Exception(body['message'] ?? "Failed to reset password");
     }
   }
- Future<Map<String, dynamic>> getDailyCallReport(DateTime date, {int? userId}) async {
+
+  Future<Map<String, dynamic>> getDailyCallReport(
+    DateTime date, {
+    int? userId,
+  }) async {
     try {
       // Format date to YYYY-MM-DD
       final dateString = date.toIso8601String().split('T').first;
-      
+
       // Build URL with query parameters
       String url = '$baseUrl/app/reports/daily-call?date=$dateString';
       if (userId != null) {
@@ -918,15 +952,16 @@ class ApiService {
       // Fetch from Laravel backend
       final response = await http.get(
         Uri.parse(url),
-        headers: await _getHeaders(), // Assuming you have a method attaching the Bearer Token
+        headers:
+            await _getHeaders(), // Assuming you have a method attaching the Bearer Token
       );
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> jsonResponse = jsonDecode(response.body);
-        
+
         if (jsonResponse['success'] == true) {
           // Return the 'data' object which contains 'summary' and 'details'
-          return jsonResponse['data']; 
+          return jsonResponse['data'];
         } else {
           throw Exception(jsonResponse['message'] ?? 'Failed to load report');
         }
@@ -937,11 +972,12 @@ class ApiService {
       throw Exception('API Error: $e');
     }
   }
+
   // Fetch Doctors for Master List (Supports Subordinate Filtering)
   Future<List<dynamic>> getDoctorsMaster({int? userId}) async {
     try {
       String url = '$baseUrl/app/doctors/master';
-      
+
       // Append the userId to the query string if a subordinate is selected
       if (userId != null) {
         url += '?user_id=$userId';
@@ -964,6 +1000,114 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('API Error: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> getCallReport({
+    required DateTime startDate,
+    required DateTime endDate,
+    int? userId,
+  }) async {
+    try {
+      // 1. Format dates to string (e.g., "2024-02-20")
+      final DateFormat formatter = DateFormat('yyyy-MM-dd');
+      final String startStr = formatter.format(startDate);
+      final String endStr = formatter.format(endDate);
+
+      // 2. Prepare Query Parameters
+      final Map<String, String> queryParams = {
+        'start_date': startStr,
+        'end_date': endStr,
+      };
+
+      // If a subordinate is selected, pass their ID.
+      // If null, the backend should assume it's the logged-in user (Myself).
+      if (userId != null) {
+        queryParams['user_id'] = userId.toString();
+      }
+
+      // 3. Construct the full URI
+      final uri = Uri.parse(
+        '$baseUrl/app/reports/execution',
+      ).replace(queryParameters: queryParams);
+
+      // 4. Make the HTTP GET request
+      final response = await http.get(uri, headers: await _getHeaders());
+
+      // 5. Handle the Response
+      if (response.statusCode == 200) {
+        // Successfully fetched data
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        // Backend returned an error
+        throw Exception(
+          'Failed to load report: ${response.statusCode} - ${response.body}',
+        );
+      }
+    } catch (e) {
+      // Catch network errors or parsing errors
+      throw Exception('Network or parsing error occurred: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadMasterData({
+    PlatformFile? doctorFile, // Changed from File to PlatformFile
+    PlatformFile? chemistFile, // Changed from File to PlatformFile
+    required String assignedTo,
+  }) async {
+    final uri = Uri.parse('$baseUrl/app/upload-master-data');
+    final request = http.MultipartRequest('POST', uri);
+
+    final headers = await _getHeaders();
+    request.headers.addAll(headers);
+
+    request.fields['assigned_to'] = assignedTo;
+
+    // Attach Doctor File using BYTES
+    if (doctorFile != null && doctorFile.bytes != null) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'doctor_file',
+          doctorFile.bytes!,
+          filename: doctorFile.name,
+        ),
+      );
+    }
+
+    // Attach Chemist File using BYTES
+    if (chemistFile != null && chemistFile.bytes != null) {
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'chemist_file',
+          chemistFile.bytes!,
+          filename: chemistFile.name,
+        ),
+      );
+    }
+
+    final streamedResponse = await request.send();
+    final response = await http.Response.fromStream(streamedResponse);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return json.decode(response.body);
+    } else {
+      throw Exception("Upload failed: ${response.body}");
+    }
+  }
+
+  Future<Map<String, dynamic>> getUploadedMasterData(
+    String assignedToId,
+  ) async {
+    // Pass the assignedToId as a query parameter
+    final url = Uri.parse('$baseUrl/app/master-data?assigned_to=$assignedToId');
+    final headers = await _getHeaders();
+
+    final response = await http.get(url, headers: headers);
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      throw Exception('Failed to load master data');
     }
   }
 }

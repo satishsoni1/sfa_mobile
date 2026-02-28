@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -21,7 +20,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   DateTime _selectedDate = DateTime.now();
   Map<String, dynamic>? _calcData;
   bool _isLoading = false;
-  File? _attachment;
+  // File? _attachment;
 
   // Dynamic Total
   double _displayTotal = 0.0;
@@ -101,7 +100,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
 
     if (pickedFile != null) {
-      setState(() => _attachment = File(pickedFile.path));
+      // setState(() => _attachment = File(pickedFile.path));
     }
   }
 
@@ -126,7 +125,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       };
 
       // 2. Call API
-      await ApiService().submitExpense(payload, _attachment);
+      // await ApiService().submitExpense(payload, _attachment);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -294,26 +293,26 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              _attachment == null
-                                  ? Icons.attach_file
-                                  : Icons.check_circle,
-                              color: _attachment == null
-                                  ? Colors.grey
-                                  : Colors.green,
-                            ),
+                            // Icon(
+                            //   _attachment == null
+                            //       ? Icons.attach_file
+                            //       : Icons.check_circle,
+                            //   color: _attachment == null
+                            //       ? Colors.grey
+                            //       : Colors.green,
+                            // ),
                             const SizedBox(width: 8),
-                            Text(
-                              _attachment == null
-                                  ? "Attach Bill / Ticket"
-                                  : "Image Attached",
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: _attachment == null
-                                    ? Colors.grey[700]
-                                    : Colors.green,
-                              ),
-                            ),
+                            // Text(
+                            //   _attachment == null
+                            //       ? "Attach Bill / Ticket"
+                            //       : "Image Attached",
+                            //   style: TextStyle(
+                            //     fontWeight: FontWeight.w600,
+                            //     color: _attachment == null
+                            //         ? Colors.grey[700]
+                            //         : Colors.green,
+                            //   ),
+                            // ),
                           ],
                         ),
                       ),

@@ -9,6 +9,7 @@ import 'package:zforce/presentation/chat/chat_screen.dart';
 import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
+import 'package:zforce/presentation/master/data_upload_screen.dart';
 import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
@@ -202,16 +203,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       key: _scaffoldKey,
       backgroundColor: bgColor,
       drawer: _buildDrawer(user),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ChatScreen()),
-          );
-        },
-        backgroundColor: const Color(0xFF4A148C),
-        child: const Icon(Icons.auto_awesome, color: Colors.white),
-      ),
+      // floatingActionButton: FloatingActionButton(
+      //   onPressed: () {
+      //     Navigator.push(
+      //       context,
+      //       MaterialPageRoute(builder: (_) => const ChatScreen()),
+      //     );
+      //   },
+      //   backgroundColor: const Color(0xFF4A148C),
+      //   child: const Icon(Icons.auto_awesome, color: Colors.white),
+      // ),
       body: RefreshIndicator(
         onRefresh: _loadInitialData,
         child: SingleChildScrollView(
@@ -636,7 +637,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildExpenseSummaryCard(),
+        // _buildExpenseSummaryCard(),
         const SizedBox(height: 16),
 
         _buildSectionTitle("Field Operations"),
@@ -670,41 +671,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icons.analytics_outlined,
             "Reports",
             Colors.indigoAccent,
-            () => _navigateTo(const DailyCallReportScreen()),
+            () => _navigateTo(const CallReportScreen()),
           ),
-        _MenuAction(
-            Icons.business_center,
-            "Sample Distribution",
-            Colors.cyan,
-            () => _navigateTo(const SampleDistributionScreen()),
-          ),
+          // _MenuAction(
+          //     Icons.business_center,
+          //     "Sample Distribution",
+          //     Colors.cyan,
+          //     () => _navigateTo(const SampleDistributionScreen()),
+          //   ),
 
-          _MenuAction(
-            Icons.campaign,
-            "Campaigns",
-            Colors.deepOrange,
-            () => _navigateTo(
-              const CampaignListScreen(),
-            ), // <--- Links to new screen
-          ),
+          //   _MenuAction(
+          //     Icons.campaign,
+          //     "Campaigns",
+          //     Colors.deepOrange,
+          //     () => _navigateTo(
+          //       const CampaignListScreen(),
+          //     ), // <--- Links to new screen
+          //   ),
           // ... other marketing tools if any
         ]),
         const SizedBox(height: 24),
 
-        _buildSectionTitle("HR & Management"),
+        _buildSectionTitle("Manager Reporting"),
         _buildMenuGrid([
-          _MenuAction(
-            Icons.receipt_long,
-            "Expense",
-            Colors.indigo,
-            () => _navigateTo(const ExpenseSummaryScreen()),
-          ),
-          _MenuAction(
-            Icons.calendar_month,
-            "Leave",
-            Colors.redAccent,
-            () => _navigateTo(const LeaveListScreen()),
-          ),
+          // _MenuAction(
+          //   Icons.receipt_long,
+          //   "Expense",
+          //   Colors.indigo,
+          //   () => _navigateTo(const ExpenseSummaryScreen()),
+          // ),
+          // _MenuAction(
+          //   Icons.calendar_month,
+          //   "Leave",
+          //   Colors.redAccent,
+          //   () => _navigateTo(const LeaveListScreen()),
+          // ),
           _MenuAction(
             Icons.groups,
             "Team View",
@@ -728,6 +729,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Dr. Master",
             Colors.deepPurple,
             () => _navigateTo(const DoctorMasterScreen()),
+          ),
+          _MenuAction(
+            Icons.business_center,
+            "Data Upload",
+            Colors.cyan,
+            () => _navigateTo(const DataUploadScreen(isManager: true)),
           ),
           _MenuAction(
             Icons.person_add_alt_1,
@@ -871,11 +878,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _navigateTo(Widget screen) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-      
+
   void _showSnack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
   );
-  
+
   void _showSettingsSheet() {
     showModalBottomSheet(
       context: context,
