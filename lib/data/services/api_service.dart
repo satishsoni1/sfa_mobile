@@ -1110,4 +1110,63 @@ class ApiService {
       throw Exception('Failed to load master data');
     }
   }
+
+  // 1. Fetch Team Members for Dropdown (Reportee List)
+  Future<List<Map<String, String>>> fetchTeamMembers() async {
+    final token = await getToken();
+    if (token == null) return [];
+
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$baseUrl/app/manager/team',
+        ), // Adjust if your backend route is different
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body)['data'] as List;
+        return data
+            .map(
+              (e) => {'id': e['id'].toString(), 'name': e['name'].toString()},
+            )
+            .toList();
+      }
+    } catch (e) {
+      print("Error fetching team: $e");
+    }
+    return [];
+  }
+
+  // 2. Fetch Specific Report Data (Call Avg, TP Deviation, Summary, etc.)
+  Future<List<dynamic>> fetchHierarchyReport(
+    String reportType, {
+    String? empCode,
+  }) async {
+    final token = await getToken();
+    if (token == null) return [];
+
+    // Map the Enum type to the API string type (e.g., ReportType.callAvg -> 'callAvg')
+    String apiType = reportType.split('.').last;
+
+    // Construct URL with optional filter
+    String url = '$baseUrl/app/manager/reports/$apiType';
+    if (empCode != null && empCode != 'All Team') {
+      url += '?employee_code=$empCode'; // Passing employee filter to backend
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body)['data'];
+      }
+    } catch (e) {
+      print("Error fetching report data: $e");
+    }
+    return [];
+  }
 }

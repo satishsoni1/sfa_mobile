@@ -10,6 +10,7 @@ import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
 import 'package:zforce/presentation/master/data_upload_screen.dart';
+import 'package:zforce/presentation/master/reports_dashboard_screen.dart';
 import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
@@ -717,6 +718,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Approvals",
             Colors.green,
             () => _navigateTo(const ManagerJointWorkScreen()),
+          ),
+          _MenuAction(
+            Icons.bar_chart,
+            "Team Reports",
+            Colors.green,
+            () => _navigateTo(const ReportsDashboardScreen()),
           ),
         ]),
         const SizedBox(height: 24),

@@ -7,4 +7,5 @@ class AppColors {
   static const Color success = Colors.green;
   static const Color textDark = Color(0xFF212121);
   static const Color textGrey = Color(0xFF757575);
+  static const Color alertRed = Colors.red;
 }
