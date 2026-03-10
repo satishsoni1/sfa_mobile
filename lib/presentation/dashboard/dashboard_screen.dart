@@ -3,14 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:zforce/presentation/chat/chat_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:universal_html/html.dart'
+    as html; // Safe cross-platform HTML handler
 
 // --- SCREENS ---
+import 'package:zforce/presentation/chat/chat_screen.dart';
 import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
 import 'package:zforce/presentation/master/data_upload_screen.dart';
 import 'package:zforce/presentation/master/reports_dashboard_screen.dart';
+import 'package:zforce/presentation/route_wise_plan/tour_plan_screen.dart';
 import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
@@ -39,6 +43,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  // --- APP VERSION (Update this manually before every new build) ---
+  static const String CURRENT_APP_VERSION = "1.0.0";
+
   // --- STATE ---
   bool _isCheckedIn = false;
   DateTime? _checkInTime;
@@ -56,7 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // --- COLORS ---
   final Color primaryColor = const Color(0xFF4A148C);
   final Color accentColor = const Color(0xFF7B1FA2);
-  final Color bgColor = const Color(0xFFF4F6F9); // Slightly softer background
+  final Color bgColor = const Color(0xFFF4F6F9);
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -88,8 +95,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final apiService = ApiService();
 
     try {
-      // 1. Parallel Data Fetching
+      // 1. Parallel Data Fetching (Added Version Check)
       await Future.wait([
+        _checkAppVersion(apiService), // NEW: Checks for updates on load
         reportProvider.fetchTodayData(),
         _fetchAttendance(apiService),
         _fetchExpenseSummary(apiService),
@@ -99,6 +107,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
     }
+  }
+
+  // --- VERSION CONTROL LOGIC ---
+  Future<void> _checkAppVersion(ApiService api) async {
+    if (!kIsWeb) return; // Optional: Only enforce hard-refresh on Web
+
+    try {
+      final serverVersion = await api.getServerAppVersion();
+
+      if (serverVersion != null && serverVersion != CURRENT_APP_VERSION) {
+        if (mounted) _showUpdatePopup();
+      }
+    } catch (e) {
+      debugPrint("Version check failed: $e");
+    }
+  }
+
+  void _showUpdatePopup() {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Forces user to click the button
+      builder: (ctx) => WillPopScope(
+        onWillPop: () async => false, // Prevent back button dismissal
+        child: AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.system_update, color: Colors.blue, size: 28),
+              const SizedBox(width: 10),
+              const Text(
+                "Update Available",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: const Text(
+            "A new version of the system has been released. Please refresh the app to clear your cache and apply the latest features.",
+            style: TextStyle(color: Colors.black87, height: 1.5),
+          ),
+          actions: [
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  if (kIsWeb) {
+                    // This forces the web browser to hard-reload, bypassing the cache
+                    html.window.location.reload();
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text(
+                  "Refresh App Now",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _fetchAttendance(ApiService api) async {
@@ -133,19 +213,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _fetchExpenseSummary(ApiService api) async {
     try {
-      // Fetch for current month
       final data = await api.getMonthlyExpenses(DateTime.now());
       if (!mounted) return;
 
       final summary = data['summary'];
       setState(() {
-        // Convert numbers to formatted strings (e.g. 5000 -> 5,000)
         final fmt = NumberFormat("#,##0");
         _expClaimed = fmt.format(summary['total_claimed'] ?? 0);
         _expPending = fmt.format(summary['total_pending'] ?? 0);
       });
     } catch (e) {
-      // Handle silently or set to error state
+      // Handle silently
     }
   }
 
@@ -204,16 +282,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       key: _scaffoldKey,
       backgroundColor: bgColor,
       drawer: _buildDrawer(user),
-      // floatingActionButton: FloatingActionButton(
-      //   onPressed: () {
-      //     Navigator.push(
-      //       context,
-      //       MaterialPageRoute(builder: (_) => const ChatScreen()),
-      //     );
-      //   },
-      //   backgroundColor: const Color(0xFF4A148C),
-      //   child: const Icon(Icons.auto_awesome, color: Colors.white),
-      // ),
       body: RefreshIndicator(
         onRefresh: _loadInitialData,
         child: SingleChildScrollView(
@@ -515,132 +583,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildExpenseSummaryCard() {
-    final String currentMonth = DateFormat('MMMM').format(DateTime.now());
-
-    return GestureDetector(
-      onTap: () async {
-        await Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ExpenseSummaryScreen()),
-        );
-        _loadInitialData(); // Refresh on return
-      },
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFF3F51B5), Color(0xFF5C6BC0)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.indigo.withOpacity(0.3),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  "Expense Summary ($currentMonth)",
-                  style: GoogleFonts.poppins(
-                    color: Colors.white.withOpacity(0.9),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const Icon(
-                  Icons.arrow_forward,
-                  color: Colors.white70,
-                  size: 18,
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "₹$_expClaimed",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      "Total Claimed",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white70,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(width: 1, height: 40, color: Colors.white24),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "₹$_expPending",
-                      style: GoogleFonts.poppins(
-                        color: const Color(0xFFFFCC80),
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      "Pending",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white70,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                InkWell(
-                  onTap: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ExpenseScreen()),
-                    );
-                    _loadInitialData(); // Refresh on return
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.add, color: Colors.indigo),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildQuickActions() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // _buildExpenseSummaryCard(),
-        const SizedBox(height: 16),
-
         _buildSectionTitle("Field Operations"),
         _buildMenuGrid([
           _MenuAction(
@@ -648,6 +594,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Tour Plan",
             Colors.teal,
             () => _navigateTo(const TourPlanScreen()),
+          ),
+          _MenuAction(
+            Icons.map,
+            "Route wise Tour Plan",
+            Colors.teal,
+            () => _navigateTo(const RouteTourPlanScreen()),
           ),
           _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
             if (_isCheckedIn) {
@@ -674,39 +626,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.indigoAccent,
             () => _navigateTo(const CallReportScreen()),
           ),
-          // _MenuAction(
-          //     Icons.business_center,
-          //     "Sample Distribution",
-          //     Colors.cyan,
-          //     () => _navigateTo(const SampleDistributionScreen()),
-          //   ),
-
-          //   _MenuAction(
-          //     Icons.campaign,
-          //     "Campaigns",
-          //     Colors.deepOrange,
-          //     () => _navigateTo(
-          //       const CampaignListScreen(),
-          //     ), // <--- Links to new screen
-          //   ),
-          // ... other marketing tools if any
         ]),
         const SizedBox(height: 24),
 
         _buildSectionTitle("Manager Reporting"),
         _buildMenuGrid([
-          // _MenuAction(
-          //   Icons.receipt_long,
-          //   "Expense",
-          //   Colors.indigo,
-          //   () => _navigateTo(const ExpenseSummaryScreen()),
-          // ),
-          // _MenuAction(
-          //   Icons.calendar_month,
-          //   "Leave",
-          //   Colors.redAccent,
-          //   () => _navigateTo(const LeaveListScreen()),
-          // ),
           _MenuAction(
             Icons.groups,
             "Team View",
@@ -730,7 +654,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
         _buildSectionTitle("Utilities"),
         _buildMenuGrid([
-          // --- NEW: Doctor Master Added Here ---
           _MenuAction(
             Icons.folder_shared,
             "Dr. Master",

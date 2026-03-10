@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:zforce/data/models/visit_report.dart';
@@ -1168,5 +1169,141 @@ class ApiService {
       print("Error fetching report data: $e");
     }
     return [];
+  }
+
+  Future<String?> getServerAppVersion() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/version'),
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['version']; // e.g. "1.0.1"
+      }
+    } catch (e) {
+      // Fails silently if offline
+      return null;
+    }
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> fetchUserAreas() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/areas'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(resData['data']);
+      }
+    } catch (e) {
+      debugPrint("Error fetching areas: $e");
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>?> createArea(
+    String areaName,
+    String territoryType,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/areas'),
+        headers: await _getHeaders(),
+        body: json.encode({
+          'area_name': areaName,
+          'territory_type': territoryType, // SENDING NEW FIELD
+        }),
+      );
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        return resData['data'];
+      }
+    } catch (e) {
+      debugPrint("Error creating area: $e");
+    }
+    return null;
+  }
+
+  Future<bool> saveAreaTourPlan(Map<String, dynamic> payload) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/tour-plan/save'),
+        headers: await _getHeaders(),
+        body: json.encode(payload),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error saving plan: $e");
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>> getMonthlyAreaPlans(
+    DateTime month, {
+    int? userId,
+  }) async {
+    try {
+      String monthStr = DateFormat('yyyy-MM').format(month);
+      String url = '$baseUrl/tour-plan/monthly?month=$monthStr';
+      if (userId != null) {
+        url += '&user_id=$userId';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        return Map<String, dynamic>.from(resData['data']);
+      }
+    } catch (e) {
+      debugPrint("Error fetching monthly plans: $e");
+    }
+    return {};
+  }
+
+  Future<bool> submitMonthPlan(DateTime month) async {
+    try {
+      String monthStr = DateFormat('yyyy-MM').format(month);
+      final response = await http.post(
+        Uri.parse('$baseUrl/tour-plan/submit-month'),
+        headers: await _getHeaders(),
+        body: json.encode({'month': monthStr}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error submitting month: $e");
+      return false;
+    }
+  }
+
+  Future<bool> bulkActionAreaPlan({
+    required String action, // 'Approved' or 'Rejected'
+    required List<String> dates,
+    String? remark,
+    required int targetUserId,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/tour-plan/bulk-action'),
+        headers: await _getHeaders(),
+        body: json.encode({
+          'action': action,
+          'dates': dates,
+          'remark': remark,
+          'user_id': targetUserId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error in bulk action: $e");
+      return false;
+    }
   }
 }
