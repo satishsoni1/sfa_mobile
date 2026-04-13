@@ -1141,35 +1141,60 @@ class ApiService {
 
   // 2. Fetch Specific Report Data (Call Avg, TP Deviation, Summary, etc.)
   Future<List<dynamic>> fetchHierarchyReport(
-    String reportType, {
-    String? empCode,
-  }) async {
-    final token = await getToken();
-    if (token == null) return [];
+  String reportType, {
+  String? empCode,
+  String? date,  // 👇 NEW: Added date param
+  String? month, // 👇 NEW: Added month param
+  String? year,  // 👇 NEW: Added year param
+}) async {
+  final token = await getToken();
+  if (token == null) return [];
 
-    // Map the Enum type to the API string type (e.g., ReportType.callAvg -> 'callAvg')
-    String apiType = reportType.split('.').last;
+  // Map the Enum type to the API string type (e.g., ReportType.callAvg -> 'callAvg')
+  String apiType = reportType.split('.').last;
 
-    // Construct URL with optional filter
-    String url = '$baseUrl/app/manager/reports/$apiType';
-    if (empCode != null && empCode != 'All Team') {
-      url += '?employee_code=$empCode'; // Passing employee filter to backend
-    }
+  // 1. Construct Base URL
+  String baseUrlString = '$baseUrl/app/manager/reports/$apiType';
 
-    try {
-      final response = await http.get(
-        Uri.parse(url),
-        headers: await _getHeaders(),
-      );
+  // 2. Build Query Parameters Map dynamically
+  Map<String, String> queryParams = {};
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body)['data'];
-      }
-    } catch (e) {
-      print("Error fetching report data: $e");
-    }
-    return [];
+  if (empCode != null && empCode != 'All Team') {
+    queryParams['employee_code'] = empCode;
   }
+  if (date != null && date.isNotEmpty) {
+    queryParams['date'] = date;
+  }
+  if (month != null && month.isNotEmpty) {
+    queryParams['month'] = month;
+  }
+  if (year != null && year.isNotEmpty) {
+    queryParams['year'] = year;
+  }
+
+  // 3. Generate the final safely-encoded URI
+  Uri uri = Uri.parse(baseUrlString);
+  if (queryParams.isNotEmpty) {
+    // This safely handles the '?' and '&' characters for you automatically
+    uri = uri.replace(queryParameters: queryParams); 
+  }
+
+  try {
+    final response = await http.get(
+      uri, // 👇 Pass the nicely formatted URI here
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['data'];
+    } else {
+      print("API Error: ${response.statusCode} - ${response.body}");
+    }
+  } catch (e) {
+    print("Error fetching report data: $e");
+  }
+  return [];
+}
 
   Future<String?> getServerAppVersion() async {
     try {
@@ -1189,21 +1214,21 @@ class ApiService {
     return null;
   }
 
-  Future<List<Map<String, dynamic>>> fetchUserAreas() async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/areas'),
-        headers: await _getHeaders(),
-      );
-      if (response.statusCode == 200) {
-        final resData = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(resData['data']);
-      }
-    } catch (e) {
-      debugPrint("Error fetching areas: $e");
-    }
-    return [];
-  }
+  // Future<List<Map<String, dynamic>>> fetchUserAreas() async {
+  //   try {
+  //     final response = await http.get(
+  //       Uri.parse('$baseUrl/areas'),
+  //       headers: await _getHeaders(),
+  //     );
+  //     if (response.statusCode == 200) {
+  //       final resData = json.decode(response.body);
+  //       return List<Map<String, dynamic>>.from(resData['data']);
+  //     }
+  //   } catch (e) {
+  //     debugPrint("Error fetching areas: $e");
+  //   }
+  //   return [];
+  // }
 
   Future<Map<String, dynamic>?> createArea(
     String areaName,
@@ -1242,46 +1267,6 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> getMonthlyAreaPlans(
-    DateTime month, {
-    int? userId,
-  }) async {
-    try {
-      String monthStr = DateFormat('yyyy-MM').format(month);
-      String url = '$baseUrl/tour-plan/monthly?month=$monthStr';
-      if (userId != null) {
-        url += '&user_id=$userId';
-      }
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: await _getHeaders(),
-      );
-
-      if (response.statusCode == 200) {
-        final resData = json.decode(response.body);
-        return Map<String, dynamic>.from(resData['data']);
-      }
-    } catch (e) {
-      debugPrint("Error fetching monthly plans: $e");
-    }
-    return {};
-  }
-
-  Future<bool> submitMonthPlan(DateTime month) async {
-    try {
-      String monthStr = DateFormat('yyyy-MM').format(month);
-      final response = await http.post(
-        Uri.parse('$baseUrl/tour-plan/submit-month'),
-        headers: await _getHeaders(),
-        body: json.encode({'month': monthStr}),
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint("Error submitting month: $e");
-      return false;
-    }
-  }
 
   Future<bool> bulkActionAreaPlan({
     required String action, // 'Approved' or 'Rejected'
@@ -1305,5 +1290,251 @@ class ApiService {
       debugPrint("Error in bulk action: $e");
       return false;
     }
+  }
+
+  Future<List<dynamic>> getChemists({int? userId}) async {
+    try {
+      String url = '$baseUrl/app/chemists';
+      if (userId != null) {
+        url += '?user_id=$userId';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        return resData['data'];
+      }
+    } catch (e) {
+      debugPrint("Error fetching chemists: $e");
+    }
+    return [];
+  }
+
+  Future<bool> addChemist(Map<String, dynamic> payload) async {
+    try {
+      final response = await http.post(
+        Uri.parse(
+          '$baseUrl/app/chemists/add',
+        ), // Adjust endpoint to match Laravel
+        headers: await _getHeaders(),
+        body: json.encode(payload),
+      );
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint("Error adding chemist: $e");
+      return false;
+    }
+  }
+
+  Future<bool> updateChemist(Map<String, dynamic> payload) async {
+    try {
+      final String chemistId = payload['id'];
+      final response = await http.post(
+        Uri.parse(
+          '$baseUrl/app/chemists/update/$chemistId',
+        ), // Adjust endpoint to match Laravel
+        headers: await _getHeaders(),
+        body: json.encode(payload),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error updating chemist: $e");
+      return false;
+    }
+  }
+
+  Future<bool> saveChemistVisit(Map<String, dynamic> payload) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/app/chemist-reports/save'),
+        headers: await _getHeaders(),
+        body: json.encode(payload),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error saving chemist report: $e");
+      return false;
+    }
+  }
+
+  Future<List<dynamic>> getChemistVisitsByDate(String date) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/chemist-reports/date?date=$date'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body)['data'];
+      }
+    } catch (e) {
+      debugPrint("Error fetching chemist reports: $e");
+    }
+    return [];
+  }
+
+  Future<List<dynamic>> getChemistHistory(String chemistId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/chemists/$chemistId/history'),
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        return resData['data'] ?? [];
+      }
+    } catch (e) {
+      debugPrint("Error fetching chemist history: $e");
+    }
+    return [];
+  }
+  // Add this to your ApiService class
+  Future<bool> saveDoctorSelection({
+    required int? subordinateId, // Null if saving for self
+    required Map<int, String> selections,
+  }) async {
+    try {
+      // Convert the Map<int, String> to a list of objects for the API
+      final List<Map<String, dynamic>> selectionPayload = selections.entries.map((e) => {
+        'doctor_id': e.key,
+        'category': e.value, // 'CORE_3', 'FRD_2', 'KBL'
+      }).toList();
+
+      // UNCOMMENT AND UPDATE WITH YOUR ACTUAL HTTP CALL
+      final response = await http.post(
+        Uri.parse('$baseUrl/app/save-doctor-selection'),
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'subordinate_id': subordinateId, // Backend should use Auth user if this is null
+          'selections': selectionPayload,
+        }),
+      );
+
+      if (response.statusCode == 200) return true;
+      return false;
+      
+      // Mocking success for now
+      // await Future.delayed(const Duration(seconds: 1));
+      // return true;
+    } catch (e) {
+      debugPrint("Error saving selections: $e");
+      return false;
+    }
+  }
+  Future<bool> approveDoctorSelection({required int subordinateId}) async {
+    
+    final url = Uri.parse('$baseUrl/app/approve-doctor-selection');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: await _getHeaders(),
+        body: jsonEncode({'subordinate_id': subordinateId}),
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        debugPrint("Failed to approve: ${response.body}");
+        return false;
+      }
+    } catch (e) {
+      debugPrint("API Error (approveDoctorSelection): $e");
+      return false;
+    }
+  }
+ // 1. FETCH MONTHLY PLANS & OVERALL MONTH STATUS
+  Future<Map<String, dynamic>> getMonthlyAreaPlans(
+    DateTime month, {
+    int? userId,
+  }) async { 
+    try {
+      String monthStr = DateFormat('yyyy-MM').format(month);
+      // Adjusted to ensure /app/ prefix is used
+      String url = '$baseUrl/tour-plan/monthly?month=$monthStr';
+      if (userId != null) {
+        url += '&user_id=$userId';
+      }
+
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        // Expecting backend to return { "data": { "month_status": "Pending", "plans": {...} } }
+        return Map<String, dynamic>.from(resData['data']);
+      }
+    } catch (e) {
+      debugPrint("Error fetching monthly plans: $e");
+    }
+    return {};
+  }
+
+  // 2. USER SUBMITS ENTIRE MONTH
+  Future<bool> submitMonthPlan(DateTime month) async {
+    try {
+      String monthStr = DateFormat('yyyy-MM').format(month);
+      final response = await http.post(
+        Uri.parse('$baseUrl/tour-plan/submit-month'),
+        headers: await _getHeaders(),
+        body: json.encode({'month': monthStr}),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error submitting month: $e");
+      return false;
+    }
+  }
+
+  // 3. MANAGER REVIEWS ENTIRE MONTH (Replacing your mock at the bottom)
+  Future<bool> reviewMonthPlan({
+    required DateTime month, 
+    required String action, // 'Approved' or 'Rejected'
+    required String remark, 
+    required int targetUserId
+  }) async { 
+    try {
+      String monthStr = DateFormat('yyyy-MM').format(month);
+      final response = await http.post(
+        Uri.parse('$baseUrl/tour-plan/review-month'),
+        headers: await _getHeaders(),
+        body: json.encode({
+          'month': monthStr,
+          'action': action,
+          'remark': remark,
+          'user_id': targetUserId,
+        }),
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint("Error reviewing month plan: $e");
+      return false;
+    }
+  }
+  Future<List<Map<String, dynamic>>> fetchUserAreas({int? userId}) async {
+    try {
+      String url = '$baseUrl/areas';
+      if (userId != null) {
+        url += '?user_id=$userId'; // Pass subordinate ID to Laravel
+      }
+      
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+      
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(resData['data']);
+      }
+    } catch (e) {
+      debugPrint("Error fetching areas: $e");
+    }
+    return [];
   }
 }

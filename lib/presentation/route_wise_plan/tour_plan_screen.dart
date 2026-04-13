@@ -19,6 +19,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   bool _isLoading = false;
 
   Map<String, dynamic> _monthlyPlans = {};
+  String _monthStatus = 'Draft'; // NEW: Tracks the status of the entire month
 
   final Color _primaryColor = const Color(0xFF2E3192);
   final Color _bgColor = const Color(0xFFF4F6F9);
@@ -27,10 +28,6 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   final Color _pendingColor = const Color(0xFFFFA726);
   final Color _approvedColor = const Color(0xFF66BB6A);
   final Color _rejectedColor = const Color(0xFFEF5350);
-
-  // --- Manager Selection Mode ---
-  bool _isSelectionMode = false;
-  Set<DateTime> _selectedDates = {}; // Dates selected for Approve/Reject
 
   @override
   void initState() {
@@ -41,7 +38,6 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
     try {
-      // Fetch Subordinates (Manager View)
       _subordinates = await _api.getSubordinates();
       await _fetchMonthlyPlans();
     } catch (e) {
@@ -51,141 +47,33 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     }
   }
 
-  // --- INTEGRATED API CALL ---
-  Future<void> _fetchMonthlyPlans() async {
+  // --- API CALL ---
+ Future<void> _fetchMonthlyPlans() async {
     setState(() => _isLoading = true);
     try {
-      final plans = await _api.getMonthlyAreaPlans(
+      final response = await _api.getMonthlyAreaPlans(
         _selectedDate,
         userId: _selectedSubordinate?['id'],
       );
       if (mounted) {
         setState(() {
-          _monthlyPlans = plans;
+          _monthStatus = response['month_status'] ?? 'Draft';
+          
+          // --- THE FIX IS HERE ---
+          var plansData = response['plans'];
+          
+          if (plansData == null || plansData is List) {
+            // Laravel returned [] (List) because it was empty. 
+            // Force it to be an empty Map {} so Dart doesn't crash.
+            _monthlyPlans = {}; 
+          } else {
+            // It has data, so it correctly came back as a Map
+            _monthlyPlans = Map<String, dynamic>.from(plansData);
+          }
         });
       }
     } catch (e) {
       debugPrint("Failed to fetch plans: $e");
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  // --- Bulk Action Logic for Managers ---
-  void _toggleSelectionMode(DateTime date) {
-    if (_selectedSubordinate == null) return; // Only managers selecting subs
-    setState(() {
-      _isSelectionMode = true;
-      if (_selectedDates.any((d) => DateUtils.isSameDay(d, date))) {
-        _selectedDates.removeWhere((d) => DateUtils.isSameDay(d, date));
-        if (_selectedDates.isEmpty) _isSelectionMode = false;
-      } else {
-        _selectedDates.add(date);
-      }
-    });
-  }
-
-  void _selectAll() {
-    setState(() {
-      final allPlanDates = _monthlyPlans.keys
-          .map((k) => DateTime.parse(k))
-          .toSet();
-      if (_selectedDates.length == allPlanDates.length &&
-          allPlanDates.isNotEmpty) {
-        _selectedDates.clear();
-        _isSelectionMode = false;
-      } else {
-        _isSelectionMode = true;
-        _selectedDates = allPlanDates;
-      }
-    });
-  }
-
-  // --- INTEGRATED API CALL ---
-  Future<void> _performBulkAction(String action) async {
-    if (_selectedDates.isEmpty) return;
-
-    String? remark;
-    if (action == 'Rejected') {
-      remark = await showDialog<String>(
-        context: context,
-        builder: (ctx) {
-          String r = "";
-          return AlertDialog(
-            title: const Text("Reject Plan"),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text("Rejecting ${_selectedDates.length} days."),
-                const SizedBox(height: 10),
-                TextField(
-                  onChanged: (v) => r = v,
-                  decoration: const InputDecoration(
-                    labelText: "Reason (Required)",
-                    border: OutlineInputBorder(),
-                  ),
-                  minLines: 2,
-                  maxLines: 3,
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text("Cancel"),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                onPressed: () => Navigator.pop(ctx, r),
-                child: const Text(
-                  "Reject",
-                  style: TextStyle(color: Colors.white),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-      if (remark == null || remark.isEmpty) return;
-    }
-
-    setState(() => _isLoading = true);
-    try {
-      List<String> dateStrings = _selectedDates
-          .map((d) => DateFormat('yyyy-MM-dd').format(d))
-          .toList();
-
-      bool success = await _api.bulkActionAreaPlan(
-        action: action,
-        dates: dateStrings,
-        remark: remark,
-        targetUserId: _selectedSubordinate['id'],
-      );
-
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Plan $action Successfully"),
-            backgroundColor: action == 'Approved' ? Colors.green : Colors.red,
-          ),
-        );
-        setState(() {
-          _isSelectionMode = false;
-          _selectedDates.clear();
-        });
-        await _fetchMonthlyPlans();
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Failed to update plans"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -197,6 +85,9 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     var todaysPlan = _monthlyPlans[dateKey];
     bool isManagerView = _selectedSubordinate != null;
 
+    // The month is locked if it's pending approval or already approved.
+    bool isMonthLocked = _monthStatus == 'Pending' || _monthStatus == 'Approved';
+
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: AppBar(
@@ -207,7 +98,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Tour Plan (Area Wise)",
+              "Monthly Tour Plan",
               style: GoogleFonts.poppins(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -231,35 +122,29 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
       ),
       body: Column(
         children: [
-          // Manager Toolbar
-          if (isManagerView)
+          _buildMonthHeaderAndReviewBtn(),
+          
+          // Month Status Banner
+          if (_monthStatus != 'Draft')
             Container(
-              color: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Manager Actions",
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey[700],
-                    ),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              color: _monthStatus == 'Approved' 
+                  ? Colors.green.shade50 
+                  : (_monthStatus == 'Pending' ? Colors.orange.shade50 : Colors.red.shade50),
+              child: Center(
+                child: Text(
+                  "Month Plan Status: ${_monthStatus.toUpperCase()}",
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: _monthStatus == 'Approved' 
+                        ? Colors.green.shade800 
+                        : (_monthStatus == 'Pending' ? Colors.orange.shade800 : Colors.red.shade800),
                   ),
-                  TextButton.icon(
-                    icon: Icon(
-                      _isSelectionMode && _selectedDates.isNotEmpty
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                    ),
-                    label: const Text("Select All Days"),
-                    onPressed: _selectAll,
-                  ),
-                ],
+                ),
               ),
             ),
 
-          _buildMonthHeaderAndReviewBtn(),
           _buildDateStrip(),
 
           Expanded(
@@ -269,94 +154,35 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           ),
         ],
       ),
-      floatingActionButton: (!isManagerView && !_isSelectionMode)
-          ? (todaysPlan?['status'] == 'Approved' ||
-                    todaysPlan?['status'] == 'Pending'
-                ? null // Hide FAB if locked
-                : FloatingActionButton.extended(
-                    onPressed: () async {
-                      final result = await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => CreateRouteTourPlanScreen(
-                            date: _selectedDate,
-                            userId: _selectedSubordinate?['id'],
-                            userName: _selectedSubordinate?['name'] ?? "Myself",
-                            existingData: todaysPlan,
-                          ),
-                        ),
-                      );
-                      if (result == true) _fetchMonthlyPlans();
-                    },
-                    backgroundColor: _primaryColor,
-                    icon: const Icon(Icons.map, color: Colors.white),
-                    label: Text(
-                      "Plan Day",
-                      style: GoogleFonts.poppins(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+      
+      // Hide FAB if manager is viewing OR if the employee's month is locked
+      floatingActionButton: (isManagerView || isMonthLocked)
+          ? null 
+          : FloatingActionButton.extended(
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CreateRouteTourPlanScreen(
+                      date: _selectedDate,
+                      userId: _selectedSubordinate?['id'],
+                      userName: _selectedSubordinate?['name'] ?? "Myself",
+                      existingData: todaysPlan,
                     ),
-                  ))
-          : null,
-      bottomNavigationBar: _isSelectionMode ? _buildManagerActionBar() : null,
-    );
-  }
-
-  Widget _buildManagerActionBar() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 10,
-            offset: Offset(0, -5),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.close, color: Colors.red),
-                label: const Text(
-                  "REJECT",
-                  style: TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
                   ),
+                );
+                if (result == true) _fetchMonthlyPlans();
+              },
+              backgroundColor: _primaryColor,
+              icon: const Icon(Icons.map, color: Colors.white),
+              label: Text(
+                "Plan Day",
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                 ),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.red),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: () => _performBulkAction('Rejected'),
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ElevatedButton.icon(
-                icon: const Icon(Icons.check, color: Colors.white),
-                label: const Text(
-                  "APPROVE",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                onPressed: () => _performBulkAction('Approved'),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -383,27 +209,21 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
                   builder: (_) => TourPlanReviewScreen(
                     currentMonth: _selectedDate,
                     monthlyPlans: _monthlyPlans,
+                    monthStatus: _monthStatus, // Pass status to review screen
                     userId: _selectedSubordinate?['id'],
                   ),
                 ),
               );
-              if (result == true) _fetchMonthlyPlans(); // Refresh if submitted
+              if (result == true) _fetchMonthlyPlans(); // Refresh if status changed
             },
             icon: const Icon(Icons.fact_check_outlined, size: 20),
             label: Text(
-              "Review & Submit",
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-                letterSpacing: 0.3,
-              ),
+              "Review Month",
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade600,
+              backgroundColor: _primaryColor,
               foregroundColor: Colors.white,
-              elevation: 6,
-              shadowColor: Colors.green.withOpacity(0.5),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -415,11 +235,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   }
 
   Widget _buildDateStrip() {
-    int daysInMonth = DateTime(
-      _selectedDate.year,
-      _selectedDate.month + 1,
-      0,
-    ).day;
+    int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
     return Container(
       height: 90,
       color: Colors.white,
@@ -428,94 +244,60 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         itemCount: daysInMonth,
         itemBuilder: (context, index) {
-          final date = DateTime(
-            _selectedDate.year,
-            _selectedDate.month,
-            index + 1,
-          );
+          final date = DateTime(_selectedDate.year, _selectedDate.month, index + 1);
           final isSelected = DateUtils.isSameDay(date, _selectedDate);
-          final isChecked = _selectedDates.any(
-            (d) => DateUtils.isSameDay(d, date),
-          );
 
           String dKey = DateFormat('yyyy-MM-dd').format(date);
           bool hasPlan = _monthlyPlans.containsKey(dKey);
-          String status = hasPlan ? _monthlyPlans[dKey]['status'] ?? '' : '';
-
+          
           Color dotColor = Colors.transparent;
-          if (status == 'Approved') dotColor = Colors.green;
-          if (status == 'Pending') dotColor = Colors.orange;
-          if (status == 'Draft') dotColor = Colors.grey;
+          if (hasPlan) {
+             // If month is approved, all dots are green. Otherwise grey for draft.
+             dotColor = _monthStatus == 'Approved' ? Colors.green : (_monthStatus == 'Pending' ? Colors.orange : Colors.grey);
+          }
 
           return GestureDetector(
-            onTap: () {
-              if (_isSelectionMode) {
-                _toggleSelectionMode(date);
-              } else {
-                setState(() => _selectedDate = date);
-              }
-            },
-            onLongPress: () => _toggleSelectionMode(date),
-            child: Stack(
-              children: [
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: 55,
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: 4,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isSelected ? _primaryColor : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isChecked
-                          ? Colors.orange
-                          : (isSelected ? _primaryColor : Colors.grey.shade200),
-                      width: isChecked ? 2.5 : 1,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        DateFormat('EEE').format(date).toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isSelected ? Colors.white70 : Colors.grey,
-                        ),
-                      ),
-                      Text(
-                        DateFormat('dd').format(date),
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: isSelected ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: dotColor,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ),
+            onTap: () => setState(() => _selectedDate = date),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 55,
+              margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? _primaryColor : Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected ? _primaryColor : Colors.grey.shade200,
                 ),
-                if (_isSelectionMode && isChecked)
-                  const Positioned(
-                    top: 2,
-                    right: 2,
-                    child: CircleAvatar(
-                      radius: 10,
-                      backgroundColor: Colors.orange,
-                      child: Icon(Icons.check, size: 14, color: Colors.white),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    DateFormat('EEE').format(date).toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: isSelected ? Colors.white70 : Colors.grey,
                     ),
                   ),
-              ],
+                  Text(
+                    DateFormat('dd').format(date),
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: dotColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },
@@ -532,7 +314,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             Icon(Icons.event_busy, size: 64, color: Colors.grey.shade300),
             const SizedBox(height: 16),
             Text(
-              "No Areas or Activities planned.",
+              "No Activity planned for this day.",
               style: GoogleFonts.poppins(color: Colors.grey.shade600),
             ),
           ],
@@ -545,30 +327,6 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Status Banner
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade200),
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: _primaryColor, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                "Status: ${plan['status']}",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  color: _primaryColor,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-
         if (isActivity)
           Card(
             elevation: 0,
@@ -608,7 +366,6 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             ),
           ),
           const SizedBox(height: 12),
-
           if (plan['areas'] != null && (plan['areas'] as List).isNotEmpty)
             ...List.generate((plan['areas'] as List).length, (index) {
               return Card(
@@ -640,9 +397,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             ),
         ],
 
-        // NEW: Remark Display
-        if (plan['remark'] != null &&
-            plan['remark'].toString().trim().isNotEmpty)
+        if (plan['remark'] != null && plan['remark'].toString().trim().isNotEmpty)
           Container(
             margin: const EdgeInsets.only(top: 16),
             padding: const EdgeInsets.all(12),
@@ -654,11 +409,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.format_quote,
-                  size: 20,
-                  color: Colors.orange.shade800,
-                ),
+                Icon(Icons.format_quote, size: 20, color: Colors.orange.shade800),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -675,10 +426,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
                       const SizedBox(height: 4),
                       Text(
                         plan['remark'],
-                        style: TextStyle(
-                          color: Colors.orange.shade900,
-                          fontSize: 13,
-                        ),
+                        style: TextStyle(color: Colors.orange.shade900, fontSize: 13),
                       ),
                     ],
                   ),
@@ -694,8 +442,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     setState(() {
       _selectedSubordinate = sub;
       _monthlyPlans = {};
-      _isSelectionMode = false;
-      _selectedDates.clear();
+      _monthStatus = 'Draft';
     });
     _fetchMonthlyPlans();
   }
@@ -705,71 +452,175 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Select Team Member",
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+      builder: (ctx) => _SubordinateSearchSheet(
+        subordinates: _subordinates,
+        selectedSubordinate: _selectedSubordinate,
+        primaryColor: _primaryColor,
+        approvedColor: _approvedColor,
+        pendingColor: _pendingColor,
+        rejectedColor: _rejectedColor,
+        onSelect: (sub) {
+          _onSubordinateChanged(sub);
+        },
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// CUSTOM SUBORDINATE SEARCH BOTTOM SHEET
+// =========================================================================
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<dynamic> subordinates;
+  final dynamic selectedSubordinate;
+  final Function(dynamic) onSelect;
+  final Color primaryColor;
+  final Color approvedColor;
+  final Color pendingColor;
+  final Color rejectedColor;
+
+  const _SubordinateSearchSheet({
+    required this.subordinates,
+    this.selectedSubordinate,
+    required this.onSelect,
+    required this.primaryColor,
+    required this.approvedColor,
+    required this.pendingColor,
+    required this.rejectedColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() =>
+      _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  String _searchQuery = "";
+  late List<dynamic> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.subordinates;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredList = widget.subordinates.where((sub) {
+        final name = sub['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75, // 75% height for better search experience
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Header & Drag Handle
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Team Member",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Search TextField
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
                 ),
-                children: [
-                  _buildSubordinateTile(
+              ],
+            ),
+          ),
+
+          // List View
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _filteredList.length + 1, // +1 for "Myself"
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  // "Myself" Option at the top
+                  if (_searchQuery.isNotEmpty && !"myself".contains(_searchQuery.toLowerCase())) {
+                    return const SizedBox.shrink();
+                  }
+                  bool isSelected = widget.selectedSubordinate == null;
+                  return _buildSubordinateTile(
                     name: "Myself",
                     subtitle: "My Territory",
-                    isSelected: _selectedSubordinate == null,
+                    isSelected: isSelected,
                     hasPlan: false,
                     onTap: () {
-                      Navigator.pop(ctx);
-                      _onSubordinateChanged(null);
+                      Navigator.pop(context);
+                      widget.onSelect(null);
                     },
-                  ),
-                  ..._subordinates.map(
-                    (sub) => _buildSubordinateTile(
-                      // ADDED ??.toString() and fallback 'Unknown' to prevent null crashes
-                      name: sub['name']?.toString() ?? 'Unknown',
-                      subtitle: sub['designation']?.toString() ?? 'Team Member',
-                      imageUrl: sub['photo']?.toString(),
-                      isSelected: _selectedSubordinate?['id'] == sub['id'],
-                      hasPlan: sub['has_plan'] == true,
-                      statusLabel: sub['plan_status']?.toString() ?? '',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _onSubordinateChanged(sub);
-                      },
-                    ),
-                  ),
-                ],
-              ),
+                  );
+                }
+
+                var sub = _filteredList[index - 1];
+                bool isSelected = widget.selectedSubordinate?['id'] == sub['id'];
+
+                return _buildSubordinateTile(
+                  name: sub['name']?.toString() ?? 'Unknown',
+                  subtitle: sub['designation']?.toString() ?? 'Team Member',
+                  imageUrl: sub['photo']?.toString(),
+                  isSelected: isSelected,
+                  hasPlan: sub['has_plan'] == true,
+                  statusLabel: sub['plan_status']?.toString() ?? '',
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onSelect(sub);
+                  },
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -784,17 +635,17 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     required VoidCallback onTap,
   }) {
     Color statusColor = Colors.grey;
-    if (statusLabel.toLowerCase() == 'approved') statusColor = _approvedColor;
-    if (statusLabel.toLowerCase() == 'pending') statusColor = _pendingColor;
-    if (statusLabel.toLowerCase() == 'rejected') statusColor = _rejectedColor;
+    if (statusLabel.toLowerCase() == 'approved') statusColor = widget.approvedColor;
+    if (statusLabel.toLowerCase() == 'pending') statusColor = widget.pendingColor;
+    if (statusLabel.toLowerCase() == 'rejected') statusColor = widget.rejectedColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isSelected ? _primaryColor.withOpacity(0.05) : Colors.white,
+        color: isSelected ? widget.primaryColor.withOpacity(0.05) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isSelected ? _primaryColor : Colors.grey.shade200,
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
         ),
       ),
       child: ListTile(
@@ -830,7 +681,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             fontSize: 15,
-            color: isSelected ? _primaryColor : Colors.black87,
+            color: isSelected ? widget.primaryColor : Colors.black87,
           ),
         ),
         subtitle: Text(
@@ -839,10 +690,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
         ),
         trailing: hasPlan && statusLabel.isNotEmpty
             ? Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: statusColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(20),

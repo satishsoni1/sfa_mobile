@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:zforce/data/models/chemist_report.dart';
 import 'package:zforce/data/models/product.dart';
 import '../data/services/api_service.dart';
 import '../data/models/visit_report.dart'; // Ensure you have this model
 import '../data/models/doctor.dart'; // Ensure you have this model
 import '../data/models/tour_plan.dart'; // Ensure you have this model
+import '../data/models/chemist.dart';
 
 class ReportProvider with ChangeNotifier {
   // Service Injection
@@ -12,6 +14,8 @@ class ReportProvider with ChangeNotifier {
   // --- STATE VARIABLES ---
   List<VisitReport> _dailyReports = [];
   List<Doctor> _doctors = [];
+  List<Chemist> _chemists = [];
+  List<Chemist> get chemists => _chemists;
   List<TourPlan> _tourPlans = [];
   bool _isDaySubmitted = false;
   bool _isLoading = false;
@@ -67,6 +71,18 @@ class ReportProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print("Error fetching doctors: $e");
+    }
+  }
+
+  Future<void> fetchChemists({int? userId}) async {
+    try {
+      final List<dynamic> chemistData = await _apiService.getChemists(
+        userId: userId,
+      );
+      _chemists = chemistData.map((json) => Chemist.fromJson(json)).toList();
+      notifyListeners();
+    } catch (e) {
+      print("Error fetching chemists: $e");
     }
   }
 
@@ -316,6 +332,73 @@ class ReportProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  List<ChemistReport> _chemistReports = [];
+  List<ChemistReport> get chemistReports => _chemistReports;
+
+  // Checks if chemist already reported today
+  bool hasChemistVisitForSelectedDate(String chemistId) {
+    return _chemistReports.any((r) => r.chemistId == chemistId);
+  }
+
+  // Fetch reports specifically for the current day
+  Future<void> fetchTodayChemistData() async {
+    await fetchChemistReportsByDate(DateTime.now());
+  }
+
+  // Fetch reports for any specific date
+  Future<void> fetchChemistReportsByDate(DateTime date) async {
+    try {
+      String dateStr = date.toIso8601String().split('T')[0];
+      final List<dynamic> data = await _apiService.getChemistVisitsByDate(
+        dateStr,
+      );
+
+      _chemistReports = data
+          .map((json) => ChemistReport.fromJson(json))
+          .toList();
+      notifyListeners();
+    } catch (e) {
+      print("Error fetching chemist reports: $e");
+      _chemistReports = [];
+      notifyListeners();
+    }
+  }
+
+  // Save the report
+  Future<void> addChemistReport(
+    ChemistReport report, {
+    DateTime? selectedDate,
+  }) async {
+    if (hasChemistVisitForSelectedDate(report.chemistId)) {
+      throw Exception("Report already exists for this chemist on this date.");
+    }
+
+    try {
+      Map<String, dynamic> data = {
+        'chemist_id': report.chemistId,
+        'chemist_name': report.chemistName,
+        'date': selectedDate != null
+            ? selectedDate.toIso8601String()
+            : report.visitTime.toIso8601String(),
+        'remarks': report.remarks,
+        'products': report.products.map((p) => p.toJson()).toList(),
+        'worked_with': report.workedWith,
+      };
+
+      bool success = await _apiService.saveChemistVisit(data);
+      if (!success) throw Exception("API returned false.");
+
+      // Refresh the list automatically
+      if (selectedDate != null) {
+        await fetchChemistReportsByDate(selectedDate);
+      } else {
+        await fetchTodayChemistData();
+      }
+    } catch (e) {
+      throw Exception("Failed to save chemist report.");
     }
   }
 }

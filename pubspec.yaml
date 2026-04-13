@@ -48,6 +48,7 @@ dependencies:
   keyboard_visibility_pro: ^0.0.1
   file_picker: ^10.3.10
   universal_html: ^2.3.0
+  share_plus: ^12.0.2
 
 dev_dependencies:
   flutter_test:

@@ -18,15 +18,15 @@ class DoctorMasterScreen extends StatefulWidget {
 
 class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
   final ApiService _api = ApiService();
-  
+
   bool _isLoading = true;
   List<dynamic> _doctors = [];
   List<dynamic> _filteredDoctors = [];
-  
+
   // Hierarchy Data
-  List<dynamic> _hierarchy = [];
-  dynamic _selectedSub; // Null = Myself
-  
+  List<dynamic> _subordinates = [];
+  dynamic _selectedSubordinate; // Null = Myself
+
   final TextEditingController _searchController = TextEditingController();
 
   final Color _primaryColor = const Color(0xFF4A148C);
@@ -58,7 +58,7 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
     setState(() => _isLoading = true);
     try {
       final subs = await _api.getSubordinates();
-      setState(() => _hierarchy = subs);
+      setState(() => _subordinates = subs);
       await _fetchDoctors();
     } catch (e) {
       debugPrint("Init Error: $e");
@@ -69,9 +69,9 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
   Future<void> _fetchDoctors() async {
     setState(() => _isLoading = true);
     try {
-      int? targetId = _selectedSub?['id'];
+      int? targetId = _selectedSubordinate?['id'];
       final response = await _api.getDoctorsMaster(userId: targetId);
-      
+
       if (mounted) {
         setState(() {
           _doctors = response;
@@ -96,7 +96,9 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
         final name = (doc['doctor_name'] ?? '').toString().toLowerCase();
         final area = (doc['area'] ?? '').toString().toLowerCase();
         final speciality = (doc['speciality'] ?? '').toString().toLowerCase();
-        return name.contains(query) || area.contains(query) || speciality.contains(query);
+        return name.contains(query) ||
+            area.contains(query) ||
+            speciality.contains(query);
       }).toList();
     });
   }
@@ -129,16 +131,44 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
     final pincode = doc['pincode']?.toString() ?? '';
     final area = doc['area']?.toString() ?? '';
     final speciality = doc['speciality']?.toString() ?? '';
-    final hasTag = (doc['is_kbl'] == 1 || doc['is_frd'] == 1 || doc['is_other'] == 1);
+    final hasTag =
+        (doc['is_kbl'] == 1 || doc['is_frd'] == 1 || doc['is_other'] == 1);
 
-    return name.isNotEmpty && email.isNotEmpty && phone.isNotEmpty && 
-           pincode.isNotEmpty && area.isNotEmpty && speciality.isNotEmpty && hasTag;
+    return name.isNotEmpty &&
+        email.isNotEmpty &&
+        phone.isNotEmpty &&
+        pincode.isNotEmpty &&
+        area.isNotEmpty &&
+        speciality.isNotEmpty &&
+        hasTag;
   }
 
   void _showSnack(String msg) {
-    if(mounted) {
+    if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     }
+  }
+
+  void _onSubordinateChanged(dynamic sub) {
+    setState(() {
+      _selectedSubordinate = sub;
+      _searchController.clear();
+    });
+    _fetchDoctors();
+  }
+
+  void _showSubordinatePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _SubordinateSearchSheet(
+        subordinates: _subordinates,
+        selectedSubordinate: _selectedSubordinate,
+        primaryColor: _primaryColor,
+        onSelect: _onSubordinateChanged,
+      ),
+    );
   }
 
   // --- UI BUILDER ---
@@ -154,34 +184,47 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
           elevation: 0,
           title: Text(
             "Doctor Master",
-            style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
+            style: GoogleFonts.poppins(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           actions: [
             IconButton(
               icon: const Icon(Icons.add_circle_outline),
               onPressed: () async {
                 final result = await Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (_) => const AddDoctorScreen())
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddDoctorScreen()),
                 );
                 if (result == true) {
                   _fetchDoctors();
                 }
               },
-            )
+            ),
           ],
         ),
         body: Column(
           children: [
-            if (_hierarchy.isNotEmpty) _buildHierarchyPicker(),
+            // Replaced scrolling chips with the modern bottom sheet trigger
+            if (_subordinates.isNotEmpty) _buildSubordinateFilter(),
+
             _buildSummaryCard(),
             _buildSearchBar(),
+
             Expanded(
               child: _isLoading
-                  ? Center(child: CircularProgressIndicator(color: _primaryColor))
+                  ? Center(
+                      child: CircularProgressIndicator(color: _primaryColor),
+                    )
                   : _filteredDoctors.isEmpty
-                      ? Center(child: Text("No doctors found.", style: GoogleFonts.poppins(color: Colors.grey)))
-                      : _buildDoctorList(),
+                  ? Center(
+                      child: Text(
+                        "No doctors found.",
+                        style: GoogleFonts.poppins(color: Colors.grey),
+                      ),
+                    )
+                  : _buildDoctorList(),
             ),
           ],
         ),
@@ -191,38 +234,38 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
 
   // --- WIDGETS ---
 
-  Widget _buildHierarchyPicker() {
+  Widget _buildSubordinateFilter() {
     return Container(
-      height: 65,
       color: _primaryColor,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        itemCount: _hierarchy.length + 1,
-        itemBuilder: (context, index) {
-          bool isMyself = index == 0;
-          var sub = isMyself ? null : _hierarchy[index - 1];
-          bool isSelected = isMyself ? _selectedSub == null : _selectedSub?['id'] == sub['id'];
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ChoiceChip(
-              label: Text(isMyself ? "Myself" : sub['name'], style: TextStyle(color: isSelected ? Colors.black : Colors.black)),
-              selected: isSelected,
-              onSelected: (_) {
-                setState(() => _selectedSub = sub);
-                _fetchDoctors();
-              },
-              selectedColor: Colors.white,
-              labelStyle: TextStyle(
-                color: isSelected ? _primaryColor : Colors.white,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: InkWell(
+        onTap: _showSubordinatePicker,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.person_search, color: Colors.white, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  _selectedSubordinate?['name'] ?? "My Territory (Self)",
+                  style: GoogleFonts.poppins(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
               ),
-              backgroundColor: Colors.white12,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            ),
-          );
-        },
+              const Icon(Icons.arrow_drop_down_circle, color: Colors.white70),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -242,11 +285,23 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildMetricColumn("Total", _totalDoctors.toString(), Colors.white),
+              _buildMetricColumn(
+                "Total",
+                _totalDoctors.toString(),
+                Colors.white,
+              ),
               Container(height: 40, width: 1, color: Colors.white30),
-              _buildMetricColumn("KBL", _totalKbl.toString(), Colors.purple.shade200),
+              _buildMetricColumn(
+                "KBL",
+                _totalKbl.toString(),
+                Colors.purple.shade200,
+              ),
               Container(height: 40, width: 1, color: Colors.white30),
-              _buildMetricColumn("FRD", _totalFrd.toString(), Colors.orange.shade300),
+              _buildMetricColumn(
+                "FRD",
+                _totalFrd.toString(),
+                Colors.orange.shade300,
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -261,9 +316,22 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
                   ),
                   child: Column(
                     children: [
-                      Text("Profile Complete", style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
+                      Text(
+                        "Profile Complete",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text("$_fullyCompleted", style: GoogleFonts.poppins(color: Colors.greenAccent, fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(
+                        "$_fullyCompleted",
+                        style: GoogleFonts.poppins(
+                          color: Colors.greenAccent,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -278,15 +346,28 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
                   ),
                   child: Column(
                     children: [
-                      Text("Incomplete", style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11)),
+                      Text(
+                        "Incomplete",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text("$_incompleteProfile", style: GoogleFonts.poppins(color: Colors.redAccent.shade100, fontSize: 20, fontWeight: FontWeight.bold)),
+                      Text(
+                        "$_incompleteProfile",
+                        style: GoogleFonts.poppins(
+                          color: Colors.redAccent.shade100,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ),
               ),
             ],
-          )
+          ),
         ],
       ),
     );
@@ -295,8 +376,18 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
   Widget _buildMetricColumn(String label, String value, Color valueColor) {
     return Column(
       children: [
-        Text(value, style: GoogleFonts.poppins(color: valueColor, fontSize: 24, fontWeight: FontWeight.bold)),
-        Text(label, style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12)),
+        Text(
+          value,
+          style: GoogleFonts.poppins(
+            color: valueColor,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.poppins(color: Colors.white70, fontSize: 12),
+        ),
       ],
     );
   }
@@ -308,7 +399,10 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
         controller: _searchController,
         decoration: InputDecoration(
           hintText: "Search by Name, Area, or Speciality...",
-          hintStyle: GoogleFonts.poppins(color: Colors.grey.shade400, fontSize: 14),
+          hintStyle: GoogleFonts.poppins(
+            color: Colors.grey.shade400,
+            fontSize: 14,
+          ),
           prefixIcon: const Icon(Icons.search, color: Colors.grey),
           filled: true,
           fillColor: Colors.white,
@@ -357,23 +451,33 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
                         children: [
                           Text(
                             doc['doctor_name'] ?? 'Unknown',
-                            style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 15),
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
                           ),
                           Text(
                             "${doc['speciality'] ?? 'No Speciality'} • ${doc['area'] ?? 'No Area'}",
-                            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+                            style: GoogleFonts.poppins(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    
+
                     // --- ACTION BUTTONS (EDIT & HISTORY) ---
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         // Edit Button
                         IconButton(
-                          icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent, size: 20),
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            color: Colors.blueAccent,
+                            size: 20,
+                          ),
                           constraints: const BoxConstraints(),
                           padding: const EdgeInsets.all(8),
                           tooltip: "Edit Doctor",
@@ -391,12 +495,13 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
                               isFrd: doc['is_frd'] == 1,
                               isOther: doc['is_other'] == 1,
                             );
-                            
+
                             final result = await Navigator.push(
-                              context, 
+                              context,
                               MaterialPageRoute(
-                                builder: (_) => AddDoctorScreen(doctorToEdit: doctorToEdit)
-                              )
+                                builder: (_) =>
+                                    AddDoctorScreen(doctorToEdit: doctorToEdit),
+                              ),
                             );
 
                             if (result == true) {
@@ -406,7 +511,11 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
                         ),
                         // History Button
                         IconButton(
-                          icon: Icon(Icons.history, color: Colors.orange.shade600, size: 20),
+                          icon: Icon(
+                            Icons.history,
+                            color: Colors.orange.shade600,
+                            size: 20,
+                          ),
                           constraints: const BoxConstraints(),
                           padding: const EdgeInsets.all(8),
                           tooltip: "Visit History",
@@ -432,18 +541,22 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
                   children: [
                     Row(
                       children: [
-                        if (doc['is_kbl'] == 1) _buildMiniBadge("KBL", Colors.purple),
-                        if (doc['is_kbl'] == 1 && doc['is_frd'] == 1) const SizedBox(width: 6),
-                        if (doc['is_frd'] == 1) _buildMiniBadge("FRD", Colors.orange),
-                        if (doc['is_other'] == 1) _buildMiniBadge("Standard", Colors.grey),
+                        if (doc['is_kbl'] == 1)
+                          _buildMiniBadge("KBL", Colors.purple),
+                        if (doc['is_kbl'] == 1 && doc['is_frd'] == 1)
+                          const SizedBox(width: 6),
+                        if (doc['is_frd'] == 1)
+                          _buildMiniBadge("FRD", Colors.orange),
+                        if (doc['is_other'] == 1)
+                          _buildMiniBadge("Standard", Colors.grey),
                       ],
                     ),
                     Row(
                       children: [
                         Icon(
-                          isComplete ? Icons.verified : Icons.error_outline, 
-                          color: isComplete ? Colors.green : Colors.redAccent, 
-                          size: 16
+                          isComplete ? Icons.verified : Icons.error_outline,
+                          color: isComplete ? Colors.green : Colors.redAccent,
+                          size: 16,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -455,9 +568,9 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
                           ),
                         ),
                       ],
-                    )
+                    ),
                   ],
-                )
+                ),
               ],
             ),
           ),
@@ -476,7 +589,206 @@ class _DoctorMasterScreenState extends State<DoctorMasterScreen> {
       ),
       child: Text(
         text,
-        style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: color.shade700),
+        style: GoogleFonts.poppins(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: color.shade700,
+        ),
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// CUSTOM SUBORDINATE SEARCH BOTTOM SHEET
+// =========================================================================
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<dynamic> subordinates;
+  final dynamic selectedSubordinate;
+  final Function(dynamic) onSelect;
+  final Color primaryColor;
+
+  const _SubordinateSearchSheet({
+    required this.subordinates,
+    this.selectedSubordinate,
+    required this.onSelect,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() =>
+      _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  String _searchQuery = "";
+  late List<dynamic> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.subordinates;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredList = widget.subordinates.where((sub) {
+        final name = sub['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Team Member",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _filteredList.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  if (_searchQuery.isNotEmpty &&
+                      !"myself".contains(_searchQuery.toLowerCase())) {
+                    return const SizedBox.shrink();
+                  }
+                  bool isSelected = widget.selectedSubordinate == null;
+                  return _buildSubordinateTile(
+                    name: "Myself",
+                    subtitle: "My Territory",
+                    isSelected: isSelected,
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.onSelect(null);
+                    },
+                  );
+                }
+
+                var sub = _filteredList[index - 1];
+                bool isSelected =
+                    widget.selectedSubordinate?['id'] == sub['id'];
+
+                return _buildSubordinateTile(
+                  name: sub['name']?.toString() ?? 'Unknown',
+                  subtitle: sub['designation']?.toString() ?? 'Team Member',
+                  imageUrl: sub['photo']?.toString(),
+                  isSelected: isSelected,
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onSelect(sub);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubordinateTile({
+    required String name,
+    required String subtitle,
+    String? imageUrl,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? widget.primaryColor.withOpacity(0.05)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
+        ),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          radius: 24,
+          backgroundColor: Colors.grey.shade100,
+          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+          child: imageUrl == null
+              ? Icon(Icons.person, color: Colors.grey.shade400)
+              : null,
+        ),
+        title: Text(
+          name,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 15,
+            color: isSelected ? widget.primaryColor : Colors.black87,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: widget.primaryColor)
+            : null,
       ),
     );
   }

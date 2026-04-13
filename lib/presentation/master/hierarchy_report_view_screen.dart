@@ -1,7 +1,14 @@
+import 'dart:io';
+import 'dart:convert'; // For utf8.encode
+import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:zforce/core/constants/app_colors.dart';
 import 'package:zforce/data/services/api_service.dart';
 import 'reports_dashboard_screen.dart'; // For ReportType enum
+import 'package:universal_html/html.dart' as html; // 👇 NEW: Safe web HTML access
 
 class HierarchyReportViewScreen extends StatefulWidget {
   final String reportTitle;
@@ -31,6 +38,9 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
   bool _isLoading = true;
   bool _isError = false;
 
+  DateTime _selectedDate = DateTime.now();
+  DateTime _selectedMonth = DateTime.now();
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +65,7 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
   }
 
   // Fetch Data based on Dropdown Selection
+  // Fetch Data based on Dropdown Selection & Date
   Future<void> _fetchReportData() async {
     setState(() {
       _isLoading = true;
@@ -62,9 +73,18 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
     });
 
     try {
+      // Format dates for backend expectations (Adjust formats as needed)
+      final String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final String formattedMonth = _selectedMonth.month.toString().padLeft(2, '0');
+      final String formattedYear = _selectedMonth.year.toString();
+
       final data = await _apiService.fetchHierarchyReport(
-        widget.reportType.toString(), // e.g., 'ReportType.callAvg'
+        widget.reportType.toString(),
         empCode: _selectedEmployeeId,
+        // 👇 Pass date or month/year based on ReportType
+        date: widget.reportType != ReportType.callAvg ? formattedDate : null,
+        month: widget.reportType == ReportType.callAvg ? formattedMonth : null,
+        year: widget.reportType == ReportType.callAvg ? formattedYear : null,
       );
 
       setState(() {
@@ -95,10 +115,13 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
           IconButton(
             icon: const Icon(Icons.download),
             onPressed: () {
-              // Export logic can be hooked up here later
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Exporting to CSV...")),
-              );
+              if (_reportData.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("No data to export.")),
+                );
+                return;
+              }
+              _exportToCsv(); // 👇 Call the export logic
             },
           ),
         ],
@@ -113,52 +136,180 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
   }
 
   // --- TOP FILTER (DYNAMIC) ---
+  // --- TOP FILTER (DYNAMIC) ---
   Widget _buildHierarchyFilter() {
+    final bool isMonthlyReport = widget.reportType == ReportType.callAvg;
+    
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Colors.black12)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          const Icon(Icons.people_alt_outlined, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedEmployeeId,
-                isExpanded: true,
-                icon: const Icon(
-                  Icons.arrow_drop_down,
-                  color: AppColors.primary,
-                ),
-                items: _teamMembers
-                    .map(
-                      (emp) => DropdownMenuItem(
-                        value: emp['id'],
-                        child: Text(
-                          emp['name']!,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+          // 1. Employee Dropdown
+          Row(
+            children: [
+              const Icon(Icons.people_alt_outlined, color: AppColors.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedEmployeeId,
+                    isExpanded: true,
+                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
+                    items: _teamMembers.map((emp) => DropdownMenuItem(
+                          value: emp['id'],
+                          child: Text(
+                            emp['name']!,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _selectedEmployeeId = val);
-                    _fetchReportData(); // Re-fetch on change
-                  }
-                },
+                        )).toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedEmployeeId = val);
+                        _fetchReportData();
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const Divider(height: 16),
+          // 2. Date / Month Picker
+          InkWell(
+            onTap: () => isMonthlyReport ? _pickMonthYear() : _pickDate(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(
+                    isMonthlyReport ? Icons.calendar_month : Icons.calendar_today,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    isMonthlyReport
+                        ? DateFormat('MMMM yyyy').format(_selectedMonth)
+                        : DateFormat('dd MMM yyyy').format(_selectedDate),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const Spacer(),
+                  const Icon(Icons.edit_calendar, size: 18, color: Colors.grey),
+                ],
               ),
             ),
-          ),
+          )
         ],
       ),
     );
+  }
+
+  // --- DATE PICKER HELPERS ---
+  Future<void> _pickDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now().add(const Duration(days: 365)), // Allow future for Tour Plans
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(primaryColor: AppColors.primary),
+        child: child!,
+      ),
+    );
+
+    if (picked != null && picked != _selectedDate) {
+      setState(() => _selectedDate = picked);
+      _fetchReportData();
+    }
+  }
+
+  Future<void> _pickMonthYear() async {
+    // Flutter doesn't have a native "Month only" picker without packages.
+    // Opening a standard date picker in "Year" mode is the native workaround.
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedMonth,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDatePickerMode: DatePickerMode.year, // Starts in Year/Month view
+      builder: (context, child) => Theme(
+        data: ThemeData.light().copyWith(primaryColor: AppColors.primary),
+        child: child!,
+      ),
+    );
+
+    if (picked != null && picked != _selectedMonth) {
+      setState(() => _selectedMonth = picked);
+      _fetchReportData();
+    }
+  }
+  // --- EXPORT TO CSV LOGIC (CROSS-PLATFORM) ---
+  Future<void> _exportToCsv() async {
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Generating file...")),
+      );
+
+      if (_reportData.isEmpty) return;
+
+      // 1. Get Headers from the first map item
+      List<String> headers = _reportData.first.keys.toList();
+      
+      // 2. Build CSV String
+      String csv = "${headers.join(',')}\n";
+      
+      for (var row in _reportData) {
+        List<String> rowValues = [];
+        for (var key in headers) {
+          if(key != 'details' && key != 'daily_details') {
+            String val = row[key]?.toString() ?? "";
+            val = val.replaceAll('"', '""'); // Escape quotes for CSV safety
+            rowValues.add('"$val"'); 
+          }
+        }
+        csv += "${rowValues.join(',')}\n";
+      }
+
+      final String fileName = "${widget.reportTitle.replaceAll(' ', '_')}_Export.csv";
+
+      // 3. Platform-Specific Export Logic
+      if (kIsWeb) {
+        // --- WEB: Trigger a direct browser file download ---
+        final bytes = utf8.encode(csv);
+        final blob = html.Blob([bytes]);
+        final url = html.Url.createObjectUrlFromBlob(blob);
+        
+        // Create an invisible HTML anchor link and "click" it
+        final anchor = html.AnchorElement(href: url)
+          ..setAttribute("download", fileName)
+          ..click();
+          
+        html.Url.revokeObjectUrl(url); // Cleanup memory
+        
+      } else {
+        // --- MOBILE: Write to temp directory and open native share sheet ---
+        final directory = await getTemporaryDirectory();
+        final path = "${directory.path}/$fileName";
+        final File file = File(path);
+        await file.writeAsString(csv);
+
+        await Share.shareXFiles([XFile(path)], text: 'Exported ${widget.reportTitle}');
+      }
+      
+    } catch (e) {
+      print("Export error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Failed to export data.")),
+      );
+    }
   }
 
   // --- REPORT BODY ---

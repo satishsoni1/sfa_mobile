@@ -9,6 +9,8 @@ import 'package:universal_html/html.dart'
 
 // --- SCREENS ---
 import 'package:zforce/presentation/chat/chat_screen.dart';
+import 'package:zforce/presentation/doctor_list/chemist_list_screen.dart';
+import 'package:zforce/presentation/doctor_list/doctor_selection_screen.dart';
 import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
@@ -29,6 +31,10 @@ import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
 
+// NEW IMPORT FOR CHEMIST REPORTING
+import '../reporting/chemist_reporting_screen.dart';
+// (Make sure to adjust the import path above to wherever you saved the new file)
+
 // --- PROVIDERS & SERVICES ---
 import '../../providers/report_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -44,7 +50,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.0";
+  static const String CURRENT_APP_VERSION = "1.0.10";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -95,9 +101,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final apiService = ApiService();
 
     try {
-      // 1. Parallel Data Fetching (Added Version Check)
+      // 1. Parallel Data Fetching
       await Future.wait([
-        _checkAppVersion(apiService), // NEW: Checks for updates on load
+        _checkAppVersion(apiService),
         reportProvider.fetchTodayData(),
         _fetchAttendance(apiService),
         _fetchExpenseSummary(apiService),
@@ -111,7 +117,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // --- VERSION CONTROL LOGIC ---
   Future<void> _checkAppVersion(ApiService api) async {
-    if (!kIsWeb) return; // Optional: Only enforce hard-refresh on Web
+    if (!kIsWeb) return;
 
     try {
       final serverVersion = await api.getServerAppVersion();
@@ -127,9 +133,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showUpdatePopup() {
     showDialog(
       context: context,
-      barrierDismissible: false, // Forces user to click the button
+      barrierDismissible: false,
       builder: (ctx) => WillPopScope(
-        onWillPop: () async => false, // Prevent back button dismissal
+        onWillPop: () async => false,
         child: AlertDialog(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
@@ -154,7 +160,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: ElevatedButton(
                 onPressed: () {
                   if (kIsWeb) {
-                    // This forces the web browser to hard-reload, bypassing the cache
                     html.window.location.reload();
                   }
                 },
@@ -295,7 +300,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   _buildHeaderBackground(user, headerHeight),
                   Container(
-                    margin: const EdgeInsets.only(
+                    margin: EdgeInsets.only(
                       top: headerHeight - cardOverlap,
                       left: 20,
                       right: 20,
@@ -584,17 +589,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildQuickActions() {
+    final user = Provider.of<AuthProvider>(context).user;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildSectionTitle("Field Operations"),
         _buildMenuGrid([
-          _MenuAction(
-            Icons.map,
-            "Tour Plan",
-            Colors.teal,
-            () => _navigateTo(const TourPlanScreen()),
-          ),
+          // _MenuAction(
+          //   Icons.map,
+          //   "Tour Plan",
+          //   Colors.teal,
+          //   () => _navigateTo(const TourPlanScreen()),
+          // ),
           _MenuAction(
             Icons.map,
             "Route wise Tour Plan",
@@ -608,6 +614,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _showSnack("Please Check In first!");
             }
           }),
+
+          // --- NEW ACTION FOR CHEMIST CALL ---
+          _MenuAction(Icons.storefront, "Chemist Call", Colors.green, () {
+            if (_isCheckedIn) {
+              // Usually navigates to a ChemistListScreen first, but for now
+              // we can mock passing a direct chemist or you can create the list screen next.
+              // For demonstration purposes:
+              _navigateTo(const ChemistListScreen());
+            } else {
+              _showSnack("Please Check In first!");
+            }
+          }),
+
           _MenuAction(
             Icons.assignment_turned_in,
             "Daily Report",
@@ -660,11 +679,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.deepPurple,
             () => _navigateTo(const DoctorMasterScreen()),
           ),
+          // _MenuAction(
+          //   Icons.business_center,
+          //   "Data Upload",
+          //   Colors.cyan,
+          //   () => _navigateTo(const DataUploadScreen(isManager: true)),
+          // ),
           _MenuAction(
             Icons.business_center,
-            "Data Upload",
+            "Doctor Selection",
             Colors.cyan,
-            () => _navigateTo(const DataUploadScreen(isManager: true)),
+            () => _navigateTo(DoctorSelectionScreen(isManager: true,division: user?.division ?? "",)),
           ),
           _MenuAction(
             Icons.person_add_alt_1,
