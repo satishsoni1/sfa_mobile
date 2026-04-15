@@ -134,6 +134,17 @@ class _ChemistHistoryScreenState extends State<ChemistHistoryScreen> {
     List products = record['products'] ?? [];
     List workedWithIds = record['worked_with'] ?? [];
     String remark = record['remarks'] ?? 'No remark provided';
+    final int totalUnits = products.fold<int>(0, (sum, p) {
+      final int sale = int.tryParse((p['sale'] ?? 0).toString()) ?? 0;
+      final int free = int.tryParse((p['free'] ?? 0).toString()) ?? 0;
+      if (sale == 0 && free == 0) {
+        return sum + (int.tryParse((p['pob'] ?? 0).toString()) ?? 0);
+      }
+      return sum + sale + free;
+    });
+    final int totalValue = products.fold<int>(0, (sum, p) {
+      return sum + (int.tryParse((p['value_pob'] ?? 0).toString()) ?? 0);
+    });
 
     // --- TRANSLATE IDs TO NAMES ---
     List<String> jointWorkNames = [];
@@ -208,33 +219,123 @@ class _ChemistHistoryScreenState extends State<ChemistHistoryScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Column(
                 children: products.map<Widget>((p) {
+                  final String productName = (p['name'] ?? '-').toString();
+                  final int sale =
+                      int.tryParse((p['sale'] ?? 0).toString()) ?? 0;
+                  final int free =
+                      int.tryParse((p['free'] ?? 0).toString()) ?? 0;
+                  final bool hasLegacyOnlyUnits = sale == 0 && free == 0;
+                  final int safeSale = hasLegacyOnlyUnits
+                      ? (int.tryParse((p['pob'] ?? 0).toString()) ?? 0)
+                      : sale;
+                  final int safeFree = hasLegacyOnlyUnits ? 0 : free;
+                  final int units =
+                      hasLegacyOnlyUnits
+                          ? (int.tryParse((p['pob'] ?? 0).toString()) ?? 0)
+                          : (sale + free);
+                  final int value =
+                      int.tryParse((p['value_pob'] ?? 0).toString()) ?? 0;
+                  final String suppliedThrough =
+                      (p['supplied_through'] ?? p['suppliedThrough'] ?? '-')
+                          .toString();
+
                   return Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
+                      horizontal: 12,
+                      vertical: 10,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.teal.shade50,
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.teal.shade100),
                     ),
-                    child: Text(
-                      // Matched keys to your JSON response
-                      "${p['name']} : ${p['pob']}",
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.teal.shade900,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "PRODUCT : $productName",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.teal.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "UNITS: [sale: $safeSale Free: $safeFree]  Total: $units",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.teal.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "VALUE : $value",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.teal.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "SUPPLIED THROUGH (STOCKIST): $suppliedThrough",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.teal.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ),
                   );
                 }).toList(),
               ),
               const SizedBox(height: 16),
+            ],
+
+            // Totals Section (Above remark)
+            if (products.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "Total units (POB): $totalUnits",
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Text(
+                        "Total Value(POB): $totalValue",
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.poppins(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
             ],
 
             // Remarks Section

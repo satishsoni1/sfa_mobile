@@ -474,6 +474,8 @@ String? _getMatchedSpecialityKey(String docSpec) {
           elevation: 0,
           title: Text(
             "Doctor Selection",
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w600),
           ),
         ),

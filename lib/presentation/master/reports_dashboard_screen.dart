@@ -56,6 +56,8 @@ class ReportsDashboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           "Team Reports",
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(color: Colors.white),
         ),
         backgroundColor: AppColors.primary,
@@ -82,7 +84,7 @@ class ReportsDashboardScreen extends StatelessWidget {
                   crossAxisCount: 2,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
-                  childAspectRatio: 1.1,
+                  childAspectRatio: 1.0,
                 ),
                 itemCount: reports.length,
                 itemBuilder: (context, index) {
@@ -136,6 +138,8 @@ class ReportsDashboardScreen extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               report['title'],
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: AppColors.textDark,

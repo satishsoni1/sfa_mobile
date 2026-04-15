@@ -450,22 +450,29 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
 
                             _buildTextField(
                               controller: _contactPersonController,
-                              label: "Contact Person Name",
+                              label: "Contact Person Name *",
                               icon: Icons.person_outline,
-                              validator: null,
+                              validator: (value) => value == null || value.trim().isEmpty
+                                  ? "Contact person name is required"
+                                  : null,
                             ),
                             const SizedBox(height: 12),
 
                             _buildTextField(
                               controller: _mobileController,
-                              label: "Mobile Number",
+                              label: "Mobile Number *",
                               icon: Icons.phone_iphone,
                               keyboardType: TextInputType.phone,
                               inputFormatters: [
                                 FilteringTextInputFormatter.digitsOnly,
                                 LengthLimitingTextInputFormatter(10),
                               ],
-                              validator: null,
+                              validator: (value) {
+                                final v = value?.trim() ?? '';
+                                if (v.isEmpty) return "Mobile number is required";
+                                if (v.length != 10) return "Enter valid 10-digit mobile number";
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 12),
 

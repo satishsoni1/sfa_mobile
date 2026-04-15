@@ -616,7 +616,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           }),
 
           // --- NEW ACTION FOR CHEMIST CALL ---
-          _MenuAction(Icons.storefront, "Chemist Call", Colors.green, () {
+          _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
             if (_isCheckedIn) {
               // Usually navigates to a ChemistListScreen first, but for now
               // we can mock passing a direct chemist or you can create the list screen next.
@@ -735,7 +735,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
-        childAspectRatio: 0.8,
+        // Slightly taller cards prevent bottom overflow for longer labels.
+        childAspectRatio: 0.72,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
@@ -758,15 +759,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              action.label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.poppins(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
+            SizedBox(
+              height: 34,
+              child: Text(
+                action.label,
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                  height: 1.15,
+                ),
               ),
             ),
           ],

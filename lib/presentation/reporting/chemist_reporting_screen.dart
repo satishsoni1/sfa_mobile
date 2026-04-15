@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -28,6 +29,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
   List<Map<String, dynamic>> _uiProducts = [];
   List<Map<String, dynamic>> _uiColleagues = [];
   bool _isLoading = true;
+  String _productSearchQuery = '';
 
   DateTime _selectedDate = DateTime.now();
   TimeOfDay _selectedTime = TimeOfDay.now();
@@ -36,6 +38,18 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
   final TextEditingController _remarkController = TextEditingController();
 
   final Color _primaryColor = const Color(0xFF4A148C);
+
+  int get _totalOrderPob => _uiProducts
+      .where((p) => p['isSelected'] == true)
+      .fold<int>(
+        0,
+        (sum, p) =>
+            sum + (((p['sale'] as int?) ?? 0) + ((p['free'] as int?) ?? 0)),
+      );
+
+  int get _totalValuePob => _uiProducts
+      .where((p) => p['isSelected'] == true)
+      .fold<int>(0, (sum, p) => sum + ((p['value_pob'] as int?) ?? 0));
 
   @override
   void initState() {
@@ -74,7 +88,10 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
       setState(() {
         // Setup Products (Only POB matters)
         _uiProducts = provider.masterProducts.map((p) {
-          int initialPob = 0;
+          int initialSale = 0;
+          int initialFree = 0;
+          int initialValuePob = 0;
+          String initialSuppliedThrough = '';
           bool initialSelect = false;
 
           if (widget.existingReport != null) {
@@ -82,12 +99,19 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
               (ep) => ep.productName == p.name,
               orElse: () => ChemistProductEntry(
                 productName: '',
+                saleQty: 0,
+                freeQty: 0,
                 pobQty: 0,
+                valuePob: 0,
+                suppliedThrough: '',
               ), // <--- NEW MODEL
             );
 
             if (existing.productName.isNotEmpty) {
-              initialPob = existing.pobQty;
+              initialSale = existing.saleQty;
+              initialFree = existing.freeQty;
+              initialValuePob = existing.valuePob;
+              initialSuppliedThrough = existing.suppliedThrough;
               initialSelect = true;
             }
           }
@@ -96,7 +120,10 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
             'id': p.id,
             'name': p.name,
             'isSelected': initialSelect,
-            'pob': initialPob,
+            'sale': initialSale,
+            'free': initialFree,
+            'value_pob': initialValuePob,
+            'supplied_through': initialSuppliedThrough,
           };
         }).toList();
 
@@ -178,8 +205,43 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
     }
   }
 
-  void _updateQty(int index, String key, String value) {
-    _uiProducts[index][key] = int.tryParse(value) ?? 0;
+  void _updateSaleQty(int index, String value) {
+    setState(() {
+      _uiProducts[index]['sale'] = int.tryParse(value) ?? 0;
+    });
+  }
+
+  void _updateFreeQty(int index, String value) {
+    setState(() {
+      _uiProducts[index]['free'] = int.tryParse(value) ?? 0;
+    });
+  }
+
+  void _updateValuePob(int index, String value) {
+    setState(() {
+      _uiProducts[index]['value_pob'] = int.tryParse(value) ?? 0;
+    });
+  }
+
+  void _updateSuppliedThrough(int index, String value) {
+    setState(() {
+      _uiProducts[index]['supplied_through'] = value;
+    });
+  }
+
+  List<int> get _filteredProductIndexes {
+    if (_productSearchQuery.trim().isEmpty) {
+      return List<int>.generate(_uiProducts.length, (i) => i);
+    }
+    final query = _productSearchQuery.toLowerCase().trim();
+    final List<int> indexes = [];
+    for (int i = 0; i < _uiProducts.length; i++) {
+      final name = (_uiProducts[i]['name'] ?? '').toString().toLowerCase();
+      if (name.contains(query)) {
+        indexes.add(i);
+      }
+    }
+    return indexes;
   }
 
   void _showJointWorkPicker() {
@@ -221,14 +283,51 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
       return;
     }
 
-    if (_remarkController.text.trim().isEmpty) {
+    final selectedProducts = _uiProducts.where((p) => p['isSelected'] == true).toList();
+    if (selectedProducts.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please type a remark"),
+          content: Text("Please select at least one product"),
           backgroundColor: Colors.orange,
         ),
       );
       return;
+    }
+
+    for (final p in selectedProducts) {
+      final int saleQty = (p['sale'] as int?) ?? 0;
+      final int invoiceValue = (p['value_pob'] as int?) ?? 0;
+      final String suppliedThrough = (p['supplied_through'] ?? '').toString().trim();
+
+      if (saleQty <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Please enter Sale units for ${p['name']}"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      if (invoiceValue <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Please enter POBS At Invoice Value for ${p['name']}"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      if (suppliedThrough.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Please enter Supplied Through for ${p['name']}"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
     }
 
     setState(() => _isLoading = true);
@@ -245,7 +344,14 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
     List<ChemistProductEntry> finalProductList = _uiProducts
         .where((p) => p['isSelected'] == true)
         .map(
-          (p) => ChemistProductEntry(productName: p['name'], pobQty: p['pob']),
+          (p) => ChemistProductEntry(
+            productName: p['name'],
+            saleQty: p['sale'],
+            freeQty: p['free'],
+            pobQty: (p['sale'] ?? 0) + (p['free'] ?? 0),
+            valuePob: p['value_pob'],
+            suppliedThrough: (p['supplied_through'] ?? '').toString().trim(),
+          ),
         )
         .toList();
 
@@ -294,15 +400,17 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
         backgroundColor: const Color(0xFFF8F9FD),
+        resizeToAvoidBottomInset: true,
         appBar: AppBar(
           title: Text(
             widget.existingReport != null
                 ? "Edit Chemist Report"
-                : "New Chemist Report",
+                : "Personal Order Booked & Supplied",
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           ),
           backgroundColor: _primaryColor,
@@ -426,17 +534,54 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                         ),
                         const SizedBox(height: 16),
                         _buildJointWorkSelectorButton(),
+                        const SizedBox(height: 12),
+                        Container(
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white24),
+                          ),
+                          child: TextField(
+                            onChanged: (value) {
+                              setState(() {
+                                _productSearchQuery = value;
+                              });
+                            },
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
+                            decoration: InputDecoration(
+                              hintText: "Search products",
+                              hintStyle: GoogleFonts.poppins(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                              prefixIcon: const Icon(
+                                Icons.search,
+                                color: Colors.white70,
+                                size: 20,
+                              ),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
 
-                  // === PRODUCTS HEADER (ONLY POB) ===
+                  // === PRODUCTS HEADER ===
                   Container(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                     child: Row(
                       children: [
                         Expanded(
-                          flex: 7,
+                          flex: 5,
                           child: Text(
                             "PRODUCT",
                             style: GoogleFonts.poppins(
@@ -447,10 +592,66 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                           ),
                         ),
                         Expanded(
+                          flex: 4,
+                          child: Column(
+                            children: [
+                              Text(
+                                "UNITS (POBS)",
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey[700],
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      "Sales",
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[600],
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      "Free",
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.grey[600],
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
                           flex: 3,
                           child: Center(
                             child: Text(
-                              "ORDER (POB)",
+                              "POBS At Invoice Value",
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey[700],
+                                fontSize: 11,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          flex: 4,
+                          child: Center(
+                            child: Text(
+                              "Supplied Through (Stockist)",
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
@@ -467,10 +668,11 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                   Expanded(
                     child: ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: _uiProducts.length,
+                      itemCount: _filteredProductIndexes.length,
                       separatorBuilder: (c, i) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
-                        final p = _uiProducts[index];
+                        final actualIndex = _filteredProductIndexes[index];
+                        final p = _uiProducts[actualIndex];
                         return ChemistProductRowItem(
                           key: ValueKey(p['id']),
                           product: p,
@@ -478,10 +680,20 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                           onCheckChanged: (val) {
                             setState(() {
                               p['isSelected'] = val;
-                              if (!val) p['pob'] = 0;
+                              if (!val) {
+                                p['sale'] = 0;
+                                p['free'] = 0;
+                                p['value_pob'] = 0;
+                                p['supplied_through'] = '';
+                              }
                             });
                           },
-                          onPobChanged: (val) => _updateQty(index, 'pob', val),
+                          onSaleChanged: (val) => _updateSaleQty(actualIndex, val),
+                          onFreeChanged: (val) => _updateFreeQty(actualIndex, val),
+                          onValuePobChanged: (val) =>
+                              _updateValuePob(actualIndex, val),
+                          onSuppliedThroughChanged: (val) =>
+                              _updateSuppliedThrough(actualIndex, val),
                         );
                       },
                     ),
@@ -489,7 +701,12 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
 
                   // === BOTTOM SHEET (ONLY TYPED REMARKS & SUBMIT) ===
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      isKeyboardOpen ? 12 : 20,
+                      20,
+                      isKeyboardOpen ? 12 : 20,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       boxShadow: [
@@ -507,6 +724,40 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        if (!isKeyboardOpen) ...[
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    "Total units (POBS): $_totalOrderPob",
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: Text(
+                                    "Total Value (POBS): $_totalValuePob",
+                                    textAlign: TextAlign.right,
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                         Text(
                           "Visit Remark",
                           style: GoogleFonts.poppins(
@@ -608,14 +859,20 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
 class ChemistProductRowItem extends StatefulWidget {
   final Map<String, dynamic> product;
   final Function(bool) onCheckChanged;
-  final Function(String) onPobChanged;
+  final Function(String) onSaleChanged;
+  final Function(String) onFreeChanged;
+  final Function(String) onValuePobChanged;
+  final Function(String) onSuppliedThroughChanged;
   final Color primaryColor;
 
   const ChemistProductRowItem({
     required Key key,
     required this.product,
     required this.onCheckChanged,
-    required this.onPobChanged,
+    required this.onSaleChanged,
+    required this.onFreeChanged,
+    required this.onValuePobChanged,
+    required this.onSuppliedThroughChanged,
     required this.primaryColor,
   }) : super(key: key);
 
@@ -624,13 +881,27 @@ class ChemistProductRowItem extends StatefulWidget {
 }
 
 class _ChemistProductRowItemState extends State<ChemistProductRowItem> {
-  late TextEditingController _pobController;
+  late TextEditingController _saleController;
+  late TextEditingController _freeController;
+  late TextEditingController _valuePobController;
+  late TextEditingController _suppliedThroughController;
 
   @override
   void initState() {
     super.initState();
-    _pobController = TextEditingController(
-      text: widget.product['pob'] == 0 ? '' : widget.product['pob'].toString(),
+    _saleController = TextEditingController(
+      text: widget.product['sale'] == 0 ? '' : widget.product['sale'].toString(),
+    );
+    _freeController = TextEditingController(
+      text: widget.product['free'] == 0 ? '' : widget.product['free'].toString(),
+    );
+    _valuePobController = TextEditingController(
+      text: widget.product['value_pob'] == 0
+          ? ''
+          : widget.product['value_pob'].toString(),
+    );
+    _suppliedThroughController = TextEditingController(
+      text: (widget.product['supplied_through'] ?? '').toString(),
     );
   }
 
@@ -638,13 +909,21 @@ class _ChemistProductRowItemState extends State<ChemistProductRowItem> {
   void didUpdateWidget(ChemistProductRowItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.product['isSelected']) {
-      if (_pobController.text.isNotEmpty) _pobController.clear();
+      if (_saleController.text.isNotEmpty) _saleController.clear();
+      if (_freeController.text.isNotEmpty) _freeController.clear();
+      if (_valuePobController.text.isNotEmpty) _valuePobController.clear();
+      if (_suppliedThroughController.text.isNotEmpty) {
+        _suppliedThroughController.clear();
+      }
     }
   }
 
   @override
   void dispose() {
-    _pobController.dispose();
+    _saleController.dispose();
+    _freeController.dispose();
+    _valuePobController.dispose();
+    _suppliedThroughController.dispose();
     super.dispose();
   }
 
@@ -672,7 +951,7 @@ class _ChemistProductRowItemState extends State<ChemistProductRowItem> {
         children: [
           // Name and Checkbox (Flex 7)
           Expanded(
-            flex: 7,
+            flex: 5,
             child: Row(
               children: [
                 Transform.scale(
@@ -701,14 +980,48 @@ class _ChemistProductRowItemState extends State<ChemistProductRowItem> {
               ],
             ),
           ),
-          // POB Input (Flex 3)
+          // Sale / Free (Flex 4)
+          Expanded(
+            flex: 4,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildMiniInput(
+                    _saleController,
+                    isSelected,
+                    widget.onSaleChanged,
+                    widget.primaryColor,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: _buildMiniInput(
+                    _freeController,
+                    isSelected,
+                    widget.onFreeChanged,
+                    widget.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 3,
             child: _buildMiniInput(
-              _pobController,
+              _valuePobController,
               isSelected,
-              widget.onPobChanged,
+              widget.onValuePobChanged,
               widget.primaryColor,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 4,
+            child: _buildTextInput(
+              _suppliedThroughController,
+              isSelected,
+              widget.onSuppliedThroughChanged,
             ),
           ),
         ],
@@ -733,6 +1046,7 @@ class _ChemistProductRowItemState extends State<ChemistProductRowItem> {
         controller: controller,
         enabled: active,
         keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         textAlign: TextAlign.center,
         style: GoogleFonts.poppins(
           fontWeight: FontWeight.bold,
@@ -740,6 +1054,37 @@ class _ChemistProductRowItemState extends State<ChemistProductRowItem> {
         ),
         decoration: const InputDecoration(
           contentPadding: EdgeInsets.only(bottom: 8),
+          border: InputBorder.none,
+          hintText: "-",
+        ),
+        onChanged: onChanged,
+      ),
+    );
+  }
+
+  Widget _buildTextInput(
+    TextEditingController controller,
+    bool active,
+    Function(String) onChanged,
+  ) {
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: active ? Colors.grey.shade50 : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: TextField(
+        controller: controller,
+        enabled: active,
+        textAlign: TextAlign.center,
+        style: GoogleFonts.poppins(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: active ? Colors.black87 : Colors.grey[400],
+        ),
+        decoration: const InputDecoration(
+          contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 10),
           border: InputBorder.none,
           hintText: "-",
         ),

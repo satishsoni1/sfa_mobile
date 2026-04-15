@@ -6,7 +6,7 @@ import '../data/models/visit_report.dart'; // Ensure you have this model
 import '../data/models/doctor.dart'; // Ensure you have this model
 import '../data/models/tour_plan.dart'; // Ensure you have this model
 import '../data/models/chemist.dart';
-
+//import 'dart:convert';
 class ReportProvider with ChangeNotifier {
   // Service Injection
   final ApiService _apiService = ApiService();
@@ -384,10 +384,22 @@ class ReportProvider with ChangeNotifier {
             ? selectedDate.toIso8601String()
             : report.visitTime.toIso8601String(),
         'remarks': report.remarks,
-        'products': report.products.map((p) => p.toJson()).toList(),
+        'products': report.products
+            .map(
+              (p) => {
+                'name': p.productName,
+                'sale': p.saleQty,
+                'free': p.freeQty,
+                'pob': p.saleQty + p.freeQty,
+                'value_pob': p.valuePob,
+                'supplied_through': p.suppliedThrough,
+              },
+            )
+            .toList(),
         'worked_with': report.workedWith,
       };
-
+  
+     // print(const JsonEncoder.withIndent('  ').convert(data));  
       bool success = await _apiService.saveChemistVisit(data);
       if (!success) throw Exception("API returned false.");
 

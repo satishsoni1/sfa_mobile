@@ -1,19 +1,59 @@
 class ChemistProductEntry {
   final String productName;
+  final int saleQty;
+  final int freeQty;
   final int pobQty;
+  final int valuePob;
+  final String suppliedThrough;
 
-  ChemistProductEntry({required this.productName, required this.pobQty});
+  ChemistProductEntry({
+    required this.productName,
+    this.saleQty = 0,
+    this.freeQty = 0,
+    required this.pobQty,
+    this.valuePob = 0,
+    this.suppliedThrough = '',
+  });
 
   factory ChemistProductEntry.fromJson(Map<String, dynamic> json) {
+    final int parsedSale =
+        json['sale'] is int
+            ? json['sale']
+            : int.tryParse(json['sale']?.toString() ?? '0') ?? 0;
+    final int parsedFree =
+        json['free'] is int
+            ? json['free']
+            : int.tryParse(json['free']?.toString() ?? '0') ?? 0;
+    final int parsedPob =
+        json['pob'] is int
+            ? json['pob']
+            : int.tryParse(json['pob']?.toString() ?? '0') ?? 0;
+
+    // Keep old payloads working: if sale/free are absent, fallback to legacy pob.
+    final int finalSale = (parsedSale == 0 && parsedFree == 0) ? parsedPob : parsedSale;
+    final int finalFree = (parsedSale == 0 && parsedFree == 0) ? 0 : parsedFree;
+
     return ChemistProductEntry(
       productName: json['name'] ?? '',
-      pobQty: json['pob'] is int
-          ? json['pob']
-          : int.tryParse(json['pob'].toString()) ?? 0,
+      saleQty: finalSale,
+      freeQty: finalFree,
+      pobQty: finalSale + finalFree,
+      valuePob: json['value_pob'] is num
+          ? (json['value_pob'] as num).toInt()
+          : int.tryParse(json['value_pob']?.toString() ?? '0') ?? 0,
+      suppliedThrough:
+          (json['supplied_through'] ?? json['suppliedThrough'] ?? '').toString(),
     );
   }
 
-  Map<String, dynamic> toJson() => {'name': productName, 'pob': pobQty};
+  Map<String, dynamic> toJson() => {
+    'name': productName,
+    'sale': saleQty,
+    'free': freeQty,
+    'pob': saleQty + freeQty,
+    'value_pob': valuePob,
+    'supplied_through': suppliedThrough,
+  };
 }
 
 class ChemistReport {
