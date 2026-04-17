@@ -251,6 +251,56 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
       _fetchReportData();
     }
   }
+
+String _formatTourPlanDoctorName(dynamic doctorName) {
+    String name = (doctorName ?? '').toString().trim();
+    if (name.isEmpty || name == '-') return '';
+
+    name = name.replaceAll(RegExp(r'\s+'), ' ');
+    name = name.replaceFirst(
+      RegExp(r'^(?:(?:dr|doctor)\.?\s*)+', caseSensitive: false),
+      '',
+    );
+    name = name.replaceAll(RegExp(r'\s+'), ' ').trim();
+
+    final parts = name
+        .split(' ')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    if (parts.length.isEven && parts.isNotEmpty) {
+      final half = parts.length ~/ 2;
+      bool sameHalves = true;
+      for (int i = 0; i < half; i++) {
+        if (parts[i].toLowerCase() != parts[i + half].toLowerCase()) {
+          sameHalves = false;
+          break;
+        }
+      }
+      if (sameHalves) {
+        name = parts.sublist(0, half).join(' ');
+      } else {
+        name = parts.join(' ');
+      }
+    } else {
+      name = parts.join(' ');
+    }
+
+    final String titleCased = name
+        .split(' ')
+        .map((word) {
+          if (word.isEmpty) return word;
+          final lower = word.toLowerCase();
+          return lower[0].toUpperCase() + lower.substring(1);
+        })
+        .join(' ')
+        .trim();
+
+    if (titleCased.isEmpty) return '';
+    return 'Dr. $titleCased';
+  }
+  
   // --- EXPORT TO CSV LOGIC (CROSS-PLATFORM) ---
   Future<void> _exportToCsv() async {
     try {
@@ -1494,9 +1544,9 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      if (item['doctor_name'] != '-')
+                      if (_formatTourPlanDoctorName(item['doctor_name']).isNotEmpty)
                         Text(
-                          "Dr. ${item['doctor_name']}",
+                          _formatTourPlanDoctorName(item['doctor_name']),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       if (item['activity'] != '-')

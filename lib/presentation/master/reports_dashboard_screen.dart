@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:zforce/core/constants/app_colors.dart';
+import 'package:zforce/presentation/reporting/daily_call_report_screen.dart';
 import 'hierarchy_report_view_screen.dart';
 
 // Enum defined outside so it can be used across files
@@ -17,10 +18,10 @@ class ReportsDashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The 6 reports based on your uploaded files
+    // 7 Team report cards
     final List<Map<String, dynamic>> reports = [
       {
-        'title': 'Daily Summary',
+        'title': 'Summary',
         'icon': Icons.summarize_outlined,
         'type': ReportType.summary,
       },
@@ -48,6 +49,11 @@ class ReportsDashboardScreen extends StatelessWidget {
         'title': 'Tour Plan (TP)',
         'icon': Icons.calendar_month_outlined,
         'type': ReportType.tourPlan,
+      },
+      {
+        'title': 'Execution Report',
+        'icon': Icons.insights_outlined,
+        'screen': const CallReportScreen(),
       },
     ];
 
@@ -101,6 +107,15 @@ class ReportsDashboardScreen extends StatelessWidget {
   Widget _buildReportCard(BuildContext context, Map<String, dynamic> report) {
     return InkWell(
       onTap: () {
+        final Widget? directScreen = report['screen'] as Widget?;
+        if (directScreen != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => directScreen),
+          );
+          return;
+        }
+
         Navigator.push(
           context,
           MaterialPageRoute(

@@ -26,7 +26,6 @@ import '../doctor_list/add_doctor_screen.dart';
 import '../doctor_list/doctor_master_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
 import '../reporting/TeamTerritoryScreen.dart';
-import '../reporting/daily_call_report_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
@@ -638,12 +637,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "NFW Report",
             Colors.brown,
             () => _navigateTo(const NfwReportScreen()),
-          ),
-          _MenuAction(
-            Icons.analytics_outlined,
-            "Reports",
-            Colors.indigoAccent,
-            () => _navigateTo(const CallReportScreen()),
           ),
         ]),
         const SizedBox(height: 24),
