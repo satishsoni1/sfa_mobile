@@ -38,8 +38,10 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
   bool _isLoading = true;
   bool _isError = false;
 
-  DateTime _selectedDate = DateTime.now();
-  DateTime _selectedMonth = DateTime.now();
+  DateTimeRange _selectedDateRange = DateTimeRange(
+    start: DateTime.now(),
+    end: DateTime.now(),
+  );
 
   @override
   void initState() {
@@ -73,18 +75,18 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
     });
 
     try {
-      // Format dates for backend expectations (Adjust formats as needed)
-      final String formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final String formattedMonth = _selectedMonth.month.toString().padLeft(2, '0');
-      final String formattedYear = _selectedMonth.year.toString();
+      final String formattedFromDate = DateFormat(
+        'yyyy-MM-dd',
+      ).format(_selectedDateRange.start);
+      final String formattedToDate = DateFormat(
+        'yyyy-MM-dd',
+      ).format(_selectedDateRange.end);
 
       final data = await _apiService.fetchHierarchyReport(
         widget.reportType.toString(),
         empCode: _selectedEmployeeId,
-        // 👇 Pass date or month/year based on ReportType
-        date: widget.reportType != ReportType.callAvg ? formattedDate : null,
-        month: widget.reportType == ReportType.callAvg ? formattedMonth : null,
-        year: widget.reportType == ReportType.callAvg ? formattedYear : null,
+        startDate: formattedFromDate,
+        endDate: formattedToDate,
       );
 
       setState(() {
@@ -134,12 +136,8 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
       ),
     );
   }
-
-  // --- TOP FILTER (DYNAMIC) ---
   // --- TOP FILTER (DYNAMIC) ---
   Widget _buildHierarchyFilter() {
-    final bool isMonthlyReport = widget.reportType == ReportType.callAvg;
-    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: const BoxDecoration(
@@ -158,14 +156,24 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
                   child: DropdownButton<String>(
                     value: _selectedEmployeeId,
                     isExpanded: true,
-                    icon: const Icon(Icons.arrow_drop_down, color: AppColors.primary),
-                    items: _teamMembers.map((emp) => DropdownMenuItem(
-                          value: emp['id'],
-                          child: Text(
-                            emp['name']!,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    icon: const Icon(
+                      Icons.arrow_drop_down,
+                      color: AppColors.primary,
+                    ),
+                    items: _teamMembers
+                        .map(
+                          (emp) => DropdownMenuItem(
+                            value: emp['id'],
+                            child: Text(
+                              emp['name']!,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
-                        )).toList(),
+                        )
+                        .toList(),
                     onChanged: (val) {
                       if (val != null) {
                         setState(() => _selectedEmployeeId = val);
@@ -178,23 +186,21 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
             ],
           ),
           const Divider(height: 16),
-          // 2. Date / Month Picker
+          // 2. Date Picker
           InkWell(
-            onTap: () => isMonthlyReport ? _pickMonthYear() : _pickDate(),
+            onTap: _pickDateRange,
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: Row(
                 children: [
-                  Icon(
-                    isMonthlyReport ? Icons.calendar_month : Icons.calendar_today,
+                  const Icon(
+                    Icons.date_range,
                     color: AppColors.primary,
                     size: 20,
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    isMonthlyReport
-                        ? DateFormat('MMMM yyyy').format(_selectedMonth)
-                        : DateFormat('dd MMM yyyy').format(_selectedDate),
+                    "${DateFormat('dd MMM yyyy').format(_selectedDateRange.start)} - ${DateFormat('dd MMM yyyy').format(_selectedDateRange.end)}",
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -206,53 +212,33 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
                 ],
               ),
             ),
-          )
+          ),
         ],
       ),
     );
   }
 
-  // --- DATE PICKER HELPERS ---
-  Future<void> _pickDate() async {
-    final DateTime? picked = await showDatePicker(
+  Future<void> _pickDateRange() async {
+    final DateTimeRange? picked = await showDateRangePicker(
       context: context,
-      initialDate: _selectedDate,
+      initialDateRange: _selectedDateRange,
       firstDate: DateTime(2020),
-      lastDate: DateTime.now().add(const Duration(days: 365)), // Allow future for Tour Plans
+      lastDate: DateTime.now().add(const Duration(days: 365)),
       builder: (context, child) => Theme(
         data: ThemeData.light().copyWith(primaryColor: AppColors.primary),
         child: child!,
       ),
     );
 
-    if (picked != null && picked != _selectedDate) {
-      setState(() => _selectedDate = picked);
+    if (picked != null &&
+        (picked.start != _selectedDateRange.start ||
+            picked.end != _selectedDateRange.end)) {
+      setState(() => _selectedDateRange = picked);
       _fetchReportData();
     }
   }
 
-  Future<void> _pickMonthYear() async {
-    // Flutter doesn't have a native "Month only" picker without packages.
-    // Opening a standard date picker in "Year" mode is the native workaround.
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedMonth,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDatePickerMode: DatePickerMode.year, // Starts in Year/Month view
-      builder: (context, child) => Theme(
-        data: ThemeData.light().copyWith(primaryColor: AppColors.primary),
-        child: child!,
-      ),
-    );
-
-    if (picked != null && picked != _selectedMonth) {
-      setState(() => _selectedMonth = picked);
-      _fetchReportData();
-    }
-  }
-
-String _formatTourPlanDoctorName(dynamic doctorName) {
+  String _formatTourPlanDoctorName(dynamic doctorName) {
     String name = (doctorName ?? '').toString().trim();
     if (name.isEmpty || name == '-') return '';
 
@@ -398,6 +384,8 @@ String _formatTourPlanDoctorName(dynamic doctorName) {
         return _buildDeviationList();
       case ReportType.jointWork:
         return _buildJointWorkList();
+      case ReportType.pobSummary:
+        return _buildPobSummaryList();
       default:
         return const Center(child: Text("Report view coming soon."));
     }
@@ -422,7 +410,7 @@ String _formatTourPlanDoctorName(dynamic doctorName) {
 
         // --- CHECK BOTH OLD AND NEW KEYS ---
         final String avg =
-            row['call_avg']?.toString() ?? row['avg']?.toString() ?? '0.0';
+            row['call_avg']?.toString() ?? row['avg']?.toString() ?? '0';
         final String totalCalls =
             row['total_drs_met']?.toString() ??
             row['total_calls']?.toString() ??
@@ -856,6 +844,16 @@ String _formatTourPlanDoctorName(dynamic doctorName) {
       itemCount: _reportData.length,
       itemBuilder: (ctx, i) {
         final row = _reportData[i];
+          final int totalCalls =
+            int.tryParse((row['total_calls'] ?? '0').toString()) ?? 0;
+        final int fieldDays =
+            int.tryParse((row['no_of_days_call'] ?? '0').toString()) ?? 0;
+        final double computedCallAvg = fieldDays > 0 ? totalCalls / fieldDays : 0;
+        final String callAvg =
+            row['call_avg']?.toString() ??
+            row['avg']?.toString() ??
+            computedCallAvg.toStringAsFixed(1);
+            '0';
 
         return InkWell(
           onTap: () => _showDailyDetailsSheet(context, row),
@@ -957,6 +955,7 @@ String _formatTourPlanDoctorName(dynamic doctorName) {
                         row['deviations']?.toString() ?? '0',
                         color: Colors.red,
                       ),
+                      _dataPoint("Call Avg", callAvg, color: Colors.teal),
                     ],
                   ),
 
@@ -977,6 +976,188 @@ String _formatTourPlanDoctorName(dynamic doctorName) {
           ),
         );
       },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 3. DAILY POBS CAMPAIGN UI
+  // ---------------------------------------------------------------------------
+  Widget _buildPobSummaryList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _reportData.length,
+      itemBuilder: (ctx, i) {
+        final dynamic rawRow = _reportData[i];
+        final Map<String, dynamic> row = rawRow is Map<String, dynamic>
+            ? rawRow
+            : rawRow is Map
+                ? rawRow.map((k, v) => MapEntry(k.toString(), v))
+                : <String, dynamic>{};
+
+        final String employeeName = row['name']?.toString() ?? 'N/A';
+        final String employeeCode = row['employee_code']?.toString() ?? 'N/A';
+        final String designation = row['designation']?.toString() ?? 'N/A';
+        final String headQtr =
+            row['head_qtr']?.toString() ?? row['hq']?.toString() ?? '-';
+        final String division = row['division']?.toString() ?? '-';
+        final String zone = row['zone']?.toString() ?? '-';
+        final String state = row['state']?.toString() ?? '-';
+
+        final String totalVisits = row['total_visits']?.toString() ?? '0';
+        final String totalProducts = row['total_products']?.toString() ?? '0';
+        final String totalQty = row['total_quantity']?.toString() ?? '0';
+        final String saleQty = row['sale_quantity']?.toString() ?? '0';
+        final String freeQty = row['free_quantity']?.toString() ?? '0';
+        final String totalValue = row['total_value']?.toString() ?? '0';
+        final String brandNames = row['brand_names']?.toString() ?? '';
+        final String stockist = row['stockist']?.toString() ?? '';
+
+        return Card(
+          elevation: 3,
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // --- TOP HEADER ---
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        employeeName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        "Code: $employeeCode",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                // --- EMPLOYEE / GEOGRAPHY INFO ---
+                Text(
+                  "$designation  |  HQ: $headQtr",
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  "Division: $division  |  Zone: $zone  |  State: $state",
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+
+                const Divider(height: 24, thickness: 1),
+
+                // --- METRICS GRID ---
+                Wrap(
+                  spacing: 16,
+                  runSpacing: 16,
+                  alignment: WrapAlignment.spaceBetween,
+                  children: [
+                    _dataPoint("Visits", totalVisits, color: AppColors.primary),
+                    _dataPoint("Products", totalProducts, color: Colors.blue),
+                    _dataPoint("Total Qty", totalQty, color: Colors.teal),
+                    _dataPoint("Sale Qty", saleQty, color: Colors.green),
+                    _dataPoint("Free Qty", freeQty, color: Colors.orange),
+                    _dataPoint("Value", "Rs. $totalValue", color: Colors.purple),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
+
+                // --- BRANDS & STOCKISTS ---
+                const Text(
+                  "Brands:",
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _buildPobTagWrap(_splitCommaValues(brandNames), emptyLabel: "-"),
+                const SizedBox(height: 6),
+                const Text(
+                  "Stockist:",
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _buildPobTagWrap(_splitCommaValues(stockist), emptyLabel: "-"),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<String> _splitCommaValues(String raw) {
+    return raw
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty && e != '-')
+        .toList();
+  }
+
+  Widget _buildPobTagWrap(List<String> values, {String emptyLabel = '-'}) {
+    if (values.isEmpty) {
+      return Text(
+        emptyLabel,
+        style: const TextStyle(color: Colors.grey, fontSize: 12),
+      );
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: values.map((value) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.06),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppColors.primary.withOpacity(0.25)),
+          ),
+          child: Text(
+            value,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black87,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 

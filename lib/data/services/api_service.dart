@@ -1129,7 +1129,12 @@ class ApiService {
         final data = jsonDecode(response.body)['data'] as List;
         return data
             .map(
-              (e) => {'id': e['id'].toString(), 'name': e['name'].toString()},
+              (e) => {
+                // Prefer employee_code for report filters; fallback to id.
+                'id': (e['employee_code'] ?? e['emp_code'] ?? e['id'])
+                    .toString(),
+                'name': e['name'].toString(),
+              },
             )
             .toList();
       }
@@ -1138,7 +1143,7 @@ class ApiService {
     }
     return [];
   }
-
+/*
   // 2. Fetch Specific Report Data (Call Avg, TP Deviation, Summary, etc.)
   Future<List<dynamic>> fetchHierarchyReport(
   String reportType, {
@@ -1194,8 +1199,63 @@ class ApiService {
     print("Error fetching report data: $e");
   }
   return [];
-}
+}*/
 
+  // 2. Fetch Specific Report Data (Call Avg, TP Deviation, Summary, pobSummary ,etc.)
+  Future<List<dynamic>> fetchHierarchyReport(
+    String reportType, {
+    String? empCode,
+    required String startDate,
+    required String endDate,
+  }) async {
+    final token = await getToken();
+    if (token == null) return [];
+
+    final String apiType = reportType.split('.').last;
+    final String baseUrlString = '$baseUrl/app/manager/reports-new/$apiType';
+
+    final Map<String, String> queryParams = {};
+    if (empCode != null && empCode != 'All Team') {
+      queryParams['employee_code'] = empCode;
+    }
+
+    queryParams['start_date'] = startDate;
+    queryParams['end_date'] = endDate;
+
+    Uri uri = Uri.parse(baseUrlString);
+    if (queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
+    }
+
+    try {
+      final response = await http.get(uri, headers: await _getHeaders());
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        return _safeExtractList(decoded);
+      } else {
+        print("API Error: ${response.statusCode} - ${response.body}");
+      }
+    } catch (e) {
+      print("Error fetching report data: $e");
+    }
+    return [];
+  }
+
+  List<dynamic> _safeExtractList(dynamic decoded) {
+    if (decoded is List) return decoded;
+    if (decoded is Map<String, dynamic>) {
+      final dynamic data = decoded['data'];
+      if (data is List) return data;
+      if (data is Map<String, dynamic>) {
+        if (data['records'] is List) return data['records'] as List<dynamic>;
+        if (data['items'] is List) return data['items'] as List<dynamic>;
+      }
+      if (decoded['records'] is List) return decoded['records'] as List<dynamic>;
+      if (decoded['items'] is List) return decoded['items'] as List<dynamic>;
+    }
+    return [];
+  }
   Future<String?> getServerAppVersion() async {
     try {
       final response = await http.get(

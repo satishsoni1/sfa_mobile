@@ -11,6 +11,7 @@ enum ReportType {
   tpDeviation,
   jointWork,
   tourPlan,
+  pobSummary,
 }
 
 class ReportsDashboardScreen extends StatelessWidget {
@@ -54,6 +55,11 @@ class ReportsDashboardScreen extends StatelessWidget {
         'title': 'Execution Report',
         'icon': Icons.insights_outlined,
         'screen': const CallReportScreen(),
+      },
+      {
+        'title': 'Daily POBS Campaign',
+        'icon': Icons.storefront_outlined,
+        'type': ReportType.pobSummary,
       },
     ];
 

@@ -129,11 +129,14 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
 
         // Setup Colleagues
         _uiColleagues = provider.colleagues.map((c) {
+          final String empId = c['id'].toString();
+          final String empName = c['name']?.toString() ?? '';
           bool isSelected =
               widget.existingReport != null &&
-              widget.existingReport!.workedWith.contains(c['id'].toString());
+              (widget.existingReport!.workedWith.contains(empId) ||
+                  widget.existingReport!.workedWith.contains(empName));
           return {
-            'id': c['id'].toString(),
+            'id': empId,
             'name': c['name'],
             'role': c['role'],
             'isSelected': isSelected,
@@ -355,9 +358,9 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
         )
         .toList();
 
-    List<String> selectedColleagueIds = _uiColleagues
+    List<String> selectedColleagueNames = _uiColleagues
         .where((c) => c['isSelected'] == true)
-        .map((c) => c['id'].toString())
+        .map((c) => c['name'].toString())
         .toList();
 
     final report = ChemistReport(
@@ -367,7 +370,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
       visitTime: combinedDateTime,
       remarks: _remarkController.text.trim(),
       products: finalProductList,
-      workedWith: selectedColleagueIds,
+      workedWith: selectedColleagueNames,
       isSubmitted: false,
     );
 
