@@ -129,14 +129,16 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
 
         // Setup Colleagues
         _uiColleagues = provider.colleagues.map((c) {
-          final String empId = c['id'].toString();
-          final String empName = c['name']?.toString() ?? '';
+          //final String empId = c['id'].toString();
+          //final String empName = c['name']?.toString() ?? '';
           bool isSelected =
               widget.existingReport != null &&
-              (widget.existingReport!.workedWith.contains(empId) ||
-                  widget.existingReport!.workedWith.contains(empName));
+              // (widget.existingReport!.workedWith.contains(empId) ||
+              //     widget.existingReport!.workedWith.contains(empName));
+              widget.existingReport!.workedWith.contains(c['id'].toString());
           return {
-            'id': empId,
+            'id': c['id'].toString(),
+            //'id': empId,
             'name': c['name'],
             'role': c['role'],
             'isSelected': isSelected,
@@ -358,9 +360,11 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
         )
         .toList();
 
-    List<String> selectedColleagueNames = _uiColleagues
+    //List<String> selectedColleagueNames = _uiColleagues
+    List<String> selectedColleagueIds = _uiColleagues
         .where((c) => c['isSelected'] == true)
-        .map((c) => c['name'].toString())
+        .map((c) => c['id'].toString())
+        //.map((c) => c['name'].toString())
         .toList();
 
     final report = ChemistReport(
@@ -370,7 +374,8 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
       visitTime: combinedDateTime,
       remarks: _remarkController.text.trim(),
       products: finalProductList,
-      workedWith: selectedColleagueNames,
+      //workedWith: selectedColleagueNames,
+      workedWith: selectedColleagueIds,
       isSubmitted: false,
     );
 

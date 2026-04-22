@@ -118,12 +118,13 @@ class _ReportingScreenState extends State<ReportingScreen> {
         _uiColleagues = provider.colleagues.map((c) {
           bool isSelected = false;
           final String empId = c['id'].toString();
-          final String empName = c['name']?.toString() ?? '';
+         // final String empName = c['name']?.toString() ?? '';
 
           if (widget.existingReport != null) {
             isSelected =
-                widget.existingReport!.workedWith.contains(empId) ||
-                widget.existingReport!.workedWith.contains(empName);
+              widget.existingReport!.workedWith.contains(empId);
+              //  widget.existingReport!.workedWith.contains(empId) ||
+              //  widget.existingReport!.workedWith.contains(empId);widget.existingReport!.workedWith.contains(empName);
           }
 
           return {
@@ -260,9 +261,11 @@ class _ReportingScreenState extends State<ReportingScreen> {
         )
         .toList();
 
-    List<String> selectedColleagueNames = _uiColleagues
+    //List<String> selectedColleagueNames = _uiColleagues
+    List<String> selectedColleagueIds = _uiColleagues
         .where((c) => c['isSelected'] == true)
-        .map((c) => c['name'].toString())
+        .map((c) => c['id'].toString())
+        //.map((c) => c['name'].toString())
         .toList();
 
     final report = VisitReport(
@@ -272,7 +275,8 @@ class _ReportingScreenState extends State<ReportingScreen> {
       visitTime: _selectedDate,
       remarks: finalRemark,
       products: finalProductList,
-      workedWith: selectedColleagueNames,
+      workedWith: selectedColleagueIds,
+      //workedWith: selectedColleagueNames,
       isSubmitted: false,
     );
 
