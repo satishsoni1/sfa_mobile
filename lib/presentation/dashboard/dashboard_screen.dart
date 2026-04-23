@@ -39,6 +39,7 @@ import '../../providers/report_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/services/api_service.dart';
 import '../../data/models/user_model.dart';
+import '../webview/internal_webview_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -49,7 +50,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.12";
+  static const String CURRENT_APP_VERSION = "1.0.13";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -265,6 +266,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _handleLogout() {
     Provider.of<AuthProvider>(context, listen: false).logout();
+  }
+
+  void _openTabJointWork() {
+    final employeeCode =
+        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
+            .trim();
+
+    if (employeeCode == null || employeeCode.isEmpty) {
+      _showSnack("Employee code not available.");
+      return;
+    }
+
+    final url = 'https://zorvia.globalspace.in/dcrapproval/$employeeCode';
+
+    Navigator.pushNamed(
+      context,
+      InternalWebViewScreen.routeName,
+      arguments: InternalWebViewArgs(
+        url: url,
+        title: 'Tab Joint Work',
+      ),
+    );
   }
 
   String _getZoneLogo(String? division) {
@@ -660,6 +683,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Team Reports",
             Colors.green,
             () => _navigateTo(const ReportsDashboardScreen()),
+          ),
+          _MenuAction(
+            Icons.handshake_outlined,
+            "Tab Joint Work",
+            Colors.blue,
+            _openTabJointWork,
           ),
         ]),
         const SizedBox(height: 24),

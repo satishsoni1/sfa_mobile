@@ -5,6 +5,7 @@ import 'providers/report_provider.dart';
 import 'providers/auth_provider.dart'; // Ensure this file exists
 import 'presentation/dashboard/dashboard_screen.dart';
 import 'presentation/login/login_screen.dart';
+import 'presentation/webview/internal_webview_screen.dart';
 
 void main() {
   // 1. We wrap the ENTIRE app in MultiProvider here.
@@ -35,6 +36,18 @@ class ZForceApp extends StatelessWidget {
           title: 'ZForce',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme, // Uses your theme file
+          onGenerateRoute: (settings) {
+            if (settings.name == InternalWebViewScreen.routeName) {
+              final args = settings.arguments;
+              if (args is InternalWebViewArgs) {
+                return MaterialPageRoute(
+                  builder: (_) => InternalWebViewScreen(args: args),
+                  settings: settings,
+                );
+              }
+            }
+            return null;
+          },
           // 3. Smart Navigation based on Auth State
           home: auth.isLoading
               ? const Scaffold(
