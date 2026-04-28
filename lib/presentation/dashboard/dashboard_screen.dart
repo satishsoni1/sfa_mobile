@@ -26,6 +26,7 @@ import '../doctor_list/add_doctor_screen.dart';
 import '../doctor_list/doctor_master_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
 import '../reporting/TeamTerritoryScreen.dart';
+import 'external_links_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
@@ -50,7 +51,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.13";
+  static const String CURRENT_APP_VERSION = "1.0.14";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -288,6 +289,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: 'Tab Joint Work',
       ),
     );
+  }
+
+  void _openWebLinks() {
+    final employeeCode =
+        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
+            .trim();
+
+    if (employeeCode == null || employeeCode.isEmpty) {
+      _showSnack("Employee code not available.");
+      return;
+    }
+
+    _navigateTo(ExternalLinksScreen(employeeCode: employeeCode));
   }
 
   String _getZoneLogo(String? division) {
@@ -689,6 +703,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Tab Joint Work",
             Colors.blue,
             _openTabJointWork,
+          ),
+          _MenuAction(
+            Icons.link,
+            "Other Links",
+            Colors.indigo,
+            _openWebLinks,
           ),
         ]),
         const SizedBox(height: 24),

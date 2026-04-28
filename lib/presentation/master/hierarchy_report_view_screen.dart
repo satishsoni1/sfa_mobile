@@ -35,6 +35,9 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
   ];
 
   List<dynamic> _reportData = [];
+  final Map<String, bool> _visitSummaryExpandedState = {};
+  final Map<String, bool> _visitSummaryDetailLoadingState = {};
+  final Map<String, List<dynamic>> _visitSummaryDetailData = {};
   bool _isLoading = true;
   bool _isError = false;
 
@@ -91,6 +94,11 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
 
       setState(() {
         _reportData = data;
+        if (widget.reportType == ReportType.visitSummary) {
+          _visitSummaryExpandedState.clear();
+          _visitSummaryDetailLoadingState.clear();
+          _visitSummaryDetailData.clear();
+        }
         _isLoading = false;
       });
     } catch (e) {
@@ -99,6 +107,66 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
         _isError = true;
       });
       print("Error fetching report data: $e");
+    }
+  }
+
+  Future<void> _toggleVisitSummarySection(
+    Map<String, dynamic> row,
+    String visitType,
+  ) async {
+    if (visitType != '1' &&
+        visitType != '2' &&
+        visitType != '3' &&
+        visitType != '3_plus') {
+      return;
+    }
+
+    final String employeeCode = row['employee_code']?.toString() ?? '';
+    if (employeeCode.isEmpty) return;
+
+    final String cacheKey = '${employeeCode}_$visitType';
+    final bool isExpanded = _visitSummaryExpandedState[cacheKey] ?? false;
+
+    setState(() {
+      _visitSummaryExpandedState[cacheKey] = !isExpanded;
+    });
+
+    if (isExpanded || _visitSummaryDetailData.containsKey(cacheKey)) {
+      return;
+    }
+
+    setState(() {
+      _visitSummaryDetailLoadingState[cacheKey] = true;
+    });
+
+    final String formattedFromDate = DateFormat(
+      'yyyy-MM-dd',
+    ).format(_selectedDateRange.start);
+    final String formattedToDate = DateFormat(
+      'yyyy-MM-dd',
+    ).format(_selectedDateRange.end);
+
+    try {
+      final List<dynamic> detailData =
+          await _apiService.fetchVisitSummaryDetail(
+            employeeCode: employeeCode,
+            startDate: formattedFromDate,
+            endDate: formattedToDate,
+            visitType: visitType,
+          );
+
+      if (!mounted) return;
+
+      setState(() {
+        _visitSummaryDetailData[cacheKey] = detailData;
+        _visitSummaryDetailLoadingState[cacheKey] = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _visitSummaryDetailData[cacheKey] = [];
+        _visitSummaryDetailLoadingState[cacheKey] = false;
+      });
     }
   }
 
@@ -386,6 +454,8 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
         return _buildJointWorkList();
       case ReportType.pobSummary:
         return _buildPobSummaryList();
+      case ReportType.visitSummary:
+        return _buildVisitSummaryList();
       default:
         return const Center(child: Text("Report view coming soon."));
     }
@@ -1127,6 +1197,305 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
         .map((e) => e.trim())
         .where((e) => e.isNotEmpty && e != '-')
         .toList();
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4. visitSummary UI
+  // doctorselection summary
+  // ---------------------------------------------------------------------------
+  Widget _buildVisitSummaryList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: _reportData.length,
+      itemBuilder: (ctx, i) {
+        final dynamic rawRow = _reportData[i];
+        final Map<String, dynamic> row = rawRow is Map<String, dynamic>
+            ? rawRow
+            : rawRow is Map
+                ? rawRow.map((k, v) => MapEntry(k.toString(), v))
+                : <String, dynamic>{};
+
+        final String employeeName = row['name']?.toString() ?? 'N/A';
+        final String employeeCode = row['employee_code']?.toString() ?? 'N/A';
+        final String designation = row['designation']?.toString() ?? 'N/A';
+        final String headQtr =
+            row['head_qtr']?.toString() ?? row['hq']?.toString() ?? '-';
+        final String division = row['division']?.toString() ?? '-';
+        final String zone = row['zone']?.toString() ?? '-';
+        final String state = row['state']?.toString() ?? '-';
+
+        return Card(
+          elevation: 3,
+          margin: const EdgeInsets.only(bottom: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        employeeName,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Text(
+                        "Code: $employeeCode",
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "$designation  |  HQ: $headQtr",
+                  style: const TextStyle(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  "Division: $division  |  Zone: $zone  |  State: $state",
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const Divider(height: 24, thickness: 1),
+                _buildVisitSummarySummaryCard(
+                  row,
+                  title: "Total Visited Doctors",
+                  value: row['total_visits']?.toString() ?? '0',
+                  color: AppColors.primary,
+                ),
+                const SizedBox(height: 12),
+                _buildVisitSummarySummaryCard(
+                  row,
+                  title: "Total 1 Time Visited Doctors",
+                  value: row['doctor_1_time']?.toString() ?? '0',
+                  color: Colors.green,
+                  visitType: '1',
+                ),
+                const SizedBox(height: 12),
+                _buildVisitSummarySummaryCard(
+                  row,
+                  title: "Total 2 Time Visited Doctors",
+                  value: row['doctor_2_time']?.toString() ?? '0',
+                  color: Colors.blue,
+                  visitType: '2',
+                ),
+                const SizedBox(height: 12),
+                _buildVisitSummarySummaryCard(
+                  row,
+                  title: "Total 3 Time Visited Doctors",
+                  value: row['doctor_3_time']?.toString() ?? '0',
+                  color: Colors.orange,
+                  visitType: '3',
+                ),
+                const SizedBox(height: 12),
+                _buildVisitSummarySummaryCard(
+                  row,
+                  title: "Total 3+ Time Visited Doctors",
+                  value: row['doctor_3_plus_time']?.toString() ?? '0',
+                  color: Colors.pink,
+                  visitType: '3_plus',
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildVisitSummarySummaryCard(
+    Map<String, dynamic> row, {
+    required String title,
+    required String value,
+    required Color color,
+    String? visitType,
+  }) {
+    final String employeeCode = row['employee_code']?.toString() ?? '';
+    final String cacheKey = visitType == null ? '' : '${employeeCode}_$visitType';
+    final bool isExpandable = visitType != null;
+    final bool isExpanded = isExpandable
+        ? (_visitSummaryExpandedState[cacheKey] ?? false)
+        : false;
+    final bool isLoading = isExpandable
+        ? (_visitSummaryDetailLoadingState[cacheKey] ?? false)
+        : false;
+    final List<dynamic> details = isExpandable
+        ? (_visitSummaryDetailData[cacheKey] ?? [])
+        : const [];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.18)),
+      ),
+      child: Column(
+        children: [
+          InkWell(
+            onTap: isExpandable
+                ? () => _toggleVisitSummarySection(row, visitType!)
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          value,
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 24,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isExpandable)
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: color,
+                        size: 28,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: _buildVisitSummaryDetailSection(
+                details: details,
+                isLoading: isLoading,
+                color: color,
+              ),
+            ),
+            crossFadeState: isExpanded
+                ? CrossFadeState.showSecond
+                : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVisitSummaryDetailSection({
+    required List<dynamic> details,
+    required bool isLoading,
+    required Color color,
+  }) {
+    if (isLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: Center(
+          child: CircularProgressIndicator(
+            color: AppColors.primary,
+            strokeWidth: 2,
+          ),
+        ),
+      );
+    }
+
+    if (details.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: Text(
+          "No records found.",
+          style: TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+      );
+    }
+
+    return Column(
+      children: details.map((item) {
+        final Map<String, dynamic> detail = item is Map<String, dynamic>
+            ? item
+            : item is Map
+                ? item.map((k, v) => MapEntry(k.toString(), v))
+                : <String, dynamic>{};
+
+        final String doctorName = detail['doctor_name']?.toString() ?? '-';
+        final String speciality = detail['speciality']?.toString() ?? '-';
+        final String visitDate = detail['visit_date']?.toString() ?? '-';
+
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.12)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                doctorName,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Speciality: $speciality",
+                style: const TextStyle(color: Colors.black87, fontSize: 12),
+              ),
+              Text(
+                "Visit Date: $visitDate",
+                style: const TextStyle(color: Colors.black87, fontSize: 12),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
+    );
   }
 
   Widget _buildPobTagWrap(List<String> values, {String emptyLabel = '-'}) {

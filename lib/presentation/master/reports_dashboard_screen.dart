@@ -12,6 +12,7 @@ enum ReportType {
   jointWork,
   tourPlan,
   pobSummary,
+  visitSummary,
 }
 
 class ReportsDashboardScreen extends StatelessWidget {
@@ -60,6 +61,11 @@ class ReportsDashboardScreen extends StatelessWidget {
         'title': 'Daily POBS Campaign',
         'icon': Icons.storefront_outlined,
         'type': ReportType.pobSummary,
+      },
+      {
+        'title': 'Doctor Selection',
+        'icon': Icons.person_search_outlined,
+        'type': ReportType.visitSummary,
       },
     ];
 
