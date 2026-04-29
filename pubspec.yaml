@@ -49,6 +49,8 @@ dependencies:
   file_picker: ^10.3.10
   universal_html: ^2.3.0
   share_plus: ^12.0.2
+  pdf: ^3.12.0
+  printing: ^5.14.3
 
 dev_dependencies:
   flutter_test:

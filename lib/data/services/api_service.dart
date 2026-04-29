@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:zforce/data/models/visit_report.dart';
 import '../models/doctor.dart' show Doctor;
@@ -742,54 +743,102 @@ class ApiService {
       throw Exception(error['message'] ?? 'Failed to approve');
     }
   }
+// Fetch calculation
+Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/calculate?date=$dateStr'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
 
-  Future<Map<String, dynamic>> calculateExpense(DateTime date) async {
-    final token = await getToken();
-    final dateStr = DateFormat('yyyy-MM-dd').format(date);
-
-    final response = await http.get(
-      Uri.parse('$baseUrl/app/expense/calculate?date=$dateStr'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body)['data'];
-    } else if (response.statusCode == 404) {
-      throw Exception("No visits found for this date.");
-    } else {
-      throw Exception("Calculation failed");
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      } else if (response.statusCode == 404) {
+        throw "No DCR found for this date.";
+      } else {
+        throw "Server Error: ${response.statusCode}";
+      }
+    } catch (e) {
+      // Re-throw the error to be caught by the UI
+      rethrow;
     }
   }
 
-  // Submit Expense (Multipart for Image)
-  Future<void> submitExpense(
-    Map<String, String> fields,
-    // File? imageFile,
-  ) async {
-    final token = await getToken();
+  // Submit Expense with Image
+  Future<void> submitExpense(Map<String, String> payload, File? attachment) async {
+     final token = await getToken();
+    var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/app/expense/submit'));
+    
+    // Add headers
+    request.headers.addAll({
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
 
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse('$baseUrl/app/expense/submit'),
-    );
-    request.headers['Authorization'] = 'Bearer $token';
+    // Add string fields
+    request.fields.addAll(payload);
 
-    // This line is where it was crashing before
-    request.fields.addAll(fields);
+    // Add Image File if it exists
+    if (attachment != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'attachment', // Must match Laravel validation name
+          attachment.path,
+        ),
+      );
+    }
 
-    // if (imageFile != null) {
-    //   request.files.add(
-    //     await http.MultipartFile.fromPath('image', imageFile.path),
-    //   );
-    // }
+    var streamedResponse = await request.send();
+    var response = await http.Response.fromStream(streamedResponse);
 
-    final response = await request.send();
-    final responseBody = await response.stream.bytesToString(); // Read response
-
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception("Failed: $responseBody");
+    if (response.statusCode != 200) {
+      throw Exception(json.decode(response.body)['message'] ?? 'Failed to submit expense');
     }
   }
+// Submit all expenses for the month
+  Future<void> submitMonthlyExpense(int month, int year) async {
+         final token = await getToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/expense/submit-month'),
+      headers: {
+        'Authorization': 'Bearer $token', 
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'month': month,
+        'year': year,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(json.decode(response.body)['message'] ?? 'Failed to submit monthly expense');
+    }
+  }
+  Future<Map<String, dynamic>> getMonthlySummary(int month, int year) async {
+    var token = await getToken();
+  final response = await http.get(
+    Uri.parse('$baseUrl/app/expense/monthly-summary?month=$month&year=$year'),
+    headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+  );
+  if (response.statusCode == 200) return json.decode(response.body);
+  throw Exception("Failed to load summary");
+}
+
+Future<void> submitFullMonth(int month, int year) async {
+    var token = await getToken();
+  final response = await http.post(
+    Uri.parse('$baseUrl/app/expense/submit-month'),
+    headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    body: {'month': month.toString(), 'year': year.toString()},
+  );
+  if (response.statusCode != 200) throw Exception("Final submission failed");
+}
 
   Future<Map<String, dynamic>> getMonthlyExpenses(DateTime date) async {
     final token = await getToken();
@@ -1311,6 +1360,54 @@ class ApiService {
       debugPrint("Error creating area: $e");
     }
     return null;
+  }
+
+  // GET monthly claims (Internet, Mobile, Hotel, etc.)
+  Future<List<dynamic>> getMonthlyClaims(int month, int year) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/expense/monthly-claims?month=$month&year=$year'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return json.decode(response.body)['data'] ?? [];
+    }
+    return [];
+  }
+
+  // POST add a monthly claim with optional bill photo
+  Future<void> addMonthlyClaim({
+    required int month,
+    required int year,
+    required String claimType,
+    required double amount,
+    File? bill,
+  }) async {
+    final token = await getToken();
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/app/expense/monthly-claim'),
+    );
+    request.headers.addAll({
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+    request.fields['month'] = month.toString();
+    request.fields['year'] = year.toString();
+    request.fields['claim_type'] = claimType;
+    request.fields['amount'] = amount.toString();
+
+    if (bill != null) {
+      request.files.add(
+          await http.MultipartFile.fromPath('bill', bill.path));
+    }
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(
+          json.decode(response.body)['message'] ?? 'Failed to add claim');
+    }
   }
 
   Future<bool> saveAreaTourPlan(Map<String, dynamic> payload) async {

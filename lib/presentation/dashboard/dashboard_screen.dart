@@ -636,6 +636,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _showSnack("Please Check In first!");
             }
           }),
+          _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
+            _navigateTo(ExpenseSummaryScreen());
+          }),
 
           // --- NEW ACTION FOR CHEMIST CALL ---
           _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
