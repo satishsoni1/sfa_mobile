@@ -20,13 +20,13 @@ Widget buildInternalIFrameView({
 
   StreamSubscription<html.Event>? loadSub;
   StreamSubscription<html.Event>? errorSub;
-  Timer? timeoutTimer;
+ // Timer? timeoutTimer;
   var completed = false;
 
   void completeLoaded() {
     if (completed) return;
     completed = true;
-    timeoutTimer?.cancel();
+   // timeoutTimer?.cancel();
     loadSub?.cancel();
     errorSub?.cancel();
     onFrameLoaded();
@@ -35,7 +35,7 @@ Widget buildInternalIFrameView({
   void completeError(String message) {
     if (completed) return;
     completed = true;
-    timeoutTimer?.cancel();
+  //  timeoutTimer?.cancel();
     loadSub?.cancel();
     errorSub?.cancel();
     onFrameError(message);
@@ -45,11 +45,11 @@ Widget buildInternalIFrameView({
   errorSub = iframe.onError.listen((_) {
     completeError('Unable to load the page inside the app.');
   });
-  timeoutTimer = Timer(const Duration(seconds: 15), () {
-    completeError(
-      'This page could not be displayed inside the app. It may be blocked by iframe or network restrictions.',
-    );
-  });
+  // timeoutTimer = Timer(const Duration(seconds: 15), () {
+  //   completeError(
+  //     'This page could not be displayed inside the app. It may be blocked by iframe or network restrictions.',
+  //   );
+  // });
 
   ui_web.platformViewRegistry.registerViewFactory(viewType, (int _) => iframe);
 

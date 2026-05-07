@@ -27,6 +27,7 @@ import '../doctor_list/doctor_master_screen.dart';
 import '../new_dr_master/new_dr_master_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
 import '../reporting/TeamTerritoryScreen.dart';
+import 'external_links_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
@@ -289,6 +290,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: 'Tab Joint Work',
       ),
     );
+  }
+
+  void _openWebLinks() {
+    final employeeCode =
+        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
+            .trim();
+
+    if (employeeCode == null || employeeCode.isEmpty) {
+      _showSnack("Employee code not available.");
+      return;
+    }
+
+    _navigateTo(ExternalLinksScreen(employeeCode: employeeCode));
   }
 
   String _getZoneLogo(String? division) {
@@ -693,6 +707,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Tab Joint Work",
             Colors.blue,
             _openTabJointWork,
+          ),
+          _MenuAction(
+            Icons.link,
+            "Other Links",
+            Colors.indigo,
+            _openWebLinks,
           ),
         ]),
         const SizedBox(height: 24),

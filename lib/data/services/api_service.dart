@@ -322,6 +322,15 @@ class ApiService {
     return [];
   }
 
+  Future<List<dynamic>> getExternalLinks() async {
+    final response = await http.get(Uri.parse('$baseUrl/links'));
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    }
+    throw Exception('Failed to load links');
+  }
+
   // Get current status on app load (to restore state)
   Future<Map<String, dynamic>> getAttendanceStatus() async {
     final response = await http.get(
@@ -1459,6 +1468,14 @@ Future<void> submitFullMonth(int month, int year) async {
                 'id': (e['employee_code'] ?? e['emp_code'] ?? e['id'])
                     .toString(),
                 'name': e['name'].toString(),
+                'employee_code':
+                    (e['employee_code'] ?? e['emp_code'] ?? e['id']).toString(),
+                'designation': (e['designation'] ?? '').toString(),
+                'head_qtr': (e['head_qtr'] ?? e['hq'] ?? '').toString(),
+                'hq': (e['hq'] ?? e['head_qtr'] ?? '').toString(),
+                'division': (e['division'] ?? '').toString(),
+                'zone': (e['zone'] ?? '').toString(),
+                'state': (e['state'] ?? '').toString(),
               },
             )
             .toList();
@@ -1557,12 +1574,63 @@ Future<void> submitFullMonth(int month, int year) async {
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          if (decoded['doctor_details'] is List) {
+            return decoded['doctor_details'] as List<dynamic>;
+          }
+          if (decoded['data'] is Map<String, dynamic> &&
+              decoded['data']['doctor_details'] is List) {
+            return decoded['data']['doctor_details'] as List<dynamic>;
+          }
+        }
         return _safeExtractList(decoded);
       } else {
         debugPrint("API Error: ${response.statusCode} - ${response.body}");
       }
     } catch (e) {
       debugPrint("Error fetching report data: $e");
+    }
+    return [];
+  }
+
+  Future<List<dynamic>> fetchVisitSummaryDetail({
+    required String employeeCode,
+    required String startDate,
+    required String endDate,
+    required String visitType,
+  }) async {
+    final token = await getToken();
+    if (token == null) return [];
+
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/app/employee/visit'),
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'employee_code': employeeCode,
+          'start_date': startDate,
+          'end_date': endDate,
+          'visit_type': visitType,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map<String, dynamic>) {
+          if (decoded['doctor_details'] is List) {
+            return decoded['doctor_details'] as List<dynamic>;
+          }
+          if (decoded['data'] is Map<String, dynamic> &&
+              decoded['data']['doctor_details'] is List) {
+            return decoded['data']['doctor_details'] as List<dynamic>;
+          }
+        }
+        return _safeExtractList(decoded);
+      } else {
+        print("API Error: ${response.statusCode} - ${response.body}");
+      }
+    } catch (e) {
+      print("Error fetching doctor selection detail: $e");
     }
     return [];
   }
