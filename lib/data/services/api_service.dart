@@ -856,6 +856,282 @@ Future<void> submitFullMonth(int month, int year) async {
     }
   }
 
+  // ─── Routes ─────────────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getRoutes() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/routes'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final list = body is List ? body : (body['data'] ?? []);
+        return List<Map<String, dynamic>>.from(list);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  // ─── Expense Rates (all DA rates by designation) ─────────────────────────────
+
+  Future<Map<String, dynamic>> getAllExpenseRates() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/all-rates'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(json.decode(response.body));
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  // ─── Expense TA Routes (expense_rates_ta) ───────────────────────────────────
+
+  Future<Map<String, dynamic>> getTransitFromLocation(String date) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/transit-from?date=${Uri.encodeComponent(date)}'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(json.decode(response.body));
+      }
+    } catch (_) {}
+    return {'from_town': '', 'is_hq': true};
+  }
+
+  /// Returns {routes: List<Map>, hq_location: String?}
+  /// hq_location is from expense_rates_ta.from_town_code or
+  /// gst_employee_profile.head_qtr when no TA routes exist.
+  Future<Map<String, dynamic>> getTaRoutes() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/ta-routes'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        final list = body['data'] ?? body;
+        return {
+          'routes': List<Map<String, dynamic>>.from(
+              list is List ? list : []),
+          'hq_location': body['hq_location']?.toString(),
+        };
+      }
+    } catch (_) {}
+    return {'routes': <Map<String, dynamic>>[], 'hq_location': null};
+  }
+
+  // ─── NFW DA Rate (expense_rates by designation) ──────────────────────────────
+
+  Future<Map<String, dynamic>> getNfwDaRate({String type = 'Meeting'}) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/expense/nfw-rate?type=${Uri.encodeComponent(type)}'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception(
+        json.decode(response.body)['message'] ?? 'Failed to load NFW rate');
+  }
+
+  // ─── Locations Master ────────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getLocations() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/locations'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final list = body is List ? body : (body['data'] ?? []);
+        return List<Map<String, dynamic>>.from(list);
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  // ─── New Doctor Master ──────────────────────────────────────────────────────
+
+  Future<List<dynamic>> getNewDoctorMaster({int? userId}) async {
+    final token = await getToken();
+    final uri = userId != null
+        ? Uri.parse('$baseUrl/app/new-doctor-master?user_id=$userId')
+        : Uri.parse('$baseUrl/app/new-doctor-master');
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      final body = jsonDecode(response.body);
+      return body is List ? body : (body['data'] ?? []);
+    }
+    return [];
+  }
+
+  Future<void> addNewDoctor(Map<String, dynamic> data) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/new-doctor-master'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(data),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to add doctor');
+    }
+  }
+
+  Future<void> updateNewDoctor(int id, Map<String, dynamic> data) async {
+    final token = await getToken();
+    final response = await http.put(
+      Uri.parse('$baseUrl/app/new-doctor-master/$id'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(data),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to update doctor');
+    }
+  }
+
+  // ─── Doctor Speciality Targets ───────────────────────────────────────────────
+
+  /// Returns {speciality: {required: int, three_visit_quota: int}}
+  Future<Map<String, dynamic>> getDoctorSpecialityTargets() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/new-doctor-master/speciality-targets'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(jsonDecode(response.body));
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  Future<Map<String, List<String>>> getNewDoctorMasterOptions() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/new-doctor-master/options'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final data = body is Map && body['data'] is Map ? body['data'] : body;
+        List<String> readList(String key) {
+          final raw = data[key];
+          if (raw is List) {
+            return raw
+                .map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
+          }
+          return <String>[];
+        }
+
+        return {
+          'specialty_qualifications': readList('specialty_qualifications'),
+          'practice_types': readList('practice_types'),
+        };
+      }
+    } catch (e) {
+      debugPrint('Error fetching new doctor options: $e');
+    }
+    return {
+      'specialty_qualifications': <String>[],
+      'practice_types': <String>[],
+    };
+  }
+
+  Future<void> updateDoctorVisitCategory(int id, String category) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/new-doctor-master/$id/category'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'visit_category': category}),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to update category');
+    }
+  }
+
+  Future<void> submitDoctorListForApproval() async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/new-doctor-master/submit-approval'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to submit for approval');
+    }
+  }
+
+  Future<void> approveNewDoctorList(int userId) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/new-doctor-master/$userId/approve'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to approve list');
+    }
+  }
+
+  Future<void> rejectNewDoctorList(int userId, String reason) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/new-doctor-master/$userId/reject'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to reject list');
+    }
+  }
+
   // 3. Update Plan Status (The missing method causing your error)
   Future<void> updatePlanStatus(
     int planId,
@@ -888,14 +1164,14 @@ Future<void> submitFullMonth(int month, int year) async {
 
       // 3. Handle the Response
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print("Success: Plan $planId updated to $status");
+        debugPrint("Success: Plan $planId updated to $status");
       } else {
         // Parse error message from backend if available
         final errorData = json.decode(response.body);
         throw Exception(errorData['message'] ?? 'Failed to update plan status');
       }
     } catch (e) {
-      print("API Error: $e");
+      debugPrint("API Error: $e");
       throw Exception('Network error: Could not update status');
     }
   }
@@ -1188,7 +1464,7 @@ Future<void> submitFullMonth(int month, int year) async {
             .toList();
       }
     } catch (e) {
-      print("Error fetching team: $e");
+      debugPrint("Error fetching team: $e");
     }
     return [];
   }
@@ -1283,10 +1559,10 @@ Future<void> submitFullMonth(int month, int year) async {
         final decoded = jsonDecode(response.body);
         return _safeExtractList(decoded);
       } else {
-        print("API Error: ${response.statusCode} - ${response.body}");
+        debugPrint("API Error: ${response.statusCode} - ${response.body}");
       }
     } catch (e) {
-      print("Error fetching report data: $e");
+      debugPrint("Error fetching report data: $e");
     }
     return [];
   }
@@ -1375,12 +1651,25 @@ Future<void> submitFullMonth(int month, int year) async {
     return [];
   }
 
-  // POST add a monthly claim with optional bill photo
+  // GET Mobile & Internet rates from expense_rates by designation
+  Future<Map<String, dynamic>> getMonthlyClaimRates() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/expense/claim-rates'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body));
+    }
+    return {'mobile': 0.0, 'internet': 0.0};
+  }
+
+  // POST add a monthly claim — amount auto-fetched server-side for Mobile/Internet
   Future<void> addMonthlyClaim({
     required int month,
     required int year,
     required String claimType,
-    required double amount,
+    double? amount, // null for Mobile/Internet (server fetches from expense_rates)
     File? bill,
   }) async {
     final token = await getToken();
@@ -1395,7 +1684,9 @@ Future<void> submitFullMonth(int month, int year) async {
     request.fields['month'] = month.toString();
     request.fields['year'] = year.toString();
     request.fields['claim_type'] = claimType;
-    request.fields['amount'] = amount.toString();
+    if (amount != null) {
+      request.fields['amount'] = amount.toString();
+    }
 
     if (bill != null) {
       request.files.add(

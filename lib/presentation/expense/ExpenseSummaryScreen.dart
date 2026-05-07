@@ -389,11 +389,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   // ─── Monthly Claims List ──────────────────────────────────────────────────────
 
   Widget _buildMonthlyClaimsList() {
-    if (_monthlyClaims.isEmpty) {
-      return _emptyState(Icons.add_card_outlined, 'No monthly claims',
-          'Add Internet, Mobile, Hotel & Misc bills');
-    }
-
     final total =
         _monthlyClaims.fold<double>(0, (s, c) => s + _toDouble(c['amount']));
 
@@ -402,34 +397,127 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 80),
         children: [
-          // Claims total bar
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.teal.shade50,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.teal.shade100),
+          _buildQuickAddSection(),
+          const SizedBox(height: 8),
+          if (_monthlyClaims.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 24),
+              child: Column(
+                children: [
+                  Icon(Icons.add_card_outlined,
+                      size: 52, color: Colors.grey.shade300),
+                  const SizedBox(height: 12),
+                  Text('No claims added yet',
+                      style: GoogleFonts.poppins(
+                          color: Colors.grey.shade500, fontSize: 14,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Use Quick Add above or tap + for other bills',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                  ),
+                ],
+              ),
+            )
+          else ...[
+            // Claims total bar
+            Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.teal.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.teal.shade100),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.summarize_outlined,
+                      color: Colors.teal.shade700, size: 18),
+                  const SizedBox(width: 10),
+                  Text('Total Claims',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.teal.shade700)),
+                  const Spacer(),
+                  Text('₹${_fmt(total)}',
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.teal.shade700,
+                          fontSize: 16)),
+                ],
+              ),
             ),
-            child: Row(
-              children: [
-                Icon(Icons.summarize_outlined,
-                    color: Colors.teal.shade700, size: 18),
-                const SizedBox(width: 10),
-                Text('Total Claims',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w600, color: Colors.teal.shade700)),
-                const Spacer(),
-                Text('₹${_fmt(total)}',
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.teal.shade700,
-                        fontSize: 16)),
-              ],
-            ),
-          ),
-          ..._monthlyClaims.map((c) => _buildClaimCard(c)),
+            ..._monthlyClaims.map((c) => _buildClaimCard(c)),
+          ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickAddSection() {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Quick Add Monthly Bills',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: Colors.grey.shade700)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                  child: _quickAddButton(
+                      'Mobile', Icons.phone_android, Colors.blue)),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: _quickAddButton('Internet', Icons.wifi, Colors.teal)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _quickAddButton(String type, IconData icon, Color color) {
+    return InkWell(
+      onTap: _isSubmitted ? null : () => _showAddClaimSheet(initialType: type),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        decoration: BoxDecoration(
+          color: _isSubmitted
+              ? Colors.grey.shade100
+              : color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+              color: _isSubmitted
+                  ? Colors.grey.shade300
+                  : color.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                color: _isSubmitted ? Colors.grey.shade400 : color, size: 18),
+            const SizedBox(width: 6),
+            Text(type,
+                style: TextStyle(
+                    color: _isSubmitted ? Colors.grey.shade400 : color,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13)),
+            const SizedBox(width: 4),
+            Icon(Icons.add_circle_outline,
+                color: _isSubmitted ? Colors.grey.shade400 : color, size: 15),
+          ],
+        ),
       ),
     );
   }
@@ -547,7 +635,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     _loadData();
   }
 
-  void _showAddClaimSheet() {
+  void _showAddClaimSheet({String? initialType}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -555,6 +643,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       builder: (_) => _AddClaimSheet(
         month: _selectedMonth.month,
         year: _selectedMonth.year,
+        initialType: initialType,
         onSuccess: () {
           Navigator.pop(context);
           _loadData();
@@ -736,9 +825,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 class _AddClaimSheet extends StatefulWidget {
   final int month, year;
   final VoidCallback onSuccess;
+  final String? initialType;
 
   const _AddClaimSheet(
-      {required this.month, required this.year, required this.onSuccess});
+      {required this.month, required this.year, required this.onSuccess,
+      this.initialType});
 
   @override
   State<_AddClaimSheet> createState() => _AddClaimSheetState();
@@ -749,8 +840,12 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
   final _amtController = TextEditingController();
   File? _billFile;
   bool _isSubmitting = false;
+  double? _mobileRate;
+  double? _internetRate;
+  bool _isLoadingRate = false;
 
   static const _claimTypes = ['Mobile', 'Internet', 'Hotel', 'Postage', 'Misc'];
+  static const _autoRatedTypes = ['Mobile', 'Internet'];
 
   final _claimIcons = {
     'Mobile': Icons.phone_android,
@@ -759,6 +854,37 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
     'Postage': Icons.local_post_office_outlined,
     'Misc': Icons.more_horiz,
   };
+
+  bool get _isAutoRated => _autoRatedTypes.contains(_selectedType);
+
+  double get _autoRate =>
+      _selectedType == 'Mobile' ? (_mobileRate ?? 0) : (_internetRate ?? 0);
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialType != null) {
+      _selectedType = widget.initialType!;
+    }
+    _fetchClaimRates();
+  }
+
+  Future<void> _fetchClaimRates() async {
+    setState(() => _isLoadingRate = true);
+    try {
+      final data = await ApiService().getMonthlyClaimRates();
+      if (mounted) {
+        setState(() {
+          _mobileRate = (data['mobile'] as num?)?.toDouble() ?? 0;
+          _internetRate = (data['internet'] as num?)?.toDouble() ?? 0;
+        });
+      }
+    } catch (_) {
+      // rates remain null; user will see 0
+    } finally {
+      if (mounted) setState(() => _isLoadingRate = false);
+    }
+  }
 
   @override
   void dispose() {
@@ -827,21 +953,53 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
           ),
 
           const SizedBox(height: 16),
-          TextField(
-            controller: _amtController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Amount',
-              prefixText: '₹ ',
-              hintText: '0.00',
-              border:
-                  OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF4A148C))),
+          if (_isAutoRated)
+            _isLoadingRate
+                ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                : Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEDE7F6),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF4A148C).withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.auto_awesome, color: Color(0xFF4A148C), size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Auto-fetched from your designation rate',
+                                  style: TextStyle(fontSize: 11, color: Colors.purple.shade400)),
+                              const SizedBox(height: 2),
+                              Text('₹${_autoRate.toStringAsFixed(0)} / month',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Color(0xFF4A148C))),
+                            ],
+                          ),
+                        ),
+                        Icon(Icons.lock_outline, color: Colors.purple.shade300, size: 18),
+                      ],
+                    ),
+                  )
+          else
+            TextField(
+              controller: _amtController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                prefixText: '₹ ',
+                hintText: '0.00',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFF4A148C))),
+              ),
             ),
-          ),
           const SizedBox(height: 14),
 
           // Bill attachment
@@ -945,11 +1103,14 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
   }
 
   void _submit() async {
-    final amount = double.tryParse(_amtController.text);
-    if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Enter a valid amount')));
-      return;
+    double? amount;
+    if (!_isAutoRated) {
+      amount = double.tryParse(_amtController.text);
+      if (amount == null || amount <= 0) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Enter a valid amount')));
+        return;
+      }
     }
 
     setState(() => _isSubmitting = true);
@@ -958,7 +1119,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
         month: widget.month,
         year: widget.year,
         claimType: _selectedType,
-        amount: amount,
+        amount: amount, // null for Mobile/Internet — server fetches from expense_rates
         bill: _billFile,
       );
       widget.onSuccess();

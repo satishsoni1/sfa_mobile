@@ -24,6 +24,7 @@ import '../campaign/campaign_list_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
 import '../doctor_list/doctor_master_screen.dart';
+import '../new_dr_master/new_dr_master_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
 import '../reporting/TeamTerritoryScreen.dart';
 import '../reporting/daily_report_screen.dart';
@@ -50,7 +51,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.13";
+  static const String CURRENT_APP_VERSION = "1.0.14";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -699,6 +700,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _buildSectionTitle("Utilities"),
         _buildMenuGrid([
           _MenuAction(
+            Icons.person_search,
+            "MCL Updation",
+            Colors.deepPurple,
+            () => _navigateTo(const NewDrMasterScreen()),
+          ),
+          _MenuAction(
             Icons.folder_shared,
             "Dr. Master",
             Colors.deepPurple,
@@ -710,18 +717,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           //   Colors.cyan,
           //   () => _navigateTo(const DataUploadScreen(isManager: true)),
           // ),
-          _MenuAction(
-            Icons.business_center,
-            "Doctor Selection",
-            Colors.cyan,
-            () => _navigateTo(DoctorSelectionScreen(isManager: true,division: user?.division ?? "",)),
-          ),
-          _MenuAction(
-            Icons.person_add_alt_1,
-            "Add Doctor",
-            Colors.pinkAccent,
-            () => _navigateTo(const AddDoctorScreen()),
-          ),
+          // _MenuAction(
+          //   Icons.business_center,
+          //   "Doctor Selection",
+          //   Colors.cyan,
+          //   () => _navigateTo(DoctorSelectionScreen(isManager: true,division: user?.division ?? "",)),
+          // ),
+          // _MenuAction(
+          //   Icons.person_add_alt_1,
+          //   "Add Doctor",
+          //   Colors.pinkAccent,
+          //   () => _navigateTo(const AddDoctorScreen()),
+          // ),
           _MenuAction(
             Icons.support_agent,
             "Support",
