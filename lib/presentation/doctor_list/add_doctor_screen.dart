@@ -292,23 +292,14 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
         isOther: _isOther,
       );
 
-      if (widget.doctorToEdit == null) {
-        // --- ADD NEW ---
-        await api.addDoctor(doctorData.toJson());
+      // --- UPDATE EXISTING ---
+      await api.updateDoctor(doctorData.toJson());
 
-        if (mounted) {
-          _showSnack('Doctor Added Successfully!', color: Colors.green);
-          Navigator.pop(context, true);
-        }
-      } else {
-        // --- UPDATE EXISTING ---
-        await api.updateDoctor(doctorData.toJson());
-
-        if (mounted) {
-          _showSnack('Doctor Updated Successfully!', color: Colors.blue);
-          Navigator.pop(context, true);
-        }
+      if (mounted) {
+        _showSnack('Doctor Updated Successfully!', color: Colors.blue);
+        Navigator.pop(context, true);
       }
+      
     } catch (e) {
       _showSnack("Error: $e");
     } finally {
@@ -355,16 +346,6 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final reportProvider = Provider.of<ReportProvider>(context);
-
-    // --- SAFE DROPDOWN FIX ---
-    final List<String> specs = List.from(reportProvider.specialities);
-    if (_selectedSpecialization != null &&
-        _selectedSpecialization!.isNotEmpty &&
-        !specs.contains(_selectedSpecialization)) {
-      specs.add(_selectedSpecialization!);
-    }
-
     final isEdit = widget.doctorToEdit != null;
 
     return Scaffold(
@@ -377,291 +358,83 @@ class _AddDoctorScreenState extends State<AddDoctorScreen> {
         backgroundColor: _primaryColor,
         elevation: 0,
       ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: _primaryColor))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildSectionTitle("Basic Details"),
-                    const SizedBox(height: 15),
-
-                    // Name
-                    _buildTextField(
-                      controller: _nameController,
-                      label: "Doctor Name *",
-                      icon: Icons.person_outline,
-                      validator: (v) => v!.isEmpty ? "Name is required" : null,
-                    ),
-                    const SizedBox(height: 15),
-
-                    // Mobile
-                    _buildTextField(
-                      controller: _mobileController,
-                      label: "Mobile Number *",
-                      icon: Icons.phone_android,
-                      keyboardType: TextInputType.phone,
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return "Mobile is required";
-                        if (v.length < 10) return "Enter valid number";
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 15),
-
-                    // Email Field
-                    _buildTextField(
-                      controller: _emailController,
-                      label: "Email ID *",
-                      icon: Icons.email_outlined,
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return "Email is required";
-                        final emailRegex = RegExp(
-                          r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$',
-                        );
-                        if (!emailRegex.hasMatch(v))
-                          return "Enter a valid email address";
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 15),
-
-                    // --- AREA DROPDOWN + ADD BUTTON ---
-                    _isLoadingAreas
-                        ? const Center(child: CircularProgressIndicator())
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  value: _selectedArea,
-                                  isExpanded: true,
-                                  decoration: InputDecoration(
-                                    labelText: "Area / City *",
-                                    prefixIcon: Icon(
-                                      Icons.location_on_outlined,
-                                      color: _primaryColor,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    filled: true,
-                                    fillColor: Colors.grey[50],
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 16,
-                                    ),
-                                  ),
-                                  items: _availableAreas.map((area) {
-                                    return DropdownMenuItem<String>(
-                                      value: area['name'],
-                                      child: Text(area['name']),
-                                    );
-                                  }).toList(),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _selectedArea = val;
-                                      // Auto-update territory type if available in API data
-                                      final matchedArea = _availableAreas
-                                          .firstWhere(
-                                            (a) => a['name'] == val,
-                                            orElse: () => {},
-                                          );
-                                      if (matchedArea.isNotEmpty &&
-                                          matchedArea['territory_type'] !=
-                                              null) {
-                                        _selectedTerritoryType =
-                                            matchedArea['territory_type'];
-                                      }
-                                    });
-                                  },
-                                  validator: (value) =>
-                                      value == null ? "Area is required" : null,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Container(
-                                height: 55,
-                                width: 55,
-                                decoration: BoxDecoration(
-                                  color: _primaryColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: _primaryColor.withOpacity(0.3),
-                                  ),
-                                ),
-                                child: IconButton(
-                                  icon: Icon(
-                                    Icons.add_location_alt,
-                                    color: _primaryColor,
-                                  ),
-                                  tooltip: "Add New Area",
-                                  onPressed: _showAddAreaDialog,
-                                ),
-                              ),
-                            ],
-                          ),
-                    const SizedBox(height: 15),
-
-                    // Pincode Field
-                    _buildTextField(
-                      controller: _pincodeController,
-                      label: "Pincode *",
-                      icon: Icons.pin_drop_outlined,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      validator: (v) {
-                        if (v == null || v.isEmpty)
-                          return "Pincode is required";
-                        if (v.length != 6) return "Enter valid 6-digit Pincode";
-                        return null;
-                      },
-                    ),
-
-                    const SizedBox(height: 30),
-                    _buildSectionTitle("Professional Info"),
-                    const SizedBox(height: 15),
-
-                    // Specialization
-                    DropdownButtonFormField<String>(
-                      value: _selectedSpecialization,
-                      hint: const Text("Select Specialization *"),
-                      decoration: InputDecoration(
-                        labelText: "Specialization *",
-                        prefixIcon: Icon(
-                          Icons.workspace_premium_outlined,
-                          color: _primaryColor,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                      ),
-                      items: specs
-                          .map(
-                            (s) => DropdownMenuItem(value: s, child: Text(s)),
-                          )
-                          .toList(),
-                      onChanged: (val) =>
-                          setState(() => _selectedSpecialization = val),
-                      validator: (v) => v == null ? "Required" : null,
-                    ),
-                    const SizedBox(height: 15),
-
-                    // Territory Type
-                    DropdownButtonFormField<String>(
-                      value: _selectedTerritoryType,
-                      hint: const Text("Select Type *"),
-                      decoration: InputDecoration(
-                        labelText: "Territory Type *",
-                        prefixIcon: Icon(
-                          Icons.map_outlined,
-                          color: _primaryColor,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 16,
-                        ),
-                      ),
-                      items: _territoryTypes
-                          .map(
-                            (t) => DropdownMenuItem(value: t, child: Text(t)),
-                          )
-                          .toList(),
-                      onChanged: (val) =>
-                          setState(() => _selectedTerritoryType = val),
-                      validator: (v) => v == null ? "Required" : null,
-                    ),
-
-                    const SizedBox(height: 25),
-                    _buildSectionTitle("Classification * (Select One)"),
-                    const SizedBox(height: 10),
-
-                    // Classification Checkboxes
-                    Container(
-                      padding: const EdgeInsets.all(5),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Column(
-                        children: [
-                          CheckboxListTile(
-                            title: const Text("Is KBL?"),
-                            subtitle: const Text("Key Business Leader"),
-                            value: _isKbl,
-                            activeColor: _primaryColor,
-                            onChanged: _toggleKbl,
-                          ),
-                          const Divider(height: 1),
-                          CheckboxListTile(
-                            title: const Text("Is FRD?"),
-                            subtitle: const Text("First Response Doctor"),
-                            value: _isFrd,
-                            activeColor: _primaryColor,
-                            onChanged: _toggleFrd,
-                          ),
-                          const Divider(height: 1),
-                          CheckboxListTile(
-                            title: const Text("Other"),
-                            subtitle: const Text("General Category"),
-                            value: _isOther,
-                            activeColor: _primaryColor,
-                            onChanged: _toggleOther,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // Save Button
-                    SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _primaryColor,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        onPressed: _isSaving ? null : _saveDoctor,
-                        child: _isSaving
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(
-                                isEdit ? "UPDATE DOCTOR" : "SAVE DOCTOR",
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: Colors.white,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+      // Blocks the form unconditionally for both Adding and Editing
+      body: _buildMslUpdationMessage(isEdit),
     );
   }
 
+  // --- MSL UPDATION MESSAGE WIDGET ---
+  Widget _buildMslUpdationMessage(bool isEdit) {
+    final action = isEdit ? "Modification" : "Addition";
+    final actionVerb = isEdit ? "edit an existing" : "add a new";
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: _primaryColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.person_off_outlined,
+                size: 80,
+                color: _primaryColor,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Text(
+              "Direct $action Disabled",
+              style: GoogleFonts.poppins(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "To maintain data integrity, please use MSL Updation to $actionVerb doctor in the system.",
+              style: GoogleFonts.poppins(
+                fontSize: 15,
+                color: Colors.grey[700],
+                height: 1.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: _primaryColor, width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  "GO BACK",
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: _primaryColor,
+                  ),
+                ),
+              ),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  // NOTE: Form widgets below are retained in the class structure but are no longer rendered 
+  // since the build method unconditionally returns _buildMslUpdationMessage.
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,

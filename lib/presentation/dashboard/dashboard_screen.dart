@@ -13,6 +13,8 @@ import 'package:zforce/presentation/doctor_list/chemist_list_screen.dart';
 import 'package:zforce/presentation/doctor_list/doctor_selection_screen.dart';
 import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
+import 'package:zforce/presentation/expense/ExpenseManagerScreen.dart';
+import 'package:zforce/presentation/doctor_brand/doctor_brand_screen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
 import 'package:zforce/presentation/master/data_upload_screen.dart';
 import 'package:zforce/presentation/master/reports_dashboard_screen.dart';
@@ -52,7 +54,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.14";
+  static const String CURRENT_APP_VERSION = "1.0.15";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -651,9 +653,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _showSnack("Please Check In first!");
             }
           }),
-          _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
-            _navigateTo(ExpenseSummaryScreen());
-          }),
+          // _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
+          //   _navigateTo(ExpenseSummaryScreen());
+          // }),
 
           // --- NEW ACTION FOR CHEMIST CALL ---
           _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
@@ -702,6 +704,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.green,
             () => _navigateTo(const ReportsDashboardScreen()),
           ),
+          // _MenuAction(
+          //   Icons.receipt_long,
+          //   "Team Expenses",
+          //   Colors.teal,
+          //   () => _navigateTo(const ExpenseManagerScreen()),
+          // ),
           _MenuAction(
             Icons.handshake_outlined,
             "Tab Joint Work",
@@ -730,6 +738,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Dr. Master",
             Colors.deepPurple,
             () => _navigateTo(const DoctorMasterScreen()),
+          ),
+          _MenuAction(
+            Icons.medication_outlined,
+            "Brand Pathfinder",
+            Colors.pink,
+            () => _navigateTo(const DoctorBrandScreen()),
           ),
           // _MenuAction(
           //   Icons.business_center,

@@ -50,8 +50,10 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
   List<String> _routes = [];
   bool _isLoadingRoutes = true;
   bool _isLoadingOptions = true;
+  bool _isLoadingPracticeTypes = false;
   List<String> _specQualificationOptions = [];
   List<String> _practiceTypeOptions = [];
+  List<String> _allPracticeTypeOptions = [];
 
   // ── Contact & Address ───────────────────────────────────────────────────────
   final _mobileCtrl = TextEditingController();
@@ -228,29 +230,42 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
       final qualifications = options['specialty_qualifications'] ?? [];
       final practiceTypes = options['practice_types'] ?? [];
       if (mounted) {
+        final allTypes = practiceTypes.isNotEmpty
+            ? practiceTypes
+            : List<String>.from(_fallbackPracticeTypes);
         setState(() {
           _specQualificationOptions = qualifications.isNotEmpty
               ? qualifications
               : List<String>.from(_fallbackSpecQualifications);
-          _practiceTypeOptions = practiceTypes.isNotEmpty
-              ? practiceTypes
-              : List<String>.from(_fallbackPracticeTypes);
+          _allPracticeTypeOptions = allTypes;
           final currentQualification = _specQualCtrl.text.trim();
           if (currentQualification.isNotEmpty &&
               !_specQualificationOptions.contains(currentQualification)) {
             _specQualificationOptions.add(currentQualification);
           }
-          if (_specPracticeType != null &&
-              !_practiceTypeOptions.contains(_specPracticeType)) {
-            _practiceTypeOptions.add(_specPracticeType!);
+          // If editing with a qualification already set, filtered types will be
+          // loaded by _onSpecialityChanged below; otherwise show all.
+          if (currentQualification.isEmpty) {
+            _practiceTypeOptions = allTypes;
+            if (_specPracticeType != null &&
+                !_practiceTypeOptions.contains(_specPracticeType)) {
+              _practiceTypeOptions.add(_specPracticeType!);
+            }
           }
         });
+        // If editing and speciality already chosen, fetch filtered practice types
+        final currentQualification = _specQualCtrl.text.trim();
+        if (currentQualification.isNotEmpty) {
+          await _loadFilteredPracticeTypes(currentQualification);
+        }
       }
     } catch (_) {
       if (mounted) {
+        final fallbackTypes = List<String>.from(_fallbackPracticeTypes);
         setState(() {
           _specQualificationOptions = List<String>.from(_fallbackSpecQualifications);
-          _practiceTypeOptions = List<String>.from(_fallbackPracticeTypes);
+          _allPracticeTypeOptions = fallbackTypes;
+          _practiceTypeOptions = fallbackTypes;
           final currentQualification = _specQualCtrl.text.trim();
           if (currentQualification.isNotEmpty &&
               !_specQualificationOptions.contains(currentQualification)) {
@@ -266,18 +281,67 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
     if (mounted) setState(() => _isLoadingOptions = false);
   }
 
+  // Called when speciality (qualification) selection changes.
+  // Clears the practice type and fetches filtered options from the server.
+  Future<void> _onSpecialityChanged(String? speciality) async {
+    setState(() {
+      _specQualCtrl.text = speciality ?? '';
+      _specPracticeType = null;
+    });
+    if (speciality == null || speciality.isEmpty) {
+      setState(() => _practiceTypeOptions = _allPracticeTypeOptions);
+      return;
+    }
+    await _loadFilteredPracticeTypes(speciality);
+  }
+
+  Future<void> _loadFilteredPracticeTypes(String speciality) async {
+    setState(() => _isLoadingPracticeTypes = true);
+    try {
+      final filtered = await ApiService().getPracticeTypesBySpeciality(speciality);
+      if (mounted) {
+        setState(() {
+          _practiceTypeOptions = filtered.isNotEmpty ? filtered : _allPracticeTypeOptions;
+          // Re-add existing practice type if it's missing (e.g. legacy data)
+          if (_specPracticeType != null &&
+              !_practiceTypeOptions.contains(_specPracticeType)) {
+            _practiceTypeOptions = [..._practiceTypeOptions, _specPracticeType!];
+          }
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _practiceTypeOptions = _allPracticeTypeOptions);
+    }
+    if (mounted) setState(() => _isLoadingPracticeTypes = false);
+  }
+
   Future<void> _loadRoutes() async {
     setState(() => _isLoadingRoutes = true);
     try {
       final result = await ApiService().getTaRoutes();
       final routesList =
           (result['routes'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-      final seen = <String>{};
+      final hqLocation = result['hq_location']?.toString().trim() ?? '';
+
+      // Use upper-cased key for dedup so "MEERUT " and "MEERUT" collapse to one entry.
+      final seenUpper = <String>{};
       final towns = <String>[];
-      for (final r in routesList) {
-        final town = r['to_town_code']?.toString() ?? '';
-        if (town.isNotEmpty && seen.add(town)) towns.add(town);
+
+      void addTown(String raw) {
+        final t = raw.trim();
+        if (t.isEmpty) return;
+        if (seenUpper.add(t.toUpperCase())) towns.add(t);
       }
+
+      // Add the HQ itself first (so it appears at top after sort if needed)
+      if (hqLocation.isNotEmpty) addTown(hqLocation);
+
+      // Add all from_town_code and to_town_code values
+      for (final r in routesList) {
+        addTown(r['from_town_code']?.toString() ?? '');
+        addTown(r['to_town_code']?.toString() ?? '');
+      }
+
       towns.sort();
       if (mounted) setState(() => _routes = towns);
     } catch (_) {}
@@ -332,7 +396,7 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
     final sp = _specPracticeType;
     if (sp == null || sp.isEmpty) return null;
 
-    // Full MSL list limit — count all docs in the same MSL group
+    // Full MCL list limit — count all docs in the same MCL group
     final mslGroup = _findGroup(widget.mslTargets);
     if (mslGroup != null && mslGroup.quota > 0) {
       final count = _otherDoctors
@@ -540,27 +604,52 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
   }
 
   // ── Date Picker helper ─────────────────────────────────────────────────────
+Future<void> _pickDate(
+  BuildContext context,
+  String? current,
+  void Function(String) onPicked,
+) async {
+  final initial = current != null
+      ? DateFormat('MM-dd').parse(current)
+      : DateTime(1990);
 
-  Future<void> _pickDate(BuildContext context, String? current,
-      void Function(String) onPicked) async {
-    final initial = current != null
-        ? (DateTime.tryParse(current) ?? DateTime(1990))
-        : DateTime(1990);
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(1940),
-      lastDate: DateTime.now(),
-      builder: (ctx, child) => Theme(
-        data: Theme.of(ctx).copyWith(
-            colorScheme: const ColorScheme.light(primary: _purple)),
-        child: child!,
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: initial,
+    firstDate: DateTime(1940),
+    lastDate: DateTime.now(),
+    builder: (ctx, child) => Theme(
+      data: Theme.of(ctx).copyWith(
+        colorScheme: const ColorScheme.light(primary: _purple),
       ),
-    );
-    if (picked != null) {
-      onPicked(DateFormat('yyyy-MM-dd').format(picked));
-    }
+      child: child!,
+    ),
+  );
+
+  if (picked != null) {
+    onPicked(DateFormat('MM-dd').format(picked));
   }
+}
+  // Future<void> _pickDate(BuildContext context, String? current,
+  //     void Function(String) onPicked) async {
+  //   final initial = current != null
+  //       ? (DateFormat('MM-dd').parse(current))
+  //       : DateTime(1990);
+  //   final picked = await showDatePicker(
+  //     context: context,
+  //     initialDate: initial,
+  //     firstDate: DateTime(1940),
+  //     lastDate: DateTime.now(),
+  //     builder: (ctx, child) => Theme(
+  //       data: Theme.of(ctx).copyWith(
+  //           colorScheme: const ColorScheme.light(primary: _purple)),
+  //       child: child!,
+  //     ),
+  //   );
+  //   if (picked != null) {
+  //     onPicked(DateFormat('MM-dd').format(picked));
+  //   }
+  // }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
 
@@ -620,20 +709,29 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
                       value: _specQualCtrl.text.trim().isEmpty
                           ? null : _specQualCtrl.text.trim(),
                       items: _specQualificationOptions,
-                      onChanged: (v) =>
-                          setState(() => _specQualCtrl.text = v ?? ''),
+                      onChanged: (v) => _onSpecialityChanged(v),
                       validator: (v) => v == null ? 'Required' : null,
                     ),
               const SizedBox(height: 14),
               _isLoadingOptions
                   ? const SizedBox.shrink()
-                  : _dropdownField(
-                      label: 'Specialty (Type of Practice) *',
-                      value: _specPracticeType,
-                      items: _practiceTypeOptions,
-                      onChanged: (v) => setState(() => _specPracticeType = v),
-                      validator: (v) => v == null ? 'Required' : null,
-                    ),
+                  : _isLoadingPracticeTypes
+                      ? const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 8),
+                          child: Row(children: [
+                            SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2)),
+                            SizedBox(width: 10),
+                            Text('Loading practice types…',
+                                style: TextStyle(fontSize: 13, color: Colors.grey)),
+                          ]))
+                      : _dropdownField(
+                          label: 'Specialty (Type of Practice) *',
+                          value: _specPracticeType,
+                          items: _practiceTypeOptions,
+                          onChanged: (v) => setState(() => _specPracticeType = v),
+                          validator: (v) => v == null ? 'Required' : null,
+                        ),
               const SizedBox(height: 14),
               _isLoadingRoutes
                   ? const Center(
@@ -899,11 +997,16 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
         onChanged: (v) => setState(() => _selectedRouteName = v),
       );
     }
+    // Normalise saved route name to match trimmed list entries
+    final trimmedRoute = _selectedRouteName?.trim();
+    final resolvedRoute = (trimmedRoute != null &&
+            _routes.any((r) => r.toUpperCase() == trimmedRoute.toUpperCase()))
+        ? _routes.firstWhere(
+            (r) => r.toUpperCase() == trimmedRoute.toUpperCase())
+        : null;
+
     return DropdownButtonFormField<String>(
-      initialValue: (_selectedRouteName != null &&
-              _routes.contains(_selectedRouteName))
-          ? _selectedRouteName
-          : null,
+      initialValue: resolvedRoute,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: 'Route *',
@@ -1478,7 +1581,10 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
   Widget _dateTile(
       String label, String? value, IconData icon, VoidCallback onTap) {
     final display = value != null
-        ? DateFormat('dd MMM yyyy').format(DateTime.parse(value))
+        ? 
+        DateFormat('dd MMM').format(
+          DateFormat('MM-dd').parse(value),
+        )
         : 'Tap to select';
     return InkWell(
       onTap: onTap,

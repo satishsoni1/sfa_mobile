@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -25,7 +26,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   String? _expenseMode; // 'FIELD', 'NFW', 'TRANSIT'
   bool _isLoading = false;
   bool _isSubmitting = false;
-  File? _attachment;
+  List<File> _attachments = [];
   double _displayTotal = 0.0;
   bool _isLocked = false;
 
@@ -35,7 +36,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   String? _endLocation;
   String? _fromLocation; // NFW / TRANSIT from dropdown
   double? _endLocationKm; // km_from_hq of selected end location
-  bool _useManualKm = false;
   List<Map<String, dynamic>> _taRoutes = [];
   String? _userHq;
   double _autoTaKm = 0;
@@ -45,10 +45,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _isLoadingNfwRate = false;
   String _nfwType = 'Meeting'; // 'Meeting' | 'Training'
   String? _transitFromTown; // last DCR area or HQ for TRANSIT
-  bool _transitFromIsHq = true;
   bool _isLoadingTransitFrom = false;
   Map<String, dynamic> _allRates = {}; // all DA rates from expense_rates by designation
   String? _destStationType; // station_type of selected destination: HQ | EXHQ | OS
+  String? _selectedFrom; // user-selected from location (overrides auto-detected)
+  bool _isTwoWay = false;
+  double _baseRouteKm = 0;
+  double _baseRouteFare = 0;
 
   @override
   void initState() {
@@ -75,7 +78,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _manualKmController.text = (d['ta_distance'] ?? '0').toString();
         _manualTaController.text = (d['ta_amount'] ?? '0').toString();
         _transitFromTown = d['start_location']?.toString();
-        _transitFromIsHq = false; // restored from saved record
+        _selectedFrom = d['start_location']?.toString();
       }
       _modeOfTravel = (d['mode_of_travel'] ?? 'Bike').toString();
       _startLocation = (d['start_location'] ?? 'HQ').toString();
@@ -575,8 +578,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ),
           const SizedBox(height: 14),
 
-          // Destination — drives TA and (for Meeting) DA rate
-          _buildDestinationDropdown(accent: Colors.blue.shade600),
+          // From + To — drives TA and (for Meeting) DA rate
+          _buildFromToSection(accent: Colors.blue.shade600),
           if (_autoTaKm > 0) ...[
             const SizedBox(height: 10),
             Container(
@@ -674,15 +677,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           ],
                         ),
                       ),
-                      TextButton(
-                        onPressed: _showDaOverrideDialog,
-                        style: TextButton.styleFrom(
-                            foregroundColor: Colors.blue.shade700,
-                            padding: EdgeInsets.zero,
-                            minimumSize: const Size(64, 32)),
-                        child: const Text('Override',
-                            style: TextStyle(fontSize: 12)),
-                      ),
+                      Icon(Icons.lock_outline,
+                          size: 16, color: Colors.blue.shade300),
                     ],
                   ),
                 ),
@@ -722,7 +718,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          _buildAttachmentButton(),
+          _buildAttachmentsSection(),
         ],
       ),
     );
@@ -731,11 +727,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // ─── Transit Input Card ───────────────────────────────────────────────────────
 
   Widget _buildTransitInputCard() {
-    final fromLabel = _transitFromTown?.isNotEmpty == true
-        ? _transitFromTown!
-        : (_userHq ?? 'HQ');
-    final fromSubtitle = _transitFromIsHq ? 'Your HQ' : 'Last DCR location';
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -752,61 +743,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   color: Colors.grey.shade700)),
           const SizedBox(height: 14),
 
-          // FROM — last DCR location or HQ (read-only, auto-detected)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('From',
-                  style: TextStyle(
-                      fontSize: 11, color: Colors.grey.shade500)),
-              const SizedBox(height: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.grey.shade300),
-                ),
-                child: _isLoadingTransitFrom
-                    ? const SizedBox(
-                        height: 18,
-                        width: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Row(
-                        children: [
-                          Icon(
-                            _transitFromIsHq
-                                ? Icons.home_outlined
-                                : Icons.pin_drop_outlined,
-                            size: 16,
-                            color: Colors.grey.shade600,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(fromLabel,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 14)),
-                                Text(fromSubtitle,
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        color: Colors.grey.shade500)),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // TO — all distinct destinations from expense_rates_ta
-          _buildDestinationDropdown(accent: Colors.orange.shade600),
+          // From + To — user selects both; auto-detects mode and calculates TA
+          if (_isLoadingTransitFrom)
+            const Center(child: CircularProgressIndicator(strokeWidth: 2))
+          else
+            _buildFromToSection(accent: Colors.orange.shade600),
           const SizedBox(height: 12),
 
           Text('Mode of Travel',
@@ -816,8 +757,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _buildModeChips(),
           const SizedBox(height: 14),
 
-          // Auto-calculated km + TA summary
-          if (_autoTaKm > 0) ...[
+          // Auto-calculated km + TA summary (also shown locked at 0 when same location)
+          if (_autoTaKm > 0 || _isSameLocation()) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
@@ -963,7 +904,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          _buildAttachmentButton(),
+          _buildAttachmentsSection(),
         ],
       ),
     );
@@ -1007,14 +948,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (!mounted) return;
       setState(() {
         _transitFromTown = data['from_town']?.toString();
-        _transitFromIsHq = data['is_hq'] == true;
       });
       if (_endLocation != null) _updateTaFromSelection();
     } catch (_) {
       if (mounted) {
         setState(() {
           _transitFromTown = _userHq;
-          _transitFromIsHq = true;
         });
       }
     } finally {
@@ -1042,8 +981,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   // Unified destination selection handler — called by all three expense modes.
   // Determines station_type → DA, and kms/fare → TA from expense_rates_ta.
+  bool _isSameLocation() {
+    final from = (_selectedFrom ?? _transitFromTown ?? _userHq ?? '').toLowerCase();
+    final to = (_endLocation ?? '').toLowerCase();
+    return from.isNotEmpty && to.isNotEmpty && from == to;
+  }
+
   void _onDestinationSelected(String? town) {
     if (town == null) return;
+
+    // Same from and to → lock at 0 km, skip route lookup
+    final from = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
+    if (from.isNotEmpty && from.toLowerCase() == town.toLowerCase()) {
+      _baseRouteKm = 0;
+      _baseRouteFare = 0;
+      setState(() {
+        _endLocation = town;
+        _destStationType = null;
+        _autoTaKm = 0;
+        _autoTaFare = 0;
+        _manualKmController.clear();
+        _manualTaController.clear();
+      });
+      _recalculateTotal();
+      return;
+    }
 
     // 1. Resolve station_type for the selected destination
     final locationRoutes = _taRoutes
@@ -1061,17 +1023,34 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       }
     }
 
-    // 2. Find the best matching route for TA (prefer matching mode_of_travel)
-    final from = _transitFromTown ?? _userHq ?? '';
-    final candidates = _taRoutes.where((r) {
-      final rFrom = r['from_town_code']?.toString() ?? '';
-      final rTo = r['to_town_code']?.toString() ?? '';
-      return (from.isEmpty || rFrom.toLowerCase() == from.toLowerCase()) &&
-          rTo.toLowerCase() == town.toLowerCase();
-    }).toList();
+    // 2. Find the best matching route for TA (from already declared above)
+    bool routeMatches(Map r, String f, String t) {
+      final rFrom = (r['from_town_code']?.toString() ?? '').toLowerCase();
+      final rTo = (r['to_town_code']?.toString() ?? '').toLowerCase();
+      return rFrom == f.toLowerCase() && rTo == t.toLowerCase();
+    }
+
+    // Try A→B first, fall back to B→A (symmetric routes)
+    var candidates = _taRoutes.where((r) => routeMatches(r, from, town)).toList();
+    if (candidates.isEmpty && from.isNotEmpty) {
+      candidates = _taRoutes.where((r) => routeMatches(r, town, from)).toList();
+    }
+    // If still nothing, loosen: match either end of the town
+    if (candidates.isEmpty) {
+      candidates = _taRoutes
+          .where((r) =>
+              (r['to_town_code']?.toString() ?? '').toLowerCase() == town.toLowerCase() ||
+              (r['from_town_code']?.toString() ?? '').toLowerCase() == town.toLowerCase())
+          .toList();
+    }
 
     double km = 0, ta = 0;
     if (candidates.isNotEmpty) {
+      // Auto-select mode of travel from route (e.g. Train)
+      final autoModeRaw = candidates.first['mode_of_travel']?.toString() ?? '';
+      final autoMode = _normalizeModeOfTravel(autoModeRaw);
+      if (autoMode != null) _modeOfTravel = autoMode;
+
       final route = candidates.firstWhere(
         (r) => (r['mode_of_travel']?.toString() ?? '').toLowerCase() ==
             _modeOfTravel.toLowerCase(),
@@ -1082,6 +1061,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final fareFromTable = (fareRaw == 'EMPTY' || fareRaw.isEmpty)
           ? 0.0
           : (double.tryParse(fareRaw) ?? 0.0);
+      // Bike: per-km rate; Train/others: use table fare; fallback per-km
       ta = _modeOfTravel == 'Bike'
           ? km * 3.5
           : (fareFromTable > 0 ? fareFromTable : km * 3.5);
@@ -1101,50 +1081,43 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _manualDaController.text = daAmount.toStringAsFixed(2);
     }
 
+    _baseRouteKm = km;
+    _baseRouteFare = ta;
     setState(() {
       _endLocation = town;
       _destStationType = stationType;
-      _autoTaKm = km;
-      _autoTaFare = ta;
-      _manualKmController.text = km.toStringAsFixed(1);
-      _manualTaController.text = ta.toStringAsFixed(2);
+      _autoTaKm = _isTwoWay ? km * 2 : km;
+      _autoTaFare = _isTwoWay ? ta * 2 : ta;
+      _manualKmController.text = _autoTaKm.toStringAsFixed(1);
+      _manualTaController.text = _autoTaFare.toStringAsFixed(2);
     });
     _recalculateTotal();
+  }
+
+  void _applyWayMultiplier() {
+    if (_baseRouteKm <= 0) return;
+    setState(() {
+      _autoTaKm = _isTwoWay ? _baseRouteKm * 2 : _baseRouteKm;
+      _autoTaFare = _isTwoWay ? _baseRouteFare * 2 : _baseRouteFare;
+      _manualKmController.text = _autoTaKm.toStringAsFixed(1);
+      _manualTaController.text = _autoTaFare.toStringAsFixed(2);
+    });
+    _recalculateTotal();
+  }
+
+  String? _normalizeModeOfTravel(String raw) {
+    final m = raw.toLowerCase();
+    if (m.contains('train') || m.contains('rail')) return 'Train';
+    if (m.contains('bike') || m.contains('motor') || m.contains('two')) return 'Bike';
+    if (m.contains('car') || m.contains('taxi') || m.contains('cab')) return 'Car';
+    if (m.contains('bus')) return 'Bus';
+    if (m.contains('auto')) return 'Auto';
+    return null;
   }
 
   // Kept for backward compatibility — delegates to unified handler
   void _updateTaFromSelection() => _onDestinationSelected(_endLocation);
 
-  void _showDaOverrideDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Override DA Amount'),
-        content: TextField(
-          controller: _manualDaController,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          autofocus: true,
-          decoration: const InputDecoration(
-              prefixText: '₹ ', labelText: 'DA Amount'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4A148C)),
-            onPressed: () {
-              _recalculateTotal();
-              Navigator.pop(ctx);
-            },
-            child: const Text('Apply',
-                style: TextStyle(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
-  }
 
   // ─── Shared: Station Type Badge ───────────────────────────────────────────────
 
@@ -1167,31 +1140,82 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  // ─── Shared: Destination Dropdown (from expense_rates_ta) ────────────────────
+  // ─── Shared: From + To Route Section ─────────────────────────────────────────
 
-  Widget _buildDestinationDropdown({required Color accent, String label = 'To (Destination)'}) {
-    final destinations = _taRoutes
-        .map((r) => r['to_town_code']?.toString() ?? '')
-        .where((d) => d.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort();
+  // All unique locations — union of from_town_code and to_town_code
+  List<String> _allLocations() {
+    final locs = <String>{};
+    for (final r in _taRoutes) {
+      final f = r['from_town_code']?.toString() ?? '';
+      final t = r['to_town_code']?.toString() ?? '';
+      if (f.isNotEmpty) locs.add(f);
+      if (t.isNotEmpty) locs.add(t);
+    }
+    return locs.toList()..sort();
+  }
 
-    if (destinations.isEmpty) return const SizedBox.shrink();
+  Widget _buildFromToSection({required Color accent}) {
+    final allLocs = _allLocations();
+    if (allLocs.isEmpty) return const SizedBox.shrink();
 
-    final safeVal = destinations.contains(_endLocation) ? _endLocation : null;
+    final autoFrom = _selectedFrom ?? _transitFromTown ?? _userHq;
+    final safeFrom = allLocs.contains(autoFrom) ? autoFrom : null;
+    final safeTo = allLocs.contains(_endLocation) ? _endLocation : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
+        Text('From',
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+        const SizedBox(height: 6),
+        DropdownButtonFormField<String>(
+          value: safeFrom,
+          isExpanded: true,
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.my_location, size: 18),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: accent),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          ),
+          hint: Text('Select origin',
+              style:
+                  TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+          items: allLocs
+              .map((f) => DropdownMenuItem<String>(
+                    value: f,
+                    child: Text(f, overflow: TextOverflow.ellipsis),
+                  ))
+              .toList(),
+          onChanged: _isLocked
+              ? null
+              : (val) {
+                  setState(() {
+                    _selectedFrom = val;
+                    _endLocation = null;
+                    _autoTaKm = 0;
+                    _autoTaFare = 0;
+                    _baseRouteKm = 0;
+                    _baseRouteFare = 0;
+                    _destStationType = null;
+                    _manualKmController.clear();
+                    _manualTaController.clear();
+                  });
+                  _recalculateTotal();
+                },
+        ),
+        const SizedBox(height: 12),
+        Text('To',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
         const SizedBox(height: 6),
         Row(
           children: [
             Expanded(
               child: DropdownButtonFormField<String>(
-                initialValue: safeVal,
+                value: safeTo,
                 isExpanded: true,
                 decoration: InputDecoration(
                   prefixIcon:
@@ -1199,15 +1223,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10)),
                   focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: accent)),
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: accent),
+                  ),
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 12),
                 ),
                 hint: Text('Select destination',
                     style: TextStyle(
                         color: Colors.grey.shade400, fontSize: 13)),
-                items: destinations
+                items: allLocs
                     .map((d) => DropdownMenuItem<String>(
                           value: d,
                           child:
@@ -1223,7 +1248,66 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ],
           ],
         ),
+        const SizedBox(height: 12),
+        // One Way / Two Way toggle
+        Row(
+          children: [
+            Text('Journey Type',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            const SizedBox(width: 12),
+            _buildWayChip(label: 'One Way', selected: !_isTwoWay, onTap: () {
+              if (_isTwoWay) {
+                setState(() => _isTwoWay = false);
+                _applyWayMultiplier();
+              }
+            }),
+            const SizedBox(width: 8),
+            _buildWayChip(label: 'Two Way', selected: _isTwoWay, onTap: () {
+              if (!_isTwoWay) {
+                setState(() => _isTwoWay = true);
+                _applyWayMultiplier();
+              }
+            }),
+            if (_isTwoWay && _autoTaKm > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.deepPurple.shade200),
+                ),
+                child: Text('× 2 = ${_fmt(_autoTaKm)} km',
+                    style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.deepPurple.shade700)),
+              ),
+            ],
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _buildWayChip({required String label, required bool selected, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: _isLocked ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF4A148C) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+              color: selected ? const Color(0xFF4A148C) : Colors.grey.shade300),
+        ),
+        child: Text(label,
+            style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: selected ? Colors.white : Colors.grey.shade700)),
+      ),
     );
   }
 
@@ -1309,94 +1393,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ),
           const SizedBox(height: 14),
 
-          // From → To
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('From',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade500)),
-                    const SizedBox(height: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.my_location,
-                              size: 13, color: Colors.grey.shade500),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              _startLocation ?? 'HQ',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.w600, fontSize: 13),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding:
-                    const EdgeInsets.only(top: 20, left: 8, right: 8),
-                child: Icon(Icons.arrow_forward,
-                    color: Colors.grey.shade400, size: 18),
-              ),
-              Expanded(
-                child: _isLocked
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('To (End Location)',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey.shade500)),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    _endLocation ?? 'N/A',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ),
-                              if (_destStationType != null) ...[
-                                const SizedBox(width: 6),
-                                _buildStationTypeBadge(_destStationType),
-                              ],
-                            ],
-                          ),
-                        ],
-                      )
-                    : _buildDestinationDropdown(
-                        accent: const Color(0xFF4A148C),
-                        label: 'To (End Location)',
-                      ),
-              ),
-            ],
-          ),
+          // From + To — shared picker used across all expense types
+          _buildFromToSection(accent: const Color(0xFF4A148C)),
           const SizedBox(height: 14),
 
           // Mode of Travel
@@ -1406,90 +1404,60 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _buildModeChips(),
           const SizedBox(height: 14),
 
-          // KM row
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          // KM — read-only when route km found; manual entry only when
+          // destination is selected but no matching route exists in expense_rates_ta
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Distance ($kmSource)',
-                        style: TextStyle(
-                            fontSize: 11, color: Colors.grey.shade500)),
-                    const SizedBox(height: 4),
-                    _useManualKm
-                        ? TextField(
-                            controller: _manualKmController,
-                            keyboardType: const TextInputType.numberWithOptions(
-                                decimal: true),
-                            onChanged: (_) => _recalculateTotal(),
-                            decoration: InputDecoration(
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 10),
-                              suffixText: 'km',
-                              hintText: '0',
-                              border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8)),
-                              focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFF4A148C))),
-                            ),
-                          )
-                        : Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFEDE7F6),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.straighten,
-                                    size: 14, color: Color(0xFF4A148C)),
-                                const SizedBox(width: 6),
-                                Text('${_fmt(autoKm)} km',
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF4A148C))),
-                              ],
-                            ),
-                          ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              if (!_isLocked)
-                GestureDetector(
-                  onTap: () => setState(() {
-                    _useManualKm = !_useManualKm;
-                    if (!_useManualKm) _manualKmController.clear();
-                  }),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: _useManualKm
-                          ? const Color(0xFF4A148C)
-                          : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: _useManualKm
-                              ? const Color(0xFF4A148C)
-                              : Colors.grey.shade300),
+              Text('Distance ($kmSource)',
+                  style:
+                      TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+              const SizedBox(height: 4),
+              _endLocation != null && _autoTaKm == 0 && !_isSameLocation()
+                  ? TextField(
+                      controller: _manualKmController,
+                      keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true),
+                      onChanged: (_) => _recalculateTotal(),
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 10),
+                        suffixText: 'km',
+                        hintText: 'Enter distance',
+                        helperText:
+                            'No route found for this destination — enter km manually',
+                        helperStyle:
+                            TextStyle(fontSize: 10, color: Colors.orange.shade600),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: const BorderSide(
+                                color: Color(0xFF4A148C))),
+                      ),
+                    )
+                  : Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEDE7F6),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.straighten,
+                              size: 14, color: Color(0xFF4A148C)),
+                          const SizedBox(width: 6),
+                          Text('${_fmt(autoKm)} km',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF4A148C))),
+                          const Spacer(),
+                          Icon(Icons.lock_outline,
+                              size: 12, color: Colors.purple.shade300),
+                        ],
+                      ),
                     ),
-                    child: Text(
-                      _useManualKm ? 'Use Auto' : 'Enter KM',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _useManualKm
-                              ? Colors.white
-                              : Colors.grey.shade700),
-                    ),
-                  ),
-                ),
             ],
           ),
         ],
@@ -1823,93 +1791,179 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ),
           ),
           const SizedBox(height: 14),
-          _buildAttachmentButton(),
+          _buildAttachmentsSection(),
         ],
       ),
     );
   }
 
-  Widget _buildAttachmentButton() {
-    return InkWell(
-      onTap: () async {
-        final src = await showModalBottomSheet<ImageSource>(
-          context: context,
-          builder: (_) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+  Widget _buildAttachmentsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Bills / Receipts',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600)),
+            const Spacer(),
+            if (_attachments.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.green.shade200)),
+                child: Text('${_attachments.length} attached',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.w500)),
+              ),
+          ],
+        ),
+        if (_attachments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: List.generate(_attachments.length, (i) {
+              final file = _attachments[i];
+              final ext = file.path.split('.').last.toLowerCase();
+              final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 68,
+                    height: 68,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade300),
+                      color: Colors.grey.shade100,
+                    ),
+                    child: isImage
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(7),
+                            child: Image.file(file,
+                                fit: BoxFit.cover, width: 68, height: 68),
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.picture_as_pdf,
+                                  color: Colors.red.shade400, size: 26),
+                              const SizedBox(height: 2),
+                              Text(ext.toUpperCase(),
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                  ),
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _attachments.removeAt(i)),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                            color: Colors.red, shape: BoxShape.circle),
+                        child: const Icon(Icons.close,
+                            size: 12, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }),
+          ),
+        ],
+        const SizedBox(height: 8),
+        InkWell(
+          onTap: _isLocked ? null : _pickAttachment,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                ListTile(
-                    leading: const Icon(Icons.camera_alt),
-                    title: const Text('Camera'),
-                    onTap: () =>
-                        Navigator.pop(context, ImageSource.camera)),
-                ListTile(
-                    leading: const Icon(Icons.photo_library),
-                    title: const Text('Gallery'),
-                    onTap: () =>
-                        Navigator.pop(context, ImageSource.gallery)),
+                Icon(Icons.add_circle_outline,
+                    color: Colors.grey.shade500, size: 20),
+                const SizedBox(width: 8),
+                Text('Add Bill / Receipt / Document',
+                    style:
+                        TextStyle(fontSize: 13, color: Colors.grey.shade600)),
               ],
             ),
           ),
-        );
-        if (src != null) {
-          final picked =
-              await ImagePicker().pickImage(source: src, imageQuality: 70);
-          if (picked != null) setState(() => _attachment = File(picked.path));
-        }
-      },
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _attachment != null ? Colors.green.shade50 : Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-              color: _attachment != null
-                  ? Colors.green.shade300
-                  : Colors.grey.shade300),
         ),
-        child: Row(
+      ],
+    );
+  }
+
+  Future<void> _pickAttachment() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              _attachment != null
-                  ? Icons.check_circle
-                  : Icons.camera_alt_outlined,
-              color: _attachment != null ? Colors.green : Colors.grey,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                _attachment != null
-                    ? 'Bill / Receipt Attached'
-                    : 'Attach Bill or Receipt',
-                style: TextStyle(
-                    color: _attachment != null
-                        ? Colors.green.shade700
-                        : Colors.grey.shade600),
-              ),
-            ),
-            if (_attachment != null)
-              Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.file(_attachment!,
-                        width: 42, height: 42, fit: BoxFit.cover),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => setState(() => _attachment = null),
-                    child: const Icon(Icons.close,
-                        size: 16, color: Colors.red),
-                  ),
-                ],
-              ),
+            ListTile(
+                leading: const Icon(Icons.camera_alt),
+                title: const Text('Camera'),
+                onTap: () => Navigator.pop(context, 'camera')),
+            ListTile(
+                leading: const Icon(Icons.photo_library),
+                title: const Text('Gallery (multiple)'),
+                onTap: () => Navigator.pop(context, 'gallery')),
+            ListTile(
+                leading: const Icon(Icons.attach_file),
+                title: const Text('File / PDF'),
+                onTap: () => Navigator.pop(context, 'file')),
           ],
         ),
       ),
     );
+    if (choice == null || !mounted) return;
+    if (choice == 'camera') {
+      final picked = await ImagePicker()
+          .pickImage(source: ImageSource.camera, imageQuality: 70);
+      if (picked != null && mounted) {
+        setState(() => _attachments.add(File(picked.path)));
+      }
+    } else if (choice == 'gallery') {
+      final picked = await ImagePicker().pickMultiImage(imageQuality: 70);
+      if (mounted) {
+        setState(() {
+          for (final img in picked) {
+            _attachments.add(File(img.path));
+          }
+        });
+      }
+    } else {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+      );
+      if (result != null && mounted) {
+        setState(() {
+          for (final f in result.files) {
+            if (f.path != null) _attachments.add(File(f.path!));
+          }
+        });
+      }
+    }
   }
 
   // ─── Locked Details Card ──────────────────────────────────────────────────────
@@ -2050,10 +2104,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
       if (_expenseMode == 'FIELD') {
         final kmManual = _manualKmController.text.trim();
-        final kmAuto = _useManualKm && kmManual.isNotEmpty
-            ? kmManual
-            : (_endLocationKm != null
-                ? _endLocationKm!.toStringAsFixed(2)
+        // Route km from expense_rates_ta takes priority; manual if no route matched; DCR as fallback
+        final kmAuto = _autoTaKm > 0
+            ? _autoTaKm.toStringAsFixed(2)
+            : (kmManual.isNotEmpty
+                ? kmManual
                 : _calcData!['total_km'].toString());
         payload = {
           'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
@@ -2116,7 +2171,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         };
       }
 
-      await ApiService().submitExpense(payload, _attachment);
+      await ApiService().submitExpense(payload, _attachments);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

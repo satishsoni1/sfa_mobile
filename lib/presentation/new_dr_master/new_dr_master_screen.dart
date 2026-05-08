@@ -39,7 +39,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   String? _subRejectionReason;
 
   // Three independent target lists (each entry groups multiple specialities)
-  List<SpecialityTarget> _mslTargets   = [];   // Full MSL list
+  List<SpecialityTarget> _mslTargets   = [];   // Full MCL list
   List<SpecialityTarget> _kblTargets   = [];   // KBL doctors
   List<SpecialityTarget> _core3Targets = [];   // 3-Visit Core FRD
   // {core_3: int, frd_2: int, kbl: int} — for overall category badges
@@ -93,6 +93,25 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     if (_mslTargets.isEmpty && _kblTargets.isEmpty && _core3Targets.isEmpty) return false;
     for (final t in _mslTargets) {
       if (t.quota > 0 && _countGroup(t, _myDoctors) < t.quota) return false;
+    }
+    for (final t in _kblTargets) {
+      if (t.quota > 0 && _countKblGroup(t, _myDoctors) < t.quota) return false;
+    }
+    for (final t in _core3Targets) {
+      if (t.quota > 0 && _countCore3Group(t, _myDoctors) < t.quota) return false;
+    }
+    return true;
+  }
+
+  // Allows submission when Full MCL is within 10% of target (≥90% filled).
+  // KBL and CORE_3 quotas must still be fully met.
+  bool get _canSubmit {
+    if (_mslTargets.isEmpty && _kblTargets.isEmpty && _core3Targets.isEmpty) return false;
+    for (final t in _mslTargets) {
+      if (t.quota > 0) {
+        final minRequired = (t.quota * 0.9).ceil();
+        if (_countGroup(t, _myDoctors) < minRequired) return false;
+      }
     }
     for (final t in _kblTargets) {
       if (t.quota > 0 && _countKblGroup(t, _myDoctors) < t.quota) return false;
@@ -647,7 +666,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     }
 
     return _buildSummaryCard(
-      title: 'Full MSL — Complete List',
+      title: 'Full MCL — Complete List',
       icon: Icons.list_alt_outlined,
       color: Colors.blue.shade700,
       col2Header: 'Required',
@@ -993,6 +1012,40 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     }
     if (_isLoadingTargets) return const SizedBox.shrink();
 
+    // MSL within 10% tolerance — allow submission with a notice
+    if (_canSubmit) {
+      int totalRequired = 0, totalAdded = 0;
+      for (final t in _mslTargets) {
+        if (t.quota > 0) {
+          totalRequired += t.quota;
+          totalAdded += _countGroup(t, _myDoctors);
+        }
+      }
+      return Column(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.amber.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: Row(children: [
+            Icon(Icons.info_outline, color: Colors.amber.shade800, size: 18),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('MSL nearly complete ($totalAdded / $totalRequired)',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+                      color: Colors.amber.shade900)),
+              Text('Within 10% allowance — you may submit now.',
+                  style: TextStyle(fontSize: 11, color: Colors.amber.shade800)),
+            ])),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        _submitButton(label: 'Submit List for Approval', icon: Icons.send_outlined),
+      ]);
+    }
+
     int totalRequired = 0, totalAdded = 0;
     for (final t in _mslTargets) {
       if (t.quota > 0) {
@@ -1016,7 +1069,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Need $stillNeeded more doctor${stillNeeded == 1 ? '' : 's'} to complete Full MSL',
+              'Need $stillNeeded more doctor${stillNeeded == 1 ? '' : 's'} to complete Full MCL',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                   color: Colors.orange.shade800),
             ),
@@ -1093,7 +1146,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   // ── Sub Approval Banner & Buttons ──────────────────────────────────────────
 
   Widget _buildSubApprovalBanner() {
-    if (_subApprovalStatus == null) return const SizedBox.shrink();
+    //if (_subApprovalStatus == null) return const SizedBox.shrink();
     IconData icon;
     MaterialColor color;
     String title, subtitle;

@@ -778,36 +778,121 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
   }
 
   // Submit Expense with Image
-  Future<void> submitExpense(Map<String, String> payload, File? attachment) async {
-     final token = await getToken();
+  Future<void> submitExpense(Map<String, String> payload, List<File> attachments) async {
+    final token = await getToken();
     var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/app/expense/submit'));
-    
-    // Add headers
     request.headers.addAll({
       'Authorization': 'Bearer $token',
       'Accept': 'application/json',
     });
-
-    // Add string fields
     request.fields.addAll(payload);
-
-    // Add Image File if it exists
-    if (attachment != null) {
+    for (final file in attachments) {
       request.files.add(
-        await http.MultipartFile.fromPath(
-          'attachment', // Must match Laravel validation name
-          attachment.path,
-        ),
+        await http.MultipartFile.fromPath('attachments[]', file.path),
       );
     }
-
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
-
     if (response.statusCode != 200) {
       throw Exception(json.decode(response.body)['message'] ?? 'Failed to submit expense');
     }
   }
+
+  Future<Map<String, dynamic>> getSubordinateMonthlyExpenses(int userId, int month, int year) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/expense/subordinate-summary?user_id=$userId&month=$month&year=$year'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load subordinate expenses');
+  }
+
+  Future<List<Map<String, dynamic>>> getSubordinateDailyExpenses(int userId, int month, int year) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/expense/subordinate-daily?user_id=$userId&month=$month&year=$year'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    }
+    throw Exception('Failed to load subordinate daily expenses');
+  }
+  Future<void> approveSubordinateExpense(int userId, int month, int year) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/expense/approve-month'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json', 'Content-Type': 'application/json'},
+      body: jsonEncode({'user_id': userId, 'month': month, 'year': year}),
+    );
+    if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to approve');
+  }
+
+  Future<void> rejectSubordinateExpense(int userId, int month, int year, String reason) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/expense/reject-month'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json', 'Content-Type': 'application/json'},
+      body: jsonEncode({'user_id': userId, 'month': month, 'year': year, 'reason': reason}),
+    );
+    if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to reject');
+  }
+
+  Future<List<Map<String, dynamic>>> getBrands() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/brands'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(json.decode(response.body)['data'] ?? []);
+    }
+    throw Exception('Failed to load brands');
+  }
+
+  Future<Map<String, dynamic>> getBrandDoctors(int brandId) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/brands/$brandId/doctors'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load brand doctors');
+  }
+
+  Future<void> addDoctorsToBrand(int brandId, List<int> doctorIds) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/brands/$brandId/doctors'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json', 'Content-Type': 'application/json'},
+      body: jsonEncode({'doctor_ids': doctorIds}),
+    );
+    if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to add doctors');
+  }
+
+  Future<void> removeDoctorFromBrand(int brandId, int doctorId) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/app/brands/$brandId/doctors/$doctorId'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to remove doctor');
+  }
+
+  Future<List<Map<String, dynamic>>> getMyDoctorList() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/doctors/my-list'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(json.decode(response.body)['data'] ?? []);
+    }
+    throw Exception('Failed to load doctor list');
+  }
+
 // Submit all expenses for the month
   Future<void> submitMonthlyExpense(int month, int year) async {
          final token = await getToken();
@@ -1073,6 +1158,26 @@ Future<void> submitFullMonth(int month, int year) async {
       'specialty_qualifications': <String>[],
       'practice_types': <String>[],
     };
+  }
+
+  Future<List<String>> getPracticeTypesBySpeciality(String speciality) async {
+    try {
+      final encoded = Uri.encodeComponent(speciality);
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/new-doctor-master/practice-types?speciality=$encoded'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final raw = body['data'] ?? body;
+        if (raw is List) {
+          return raw.map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching practice types: $e');
+    }
+    return [];
   }
 
   Future<void> updateDoctorVisitCategory(int id, String category) async {
@@ -1843,6 +1948,24 @@ Future<void> submitFullMonth(int month, int year) async {
       debugPrint("Error adding chemist: $e");
       return false;
     }
+  }
+
+  Future<List<Map<String, dynamic>>> getDoctorBrandSummary() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/brands/doctor-summary'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        final raw = body['data'] ?? body;
+        if (raw is List) return List<Map<String, dynamic>>.from(raw);
+      }
+    } catch (e) {
+      debugPrint('Error fetching doctor brand summary: $e');
+    }
+    return [];
   }
 
   Future<bool> updateChemist(Map<String, dynamic> payload) async {
