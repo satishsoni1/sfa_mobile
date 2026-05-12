@@ -528,6 +528,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Internet': Icons.wifi,
       'Hotel': Icons.hotel_outlined,
       'Postage': Icons.local_post_office_outlined,
+      'Toll': Icons.toll_outlined,
+      'Courier': Icons.local_shipping_outlined,
+      'Parking': Icons.local_parking,
+      'Food Bill': Icons.restaurant_outlined,
       'Misc': Icons.more_horiz,
     };
     final claimColors = {
@@ -535,6 +539,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Internet': Colors.teal,
       'Hotel': Colors.indigo,
       'Postage': Colors.brown,
+      'Toll': Colors.deepOrange,
+      'Courier': Colors.cyan,
+      'Parking': Colors.purple,
+      'Food Bill': Colors.green,
       'Misc': Colors.grey,
     };
     final type = claim['claim_type'] ?? 'Misc';
@@ -844,7 +852,10 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
   double? _internetRate;
   bool _isLoadingRate = false;
 
-  static const _claimTypes = ['Mobile', 'Internet', 'Hotel', 'Postage', 'Misc'];
+  static const _claimTypes = [
+    'Mobile', 'Internet', 'Hotel', 'Postage',
+    'Toll', 'Courier', 'Parking', 'Food Bill', 'Misc',
+  ];
   static const _autoRatedTypes = ['Mobile', 'Internet'];
 
   final _claimIcons = {
@@ -852,6 +863,10 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
     'Internet': Icons.wifi,
     'Hotel': Icons.hotel_outlined,
     'Postage': Icons.local_post_office_outlined,
+    'Toll': Icons.toll_outlined,
+    'Courier': Icons.local_shipping_outlined,
+    'Parking': Icons.local_parking,
+    'Food Bill': Icons.restaurant_outlined,
     'Misc': Icons.more_horiz,
   };
 

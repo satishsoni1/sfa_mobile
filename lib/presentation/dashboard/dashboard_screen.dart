@@ -653,9 +653,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _showSnack("Please Check In first!");
             }
           }),
-          // _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
-          //   _navigateTo(ExpenseSummaryScreen());
-          // }),
+          _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
+            _navigateTo(ExpenseSummaryScreen());
+          }),
 
           // --- NEW ACTION FOR CHEMIST CALL ---
           _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
@@ -704,12 +704,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.green,
             () => _navigateTo(const ReportsDashboardScreen()),
           ),
-          // _MenuAction(
-          //   Icons.receipt_long,
-          //   "Team Expenses",
-          //   Colors.teal,
-          //   () => _navigateTo(const ExpenseManagerScreen()),
-          // ),
+          _MenuAction(
+            Icons.receipt_long,
+            "Team Expenses",
+            Colors.teal,
+            () => _navigateTo(const ExpenseManagerScreen()),
+          ),
           _MenuAction(
             Icons.handshake_outlined,
             "Tab Joint Work",

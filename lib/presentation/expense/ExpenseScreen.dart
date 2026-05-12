@@ -6,6 +6,20 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../data/services/api_service.dart';
 
+// Represents one itemized other-expense entry (Toll, Courier, Parking, etc.)
+class OtherExpenseItem {
+  String type;
+  final TextEditingController amountController;
+  File? bill;
+
+  OtherExpenseItem({required this.type, String amount = '', this.bill})
+      : amountController = TextEditingController(text: amount);
+
+  void dispose() => amountController.dispose();
+
+  double get amount => double.tryParse(amountController.text) ?? 0;
+}
+
 class ExpenseScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
   const ExpenseScreen({super.key, this.editData});
@@ -15,7 +29,6 @@ class ExpenseScreen extends StatefulWidget {
 }
 
 class _ExpenseScreenState extends State<ExpenseScreen> {
-  final _otherAmtController = TextEditingController();
   final _remarkController = TextEditingController();
   final _manualDaController = TextEditingController();
   final _manualKmController = TextEditingController();
@@ -53,12 +66,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   double _baseRouteKm = 0;
   double _baseRouteFare = 0;
 
+  // Itemized other expenses (Toll, Courier, Parking, Food Bill, Others)
+  List<OtherExpenseItem> _otherExpenses = [];
+  // DA overrides when user selects a destination (field mode)
+  String? _fieldDaTypeOverride;
+  double? _fieldDaAmountOverride;
+
   @override
   void initState() {
     super.initState();
     if (widget.editData != null) {
       final d = widget.editData!;
-      _otherAmtController.text = (d['other_amount'] ?? '0').toString();
+      // Restore legacy single other_amount as one item for backward compat
+      final legacyOther = double.tryParse((d['other_amount'] ?? '0').toString()) ?? 0;
+      if (legacyOther > 0) {
+        final item = OtherExpenseItem(type: 'Other', amount: legacyOther.toStringAsFixed(2));
+        item.amountController.addListener(_recalculateTotal);
+        _otherExpenses.add(item);
+      }
       _remarkController.text = d['remarks'] ?? '';
       _selectedDate = DateTime.tryParse(d['expense_date'] ?? '') ?? DateTime.now();
       _isLocked = d['is_submitted_for_month'] == 1;
@@ -85,7 +110,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _endLocation = d['end_location']?.toString();
       _fromLocation = d['start_location']?.toString();
     }
-    _otherAmtController.addListener(_recalculateTotal);
     _manualDaController.addListener(_recalculateTotal);
     _manualTaController.addListener(_recalculateTotal);
     _loadTaRoutes();
@@ -95,10 +119,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   @override
   void dispose() {
-    _otherAmtController.removeListener(_recalculateTotal);
     _manualDaController.removeListener(_recalculateTotal);
     _manualTaController.removeListener(_recalculateTotal);
-    _otherAmtController.dispose();
+    for (final e in _otherExpenses) { e.dispose(); }
     _remarkController.dispose();
     _manualDaController.dispose();
     _manualKmController.dispose();
@@ -106,10 +129,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     super.dispose();
   }
 
+  double get _totalOtherAmount =>
+      _otherExpenses.fold(0.0, (sum, e) => sum + e.amount);
+
   void _recalculateTotal() {
     double da = 0, ta = 0;
     if (_expenseMode == 'FIELD' && _calcData != null) {
-      da = _toDouble(_calcData!['da_amount']);
+      da = _fieldDaAmountOverride ?? _toDouble(_calcData!['da_amount']);
       // SFA route TA takes precedence over DCR-based TA when destination selected
       ta = _autoTaFare > 0
           ? _autoTaFare
@@ -123,8 +149,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ? _autoTaFare
           : (double.tryParse(_manualTaController.text) ?? 0);
     }
-    final other = double.tryParse(_otherAmtController.text) ?? 0;
-    setState(() => _displayTotal = da + ta + other);
+    setState(() => _displayTotal = da + ta + _totalOtherAmount);
   }
 
   Future<void> _fetchCalculation() async {
@@ -688,21 +713,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           const SizedBox(height: 6),
           _buildModeChips(),
           const SizedBox(height: 12),
-          TextField(
-            controller: _otherAmtController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Other Expenses (Toll, Parking, Misc)',
-              prefixText: '₹ ',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: Color(0xFF4A148C))),
-            ),
-          ),
+          _buildOtherExpensesSection(),
           const SizedBox(height: 12),
           TextField(
             controller: _remarkController,
@@ -874,21 +885,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             const SizedBox(height: 12),
           ],
 
-          TextField(
-            controller: _otherAmtController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Other Expenses (Toll, Parking, Misc)',
-              prefixText: '₹ ',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: Color(0xFF4A148C))),
-            ),
-          ),
+          _buildOtherExpensesSection(),
           const SizedBox(height: 12),
           TextField(
             controller: _remarkController,
@@ -1000,6 +997,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _destStationType = null;
         _autoTaKm = 0;
         _autoTaFare = 0;
+        _fieldDaTypeOverride = null;
+        _fieldDaAmountOverride = null;
         _manualKmController.clear();
         _manualTaController.clear();
       });
@@ -1067,7 +1066,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           : (fareFromTable > 0 ? fareFromTable : km * 3.5);
     }
 
-    // 3. For NFW Meeting: station_type drives DA rate
+    // 3. DA rate driven by destination station_type
     if (_expenseMode == 'NFW' && _nfwType == 'Meeting') {
       double daAmount;
       if (stationType == 'OS') {
@@ -1079,6 +1078,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       }
       _nfwDaAmount = daAmount;
       _manualDaController.text = daAmount.toStringAsFixed(2);
+    }
+
+    // For FIELD mode: override DA type/amount based on destination station_type
+    if (_expenseMode == 'FIELD' && _calcData != null) {
+      String daType;
+      double daAmount;
+      if (stationType == 'OS') {
+        daType = 'OS';
+        daAmount = (_allRates['da_os'] as num?)?.toDouble() ?? _toDouble(_calcData!['da_amount']);
+      } else if (stationType == 'EXHQ') {
+        daType = 'EX';
+        daAmount = (_allRates['da_exhq'] as num?)?.toDouble() ?? _toDouble(_calcData!['da_amount']);
+      } else {
+        daType = 'HQ';
+        daAmount = (_allRates['da_hq_non_metro'] as num?)?.toDouble() ?? _toDouble(_calcData!['da_amount']);
+      }
+      _fieldDaTypeOverride = daType;
+      _fieldDaAmountOverride = daAmount;
     }
 
     _baseRouteKm = km;
@@ -1201,6 +1218,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     _baseRouteKm = 0;
                     _baseRouteFare = 0;
                     _destStationType = null;
+                    _fieldDaTypeOverride = null;
+                    _fieldDaAmountOverride = null;
                     _manualKmController.clear();
                     _manualTaController.clear();
                   });
@@ -1596,8 +1615,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Widget _buildDaCard() {
-    final daType = (_calcData!['da_type'] ?? 'HQ').toString().toUpperCase();
-    final daAmount = _toDouble(_calcData!['da_amount']);
+    final daType = (_fieldDaTypeOverride ?? (_calcData!['da_type'] ?? 'HQ')).toString().toUpperCase();
+    final daAmount = _fieldDaAmountOverride ?? _toDouble(_calcData!['da_amount']);
     final labels = {
       'HQ': 'HQ Daily Allowance',
       'EX': 'Ex-HQ Daily Allowance',
@@ -1761,21 +1780,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   fontSize: 13,
                   color: Colors.grey.shade700)),
           const SizedBox(height: 14),
-          TextField(
-            controller: _otherAmtController,
-            keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Other Expenses (Toll, Parking, Misc)',
-              prefixText: '₹ ',
-              border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide:
-                      const BorderSide(color: Color(0xFF4A148C))),
-            ),
-          ),
+          _buildOtherExpensesSection(),
           const SizedBox(height: 12),
           TextField(
             controller: _remarkController,
@@ -1908,6 +1913,164 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  // ─── Other Expenses Section ───────────────────────────────────────────────────
+
+  Widget _buildOtherExpensesSection() {
+    final total = _totalOtherAmount;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('Other Expenses',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade600)),
+            const Spacer(),
+            if (!_isLocked)
+              TextButton.icon(
+                onPressed: _showAddOtherExpenseSheet,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Add', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF4A148C),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                ),
+              ),
+          ],
+        ),
+        if (_otherExpenses.isEmpty)
+          InkWell(
+            onTap: _isLocked ? null : _showAddOtherExpenseSheet,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.add_circle_outline, color: Colors.grey.shade400, size: 16),
+                  const SizedBox(width: 8),
+                  Text('Toll, Parking, Courier, Food Bill…',
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                ],
+              ),
+            ),
+          )
+        else ...[
+          const SizedBox(height: 6),
+          ...List.generate(_otherExpenses.length,
+              (i) => _buildOtherExpenseRow(i, _otherExpenses[i])),
+          Container(
+            margin: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Total Other',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                Text('₹${_fmt(total)}',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildOtherExpenseRow(int index, OtherExpenseItem item) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDE7F6),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(item.type,
+                style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF4A148C))),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: item.amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              enabled: !_isLocked,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              decoration: const InputDecoration(
+                prefixText: '₹ ',
+                border: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+            ),
+          ),
+          if (item.bill != null) ...[
+            const SizedBox(width: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: Image.file(item.bill!, width: 30, height: 30, fit: BoxFit.cover),
+            ),
+          ],
+          if (!_isLocked) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: () {
+                item.dispose();
+                setState(() => _otherExpenses.removeAt(index));
+                _recalculateTotal();
+              },
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration:
+                    const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                child: const Icon(Icons.close, size: 12, color: Colors.white),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  void _showAddOtherExpenseSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AddOtherExpenseSheet(
+        onAdd: (type, amount, bill) {
+          final item = OtherExpenseItem(
+              type: type, amount: amount.toStringAsFixed(2), bill: bill);
+          item.amountController.addListener(_recalculateTotal);
+          setState(() => _otherExpenses.add(item));
+          _recalculateTotal();
+        },
+      ),
     );
   }
 
@@ -2112,13 +2275,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 : _calcData!['total_km'].toString());
         payload = {
           'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
-          'da_type': _calcData!['da_type'].toString(),
-          'da_amount': _calcData!['da_amount'].toString(),
+          'da_type': _fieldDaTypeOverride ?? _calcData!['da_type'].toString(),
+          'da_amount': (_fieldDaAmountOverride ?? _toDouble(_calcData!['da_amount'])).toStringAsFixed(2),
           'ta_distance': kmAuto,
-          'ta_amount': _calcData!['ta_amount'].toString(),
-          'other_amount': _otherAmtController.text.trim().isEmpty
-              ? '0'
-              : _otherAmtController.text.trim(),
+          'ta_amount': (_autoTaFare > 0 ? _autoTaFare : _toDouble(_calcData!['ta_amount'])).toStringAsFixed(2),
+          'other_amount': _totalOtherAmount.toStringAsFixed(2),
           'remarks': _remarkController.text.trim(),
           ...travelFields,
         };
@@ -2129,13 +2290,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
           'da_type': _nfwType == 'Transit'
               ? 'TRANSIT_DA'
-              : _nfwType.toUpperCase(), // MEETING | TRAINING | TRANSIT_DA
+              : _nfwType.toUpperCase(),
           'da_amount': daAmt.toStringAsFixed(2),
-          'ta_distance': '0',
-          'ta_amount': '0',
-          'other_amount': _otherAmtController.text.trim().isEmpty
-              ? '0'
-              : _otherAmtController.text.trim(),
+          'ta_distance': _autoTaKm.toStringAsFixed(2),
+          'ta_amount': _autoTaFare.toStringAsFixed(2),
+          'other_amount': _totalOtherAmount.toStringAsFixed(2),
           'remarks': _remarkController.text.trim(),
           'mode_of_travel': _modeOfTravel,
           'start_location': _userHq ?? 'HQ',
@@ -2161,9 +2320,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           'da_amount': '0',
           'ta_distance': kmTransit,
           'ta_amount': taTransit,
-          'other_amount': _otherAmtController.text.trim().isEmpty
-              ? '0'
-              : _otherAmtController.text.trim(),
+          'other_amount': _totalOtherAmount.toStringAsFixed(2),
           'remarks': _remarkController.text.trim(),
           'mode_of_travel': _modeOfTravel,
           'start_location': _transitFromTown ?? _userHq ?? 'HQ',
@@ -2171,7 +2328,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         };
       }
 
-      await ApiService().submitExpense(payload, _attachments);
+      await ApiService().submitExpense(
+        payload,
+        _attachments,
+        otherItems: _otherExpenses
+            .map((e) => {'type': e.type, 'amount': e.amount.toStringAsFixed(2), 'bill': e.bill})
+            .toList(),
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2197,4 +2360,217 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   String _fmt(double v) =>
       v == v.truncateToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+}
+
+// ─── Add Other Expense Bottom Sheet ──────────────────────────────────────────
+
+class _AddOtherExpenseSheet extends StatefulWidget {
+  final void Function(String type, double amount, File? bill) onAdd;
+  const _AddOtherExpenseSheet({required this.onAdd});
+
+  @override
+  State<_AddOtherExpenseSheet> createState() => _AddOtherExpenseSheetState();
+}
+
+class _AddOtherExpenseSheetState extends State<_AddOtherExpenseSheet> {
+  static const _types = ['Toll', 'Courier', 'Parking', 'Food Bill', 'Others'];
+  String _selectedType = 'Toll';
+  final _amtController = TextEditingController();
+  final _customTypeController = TextEditingController();
+  File? _bill;
+
+  @override
+  void dispose() {
+    _amtController.dispose();
+    _customTypeController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        left: 20,
+        right: 20,
+        top: 8,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Text('Add Other Expense',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
+          const SizedBox(height: 16),
+
+          // Type chips
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: _types.map((t) {
+              final sel = _selectedType == t;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedType = t),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: sel ? const Color(0xFF4A148C) : const Color(0xFFEDE7F6),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(t,
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: sel ? Colors.white : const Color(0xFF4A148C))),
+                ),
+              );
+            }).toList(),
+          ),
+
+          if (_selectedType == 'Others') ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _customTypeController,
+              decoration: InputDecoration(
+                labelText: 'Describe expense',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF4A148C))),
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+
+          TextField(
+            controller: _amtController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: 'Amount',
+              prefixText: '₹ ',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFF4A148C))),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Bill attachment
+          InkWell(
+            onTap: () async {
+              final choice = await showModalBottomSheet<String>(
+                context: context,
+                builder: (_) => SafeArea(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ListTile(
+                          leading: const Icon(Icons.camera_alt),
+                          title: const Text('Camera'),
+                          onTap: () => Navigator.pop(context, 'camera')),
+                      ListTile(
+                          leading: const Icon(Icons.photo_library),
+                          title: const Text('Gallery'),
+                          onTap: () => Navigator.pop(context, 'gallery')),
+                    ],
+                  ),
+                ),
+              );
+              if (choice == null || !mounted) return;
+              final picked = await ImagePicker().pickImage(
+                source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+                imageQuality: 70,
+              );
+              if (picked != null && mounted) setState(() => _bill = File(picked.path));
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: _bill != null ? Colors.green.shade50 : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: _bill != null
+                        ? Colors.green.shade300
+                        : Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _bill != null ? Icons.check_circle : Icons.camera_alt_outlined,
+                    color: _bill != null ? Colors.green : Colors.grey.shade500,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _bill != null ? 'Bill Attached' : 'Attach Bill (Optional)',
+                      style: TextStyle(
+                          color: _bill != null
+                              ? Colors.green.shade700
+                              : Colors.grey.shade600,
+                          fontSize: 13),
+                    ),
+                  ),
+                  if (_bill != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: Image.file(_bill!, width: 36, height: 36, fit: BoxFit.cover),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4A148C),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape:
+                    RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                final amount = double.tryParse(_amtController.text);
+                if (amount == null || amount <= 0) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Enter a valid amount')));
+                  return;
+                }
+                final type =
+                    _selectedType == 'Others' && _customTypeController.text.trim().isNotEmpty
+                        ? _customTypeController.text.trim()
+                        : _selectedType;
+                Navigator.pop(context);
+                widget.onAdd(type, amount, _bill);
+              },
+              child: Text('Add Expense',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600, fontSize: 15)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

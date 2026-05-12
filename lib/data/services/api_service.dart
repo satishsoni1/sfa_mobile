@@ -778,7 +778,11 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
   }
 
   // Submit Expense with Image
-  Future<void> submitExpense(Map<String, String> payload, List<File> attachments) async {
+  Future<void> submitExpense(
+    Map<String, String> payload,
+    List<File> attachments, {
+    List<Map<String, dynamic>> otherItems = const [],
+  }) async {
     final token = await getToken();
     var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/app/expense/submit'));
     request.headers.addAll({
@@ -790,6 +794,18 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       request.files.add(
         await http.MultipartFile.fromPath('attachments[]', file.path),
       );
+    }
+    // Itemized other expenses (Toll, Courier, Parking, Food Bill, etc.)
+    for (var i = 0; i < otherItems.length; i++) {
+      final item = otherItems[i];
+      request.fields['other_items[$i][type]'] = item['type']?.toString() ?? 'Other';
+      request.fields['other_items[$i][amount]'] = item['amount']?.toString() ?? '0';
+      final bill = item['bill'] as File?;
+      if (bill != null) {
+        request.files.add(
+          await http.MultipartFile.fromPath('other_bills[$i]', bill.path),
+        );
+      }
     }
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
