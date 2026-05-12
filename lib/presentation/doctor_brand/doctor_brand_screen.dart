@@ -103,13 +103,22 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
       body: NestedScrollView(
         headerSliverBuilder: (_, __) => [
           SliverAppBar(
-            expandedHeight: 140,
+            expandedHeight: 160,
             pinned: true,
             backgroundColor: _purple,
             foregroundColor: Colors.white,
             elevation: 0,
-            title: Text('Dr. Brands',
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 17)),
+            title: Padding(
+              padding: const EdgeInsets.only(bottom: 04),
+            
+              child: Text(
+                'Dr. Brands',
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 17,
+                ),
+              ),
+             ),
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(
@@ -123,7 +132,7 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
                   child: Align(
                     alignment: Alignment.bottomCenter,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 52),
+                      padding: const EdgeInsets.fromLTRB(16, 52, 16, 52),
                       child: Row(
                         children: [
                           _statPill(Icons.medication_outlined, '${_brands.length}', 'Brands'),
@@ -329,7 +338,7 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
                     children: [
                       Icon(Icons.star_rounded, size: 13, color: Colors.amber.shade700),
                       const SizedBox(width: 5),
-                      Text('Target  ',
+                      Text('Preferred Speciality   ',
                           style: TextStyle(
                               fontSize: 11,
                               color: Colors.amber.shade800,
