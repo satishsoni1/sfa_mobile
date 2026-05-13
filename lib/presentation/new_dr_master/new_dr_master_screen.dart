@@ -80,6 +80,18 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   int _countCore3Group(SpecialityTarget g, List<NewDoctor> docs) =>
       docs.where((d) => g.contains(d.specialtyPracticeType) && d.visitCategory == 'CORE_3').length;
 
+  // Full MCL counts the complete doctor list, including "No target" specialities.
+  int _countFullMclDoctors(List<NewDoctor> docs) =>
+      docs.where((d) => d.specialtyPracticeType.isNotEmpty).length;
+
+  int get _fullMclRequiredTotal =>
+      _mslTargets.fold(0, (sum, t) => sum + t.quota);
+
+  // Full MCL allowance stays data-driven from the backend target.
+  int _fullMclMinAllowed(int required) => (required * 0.9).ceil();
+
+  int _fullMclMaxAllowed(int required) => (required * 11) ~/ 10;
+
   Map<String, int> _categoryCounts(List<NewDoctor> docs) {
     final map = {'CORE_3': 0, 'FRD_2': 0, 'KBL': 0, 'REMAINING': 0, 'UNSET': 0};
     for (final d in docs) {
@@ -91,8 +103,10 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
 
   bool get _allTargetsMet {
     if (_mslTargets.isEmpty && _kblTargets.isEmpty && _core3Targets.isEmpty) return false;
-    for (final t in _mslTargets) {
-      if (t.quota > 0 && _countGroup(t, _myDoctors) < t.quota) return false;
+    final fullMclRequired = _fullMclRequiredTotal;
+    if (fullMclRequired > 0 &&
+        _countFullMclDoctors(_myDoctors) < fullMclRequired) {
+      return false;
     }
     for (final t in _kblTargets) {
       if (t.quota > 0 && _countKblGroup(t, _myDoctors) < t.quota) return false;
@@ -103,15 +117,16 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     return true;
   }
 
-  // Allows submission when Full MCL is within 10% of target (≥90% filled).
+  // Allows submission when Full MCL is within the complete-list allowance.
   // KBL and CORE_3 quotas must still be fully met.
   bool get _canSubmit {
     if (_mslTargets.isEmpty && _kblTargets.isEmpty && _core3Targets.isEmpty) return false;
-    for (final t in _mslTargets) {
-      if (t.quota > 0) {
-        final minRequired = (t.quota * 0.9).ceil();
-        if (_countGroup(t, _myDoctors) < minRequired) return false;
-      }
+    final fullMclRequired = _fullMclRequiredTotal;
+    if (fullMclRequired > 0) {
+      final fullMclAdded = _countFullMclDoctors(_myDoctors);
+      final minAllowed = _fullMclMinAllowed(fullMclRequired);
+      final maxAllowed = _fullMclMaxAllowed(fullMclRequired);
+      if (fullMclAdded < minAllowed || fullMclAdded > maxAllowed) return false;
     }
     for (final t in _kblTargets) {
       if (t.quota > 0 && _countKblGroup(t, _myDoctors) < t.quota) return false;
@@ -631,7 +646,8 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   // ── 3 Speciality Summary Cards ─────────────────────────────────────────────
 
   Widget _buildMslSummaryCard(List<NewDoctor> docs) {
-    int totalQ = 0, totalA = 0;
+    int totalQ = 0;
+    final totalA = _countFullMclDoctors(docs);
     // Collect all specialities NOT covered by any MSL group (extras)
     final allGroupSp = _mslTargets.expand((t) => t.specialities).toSet();
     final extraSp = docs
@@ -645,7 +661,6 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     for (final t in _mslTargets) {
       final added = _countGroup(t, docs);
       totalQ += t.quota;
-      totalA += added;
       rows.add(_TableRow(
         label: t.category,
         subLabel: t.specialities.join(' · '),
@@ -1012,15 +1027,11 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     }
     if (_isLoadingTargets) return const SizedBox.shrink();
 
-    // MSL within 10% tolerance — allow submission with a notice
+    // Full MCL within complete-list allowance — allow submission with a notice.
+    // Full MCL total uses actual doctors added, including "No target" rows.
     if (_canSubmit) {
-      int totalRequired = 0, totalAdded = 0;
-      for (final t in _mslTargets) {
-        if (t.quota > 0) {
-          totalRequired += t.quota;
-          totalAdded += _countGroup(t, _myDoctors);
-        }
-      }
+      final totalRequired = _fullMclRequiredTotal;
+      final totalAdded = _countFullMclDoctors(_myDoctors);
       return Column(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1036,7 +1047,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
               Text('MSL nearly complete ($totalAdded / $totalRequired)',
                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
                       color: Colors.amber.shade900)),
-              Text('Within 10% allowance — you may submit now.',
+              Text('Within Full MCL allowance — you may submit now.',
                   style: TextStyle(fontSize: 11, color: Colors.amber.shade800)),
             ])),
           ]),
@@ -1046,14 +1057,10 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
       ]);
     }
 
-    int totalRequired = 0, totalAdded = 0;
-    for (final t in _mslTargets) {
-      if (t.quota > 0) {
-        totalRequired += t.quota;
-        totalAdded += _countGroup(t, _myDoctors);
-      }
-    }
-    final stillNeeded = (totalRequired - totalAdded).clamp(0, totalRequired);
+    final totalRequired = _fullMclRequiredTotal;
+    final totalAdded = _countFullMclDoctors(_myDoctors);
+    final minAllowed = _fullMclMinAllowed(totalRequired);
+    final stillNeeded = (minAllowed - totalAdded).clamp(0, minAllowed);
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

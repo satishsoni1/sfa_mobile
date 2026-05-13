@@ -396,14 +396,14 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
     final sp = _specPracticeType;
     if (sp == null || sp.isEmpty) return null;
 
-    // Full MCL list limit — count all docs in the same MCL group
-    final mslGroup = _findGroup(widget.mslTargets);
-    if (mslGroup != null && mslGroup.quota > 0) {
-      final count = _otherDoctors
-          .where((d) => mslGroup.contains(d.specialtyPracticeType))
-          .length;
-      if (count + 1 > mslGroup.quota) {
-        return '${mslGroup.category} complete list limit reached (${mslGroup.quota}/${mslGroup.quota}).';
+    // Full MCL complete-list cap only: users can exceed individual required
+    // speciality counts, but cannot add beyond +10% of the overall MCL target.
+    final fullMclTarget =
+        widget.mslTargets.fold<int>(0, (sum, t) => sum + t.quota);
+    if (fullMclTarget > 0) {
+      final maxAllowed = (fullMclTarget * 11) ~/ 10;
+      if (_otherDoctors.length + 1 > maxAllowed) {
+        return 'Full MCL complete list limit reached ($maxAllowed max for $fullMclTarget target).';
       }
     }
 
