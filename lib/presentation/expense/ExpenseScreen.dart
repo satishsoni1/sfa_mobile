@@ -115,7 +115,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _manualDaController.addListener(_recalculateTotal);
     _manualTaController.addListener(_recalculateTotal);
     _loadTaRoutes();
-    _loadAllExpenseRates();
+    _loadAllExpenseRates(); 
     _fetchCalculation();
   }
 
