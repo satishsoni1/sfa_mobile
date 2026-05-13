@@ -1052,6 +1052,31 @@ Future<void> submitFullMonth(int month, int year) async {
         json.decode(response.body)['message'] ?? 'Failed to load NFW rate');
   }
 
+  /// POST /app/expense/recalculate-location
+  /// Sends explicit from_town + to_town so the server can compute
+  /// TA (FIXED / train-slab / km×3.5) and DA (by station_type) for that route.
+  /// Returns {da_type, da_amount, total_km, road_km, ta_amount, ta_mode, station_type, from_town, to_town}
+  Future<Map<String, dynamic>> recalculateOnLastLocation(
+      String date, String fromTown, String toTown) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/expense/recalculate-location'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({
+        'date'      : date,
+        'from_town' : fromTown,
+        'to_town'   : toTown,
+      }),
+    );
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception(
+        json.decode(response.body)['message'] ?? 'Recalculation failed');
+  }
+
   // ─── Locations Master ────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getLocations() async {

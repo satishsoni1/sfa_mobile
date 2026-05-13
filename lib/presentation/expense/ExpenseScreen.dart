@@ -65,6 +65,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _isTwoWay = false;
   double _baseRouteKm = 0;
   double _baseRouteFare = 0;
+  bool _isRecalculating = false; // true while server recalc API call is in flight
+  String _serverTaMode = 'road'; // 'road' | 'train' — returned by recalculate API
 
   // Itemized other expenses (Toll, Courier, Parking, Food Bill, Others)
   List<OtherExpenseItem> _otherExpenses = [];
@@ -987,8 +989,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void _onDestinationSelected(String? town) {
     if (town == null) return;
 
-    // Same from and to → lock at 0 km, skip route lookup
     final from = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
+
+    // Same from/to → zero km
     if (from.isNotEmpty && from.toLowerCase() == town.toLowerCase()) {
       _baseRouteKm = 0;
       _baseRouteFare = 0;
@@ -1006,10 +1009,89 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       return;
     }
 
-    // 1. Resolve station_type for the selected destination
-    final locationRoutes = _taRoutes
-        .where((r) => r['to_town_code']?.toString() == town)
-        .toList();
+    setState(() => _endLocation = town);
+
+    // FIELD mode: server recalculates full day route with all policies applied
+    if (_expenseMode == 'FIELD') {
+      _recalculateFromServer(town);
+    } else {
+      // NFW / TRANSIT: local lookup from _taRoutes
+      _recalculateFromLocalRoutes(town);
+    }
+  }
+
+  /// Called when last location changes in FIELD mode.
+  /// Hits recalculate-location API which applies:
+  ///   FIXED mode → fare, road km >150 → train slab, else km×3.5
+  ///   DA from station_type (OS > EX > HQ)
+  Future<void> _recalculateFromServer(String toTown) async {
+    // Resolve the from location the same way _onDestinationSelected does
+    final fromTown = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
+    if (fromTown.isEmpty) {
+      _recalculateFromLocalRoutes(toTown);
+      return;
+    }
+
+    setState(() => _isRecalculating = true);
+    try {
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final result  = await ApiService()
+          .recalculateOnLastLocation(dateStr, fromTown, toTown);
+      if (!mounted) return;
+
+      final totalKm  = (result['total_km']  as num?)?.toDouble() ?? 0;
+      final fare     = (result['ta_amount'] as num?)?.toDouble() ?? 0;
+      final taMode   = result['ta_mode']?.toString() ?? 'road';
+      final daType   = (result['da_type']?.toString() ?? 'HQ').toUpperCase();
+      final daAmount = (result['da_amount'] as num?)?.toDouble() ?? 0;
+
+      // Use station_type from server response when available;
+      // otherwise derive it from da_type for the badge display
+      final rawStation = result['station_type']?.toString() ?? '';
+      String stationType;
+      if (rawStation.contains('OS') || rawStation.contains('OUT')) {
+        stationType = 'OS';
+      } else if (rawStation.contains('EX')) {
+        stationType = 'EXHQ';
+      } else {
+        stationType = daType == 'OS' ? 'OS' : daType == 'EX' ? 'EXHQ' : 'HQ';
+      }
+
+      _baseRouteKm   = totalKm;
+      _baseRouteFare = fare;
+
+      setState(() {
+        _serverTaMode          = taMode;
+        _destStationType       = stationType;
+        _fieldDaTypeOverride   = daType;
+        _fieldDaAmountOverride = daAmount;
+        _autoTaKm   = _isTwoWay ? totalKm * 2 : totalKm;
+        _autoTaFare = _isTwoWay ? fare    * 2 : fare;
+        _manualKmController.text = _autoTaKm.toStringAsFixed(1);
+        _manualTaController.text = _autoTaFare.toStringAsFixed(2);
+      });
+      _recalculateTotal();
+    } catch (_) {
+      // Fallback to local route table if server call fails
+      _recalculateFromLocalRoutes(toTown);
+    } finally {
+      if (mounted) setState(() => _isRecalculating = false);
+    }
+  }
+
+  /// NFW / TRANSIT local fare lookup from _taRoutes.
+  /// Supports A→B and B→A vice-versa.
+  /// FIXED mode_of_travel → uses fare column directly.
+  void _recalculateFromLocalRoutes(String town) {
+    final from = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
+
+    // Resolve station_type for DA
+    final locationRoutes = _taRoutes.where((r) {
+      final to = (r['to_town_code']?.toString() ?? '').toLowerCase();
+      final fr = (r['from_town_code']?.toString() ?? '').toLowerCase();
+      return to == town.toLowerCase() || fr == town.toLowerCase();
+    }).toList();
+
     String stationType = 'HQ';
     if (locationRoutes.isNotEmpty) {
       final raw = (locationRoutes.first['station_type']?.toString() ?? '').toUpperCase();
@@ -1017,37 +1099,26 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         stationType = 'OS';
       } else if (raw.contains('EX')) {
         stationType = 'EXHQ';
-      } else {
-        stationType = 'HQ';
       }
     }
 
-    // 2. Find the best matching route for TA (from already declared above)
-    bool routeMatches(Map r, String f, String t) {
-      final rFrom = (r['from_town_code']?.toString() ?? '').toLowerCase();
-      final rTo = (r['to_town_code']?.toString() ?? '').toLowerCase();
-      return rFrom == f.toLowerCase() && rTo == t.toLowerCase();
-    }
+    // Route candidates: A→B then B→A (vice versa)
+    bool matches(Map r, String f, String t) =>
+        (r['from_town_code']?.toString() ?? '').toLowerCase() == f.toLowerCase() &&
+        (r['to_town_code']?.toString() ?? '').toLowerCase() == t.toLowerCase();
 
-    // Try A→B first, fall back to B→A (symmetric routes)
-    var candidates = _taRoutes.where((r) => routeMatches(r, from, town)).toList();
-    if (candidates.isEmpty && from.isNotEmpty) {
-      candidates = _taRoutes.where((r) => routeMatches(r, town, from)).toList();
-    }
-    // If still nothing, loosen: match either end of the town
+    var candidates = _taRoutes.where((r) => matches(r, from, town)).toList();
     if (candidates.isEmpty) {
-      candidates = _taRoutes
-          .where((r) =>
-              (r['to_town_code']?.toString() ?? '').toLowerCase() == town.toLowerCase() ||
-              (r['from_town_code']?.toString() ?? '').toLowerCase() == town.toLowerCase())
-          .toList();
+      candidates = _taRoutes.where((r) => matches(r, town, from)).toList();
+    }
+    if (candidates.isEmpty) {
+      candidates = locationRoutes;
     }
 
     double km = 0, ta = 0;
     if (candidates.isNotEmpty) {
-      // Auto-select mode of travel from route (e.g. Train)
-      final autoModeRaw = candidates.first['mode_of_travel']?.toString() ?? '';
-      final autoMode = _normalizeModeOfTravel(autoModeRaw);
+      final autoMode = _normalizeModeOfTravel(
+          candidates.first['mode_of_travel']?.toString() ?? '');
       if (autoMode != null) _modeOfTravel = autoMode;
 
       final route = candidates.firstWhere(
@@ -1055,55 +1126,40 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             _modeOfTravel.toLowerCase(),
         orElse: () => candidates.first,
       );
+
       km = double.tryParse(route['kms']?.toString() ?? '0') ?? 0;
       final fareRaw = route['fare']?.toString() ?? '';
       final fareFromTable = (fareRaw == 'EMPTY' || fareRaw.isEmpty)
           ? 0.0
           : (double.tryParse(fareRaw) ?? 0.0);
-      // Bike: per-km rate; Train/others: use table fare; fallback per-km
-      ta = _modeOfTravel == 'Bike'
-          ? km * 3.5
-          : (fareFromTable > 0 ? fareFromTable : km * 3.5);
+      final modeUpper = (route['mode_of_travel']?.toString() ?? '').toUpperCase();
+
+      // Fare policy: FIXED → table fare, Bike → km×3.5, others → table fare or km×3.5
+      if (modeUpper == 'FIXED') {
+        ta = fareFromTable;
+      } else if (_modeOfTravel == 'Bike') {
+        ta = km * 3.5;
+      } else {
+        ta = fareFromTable > 0 ? fareFromTable : km * 3.5;
+      }
     }
 
-    // 3. DA rate driven by destination station_type
+    // DA: NFW Meeting adjusts by station_type
     if (_expenseMode == 'NFW' && _nfwType == 'Meeting') {
-      double daAmount;
-      if (stationType == 'OS') {
-        daAmount = (_allRates['da_os'] as num?)?.toDouble() ?? _nfwDaAmount;
-      } else if (stationType == 'EXHQ') {
-        daAmount = (_allRates['da_exhq'] as num?)?.toDouble() ?? _nfwDaAmount;
-      } else {
-        daAmount = (_allRates['da_hq_non_metro'] as num?)?.toDouble() ?? _nfwDaAmount;
-      }
+      final daAmount = stationType == 'OS'
+          ? ((_allRates['da_os'] as num?)?.toDouble() ?? _nfwDaAmount)
+          : stationType == 'EXHQ'
+              ? ((_allRates['da_exhq'] as num?)?.toDouble() ?? _nfwDaAmount)
+              : ((_allRates['da_hq_non_metro'] as num?)?.toDouble() ?? _nfwDaAmount);
       _nfwDaAmount = daAmount;
       _manualDaController.text = daAmount.toStringAsFixed(2);
     }
 
-    // For FIELD mode: override DA type/amount based on destination station_type
-    if (_expenseMode == 'FIELD' && _calcData != null) {
-      String daType;
-      double daAmount;
-      if (stationType == 'OS') {
-        daType = 'OS';
-        daAmount = (_allRates['da_os'] as num?)?.toDouble() ?? _toDouble(_calcData!['da_amount']);
-      } else if (stationType == 'EXHQ') {
-        daType = 'EX';
-        daAmount = (_allRates['da_exhq'] as num?)?.toDouble() ?? _toDouble(_calcData!['da_amount']);
-      } else {
-        daType = 'HQ';
-        daAmount = (_allRates['da_hq_non_metro'] as num?)?.toDouble() ?? _toDouble(_calcData!['da_amount']);
-      }
-      _fieldDaTypeOverride = daType;
-      _fieldDaAmountOverride = daAmount;
-    }
-
-    _baseRouteKm = km;
+    _baseRouteKm  = km;
     _baseRouteFare = ta;
     setState(() {
-      _endLocation = town;
       _destStationType = stationType;
-      _autoTaKm = _isTwoWay ? km * 2 : km;
+      _autoTaKm   = _isTwoWay ? km * 2 : km;
       _autoTaFare = _isTwoWay ? ta * 2 : ta;
       _manualKmController.text = _autoTaKm.toStringAsFixed(1);
       _manualTaController.text = _autoTaFare.toStringAsFixed(2);
@@ -1678,12 +1734,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Widget _buildTaCard() {
-    // SFA route-based values take precedence when destination is selected
-    final sfaBased  = _autoTaKm > 0;
-    final totalKm   = sfaBased ? _autoTaKm   : _toDouble(_calcData!['total_km']);
-    final taAmount  = sfaBased ? _autoTaFare  : _toDouble(_calcData!['ta_amount']);
-    final taLabel   = sfaBased ? 'Travel Allowance (SFA Route)' : 'Travel Allowance (DCR Route)';
-    final taColor   = sfaBased ? Colors.teal  : Colors.green;
+    final sfaBased = _autoTaKm > 0;
+    final isTrain  = _serverTaMode == 'train';
+    final totalKm  = sfaBased ? _autoTaKm  : _toDouble(_calcData!['total_km']);
+    final taAmount = sfaBased ? _autoTaFare : _toDouble(_calcData!['ta_amount']);
+
+    final taColor = isTrain ? Colors.indigo : (sfaBased ? Colors.teal : Colors.green);
+    final taLabel = isTrain
+        ? 'Travel Allowance (Train)'
+        : sfaBased
+            ? 'Travel Allowance (SFA Route)'
+            : 'Travel Allowance (DCR Route)';
+    final taIcon = isTrain ? Icons.train : Icons.directions_car_outlined;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1691,74 +1753,111 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: sfaBased ? Colors.teal.shade200 : Colors.grey.shade200)),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-                color: taColor.shade50,
-                borderRadius: BorderRadius.circular(12)),
-            child: Icon(Icons.directions_car_outlined,
-                color: taColor.shade700, size: 26),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Text(taLabel,
-                      style: TextStyle(
-                          fontSize: 12, color: Colors.grey.shade600)),
-                  if (sfaBased && _modeOfTravel == 'Bike') ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 2),
-                      decoration: BoxDecoration(
-                          color: Colors.teal.shade600,
-                          borderRadius: BorderRadius.circular(4)),
-                      child: const Text('₹3.5/km',
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold)),
-                    ),
+              color: isTrain
+                  ? Colors.indigo.shade200
+                  : sfaBased
+                      ? Colors.teal.shade200
+                      : Colors.grey.shade200)),
+      child: _isRecalculating
+          ? const SizedBox(
+              height: 72,
+              child: Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2)),
+                    SizedBox(width: 12),
+                    Text('Recalculating fare…',
+                        style: TextStyle(fontSize: 13, color: Colors.grey)),
                   ],
-                ]),
-                const SizedBox(height: 4),
-                Text('₹${_fmt(taAmount)}',
-                    style: GoogleFonts.poppins(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: taColor.shade700)),
-                if (sfaBased && _destStationType != null)
-                  Row(children: [
-                    _buildStationTypeBadge(_destStationType),
-                    const SizedBox(width: 6),
-                    Text('→ $_endLocation',
+                ),
+              ),
+            )
+          : Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      color: taColor.shade50,
+                      borderRadius: BorderRadius.circular(12)),
+                  child: Icon(taIcon, color: taColor.shade700, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(taLabel,
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.grey.shade600)),
+                          if (isTrain) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: Colors.indigo.shade600,
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: const Text('TRAIN',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ] else if (sfaBased && _modeOfTravel == 'Bike') ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: Colors.teal.shade600,
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: const Text('₹3.5/km',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text('₹${_fmt(taAmount)}',
+                          style: GoogleFonts.poppins(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: taColor.shade700)),
+                      if (sfaBased && _destStationType != null)
+                        Row(children: [
+                          _buildStationTypeBadge(_destStationType),
+                          const SizedBox(width: 6),
+                          Text('→ $_endLocation',
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.grey.shade500)),
+                        ]),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('${_fmt(totalKm)} km',
                         style: TextStyle(
-                            fontSize: 10, color: Colors.grey.shade500)),
-                  ]),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: taColor.shade700)),
+                    Text(isTrain ? 'train km' : sfaBased ? 'SFA km' : 'DCR km',
+                        style:
+                            TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                  ],
+                ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text('${_fmt(totalKm)} km',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: sfaBased ? Colors.teal.shade700 : null)),
-              Text(sfaBased ? 'SFA km' : 'DCR km',
-                  style: TextStyle(
-                      fontSize: 10, color: Colors.grey.shade500)),
-            ],
-          ),
-        ],
-      ),
     );
   }
 
