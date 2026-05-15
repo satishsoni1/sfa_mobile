@@ -322,8 +322,14 @@ class ApiService {
     return [];
   }
 
-  Future<List<dynamic>> getExternalLinks() async {
-    final response = await http.get(Uri.parse('$baseUrl/links'));
+  Future<List<dynamic>> getExternalLinks({String? employeeCode}) async {
+    // Send employee code to /links so backend can prepare the final URLs.
+    final uri = employeeCode == null || employeeCode.isEmpty
+        ? Uri.parse('$baseUrl/links')
+        : Uri.parse('$baseUrl/links').replace(
+            queryParameters: {'employee_code': employeeCode},
+          );
+    final response = await http.get(uri);
 
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
@@ -875,10 +881,13 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
     if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to reject');
   }
 
-  Future<List<Map<String, dynamic>>> getBrands() async {
+  Future<List<Map<String, dynamic>>> getBrands({int? userId}) async {
     final token = await getToken();
+    final uri = userId != null
+        ? Uri.parse('$baseUrl/app/brands?user_id=$userId')
+        : Uri.parse('$baseUrl/app/brands');
     final response = await http.get(
-      Uri.parse('$baseUrl/app/brands'),
+      uri,
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
     );
     if (response.statusCode == 200) {
@@ -887,10 +896,13 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
     throw Exception('Failed to load brands');
   }
 
-  Future<Map<String, dynamic>> getBrandDoctors(int brandId) async {
+  Future<Map<String, dynamic>> getBrandDoctors(int brandId, {int? userId}) async {
     final token = await getToken();
+    final uri = userId != null
+        ? Uri.parse('$baseUrl/app/brands/$brandId/doctors?user_id=$userId')
+        : Uri.parse('$baseUrl/app/brands/$brandId/doctors');
     final response = await http.get(
-      Uri.parse('$baseUrl/app/brands/$brandId/doctors'),
+      uri,
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
     );
     if (response.statusCode == 200) return json.decode(response.body);
@@ -914,6 +926,58 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
     );
     if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to remove doctor');
+  }
+
+  Future<void> submitBrandsForApproval() async {
+    final token = await getToken();
+    final user = await getUser();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/brands/submit'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      // Backend receives the logged-in user's id explicitly, matching the brand list fetch.
+      body: jsonEncode({'user_id': user?.employeeId}),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to submit brands for approval');
+    }
+  }
+
+  Future<void> approveBrandList(int userId) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/brands/$userId/approve'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to approve brand list');
+    }
+  }
+
+  Future<void> rejectBrandList(int userId, String reason) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/brands/$userId/reject'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to reject brand list');
+    }
   }
 
   Future<List<Map<String, dynamic>>> getMyDoctorList() async {
@@ -2020,11 +2084,14 @@ Future<void> submitFullMonth(int month, int year) async {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getDoctorBrandSummary() async {
+  Future<List<Map<String, dynamic>>> getDoctorBrandSummary({int? userId}) async {
     try {
       final token = await getToken();
+      final uri = userId != null
+          ? Uri.parse('$baseUrl/app/brands/doctor-summary?user_id=$userId')
+          : Uri.parse('$baseUrl/app/brands/doctor-summary');
       final response = await http.get(
-        Uri.parse('$baseUrl/app/brands/doctor-summary'),
+        uri,
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );
       if (response.statusCode == 200) {

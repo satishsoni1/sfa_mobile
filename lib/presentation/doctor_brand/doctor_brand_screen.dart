@@ -19,8 +19,20 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
 
   List<Map<String, dynamic>> _brands = [];
   List<Map<String, dynamic>> _doctorSummary = [];
+  List<Map<String, dynamic>> _teamBrands = [];
+  List<dynamic> _subordinates = [];
+  int? _selectedSubId;
   bool _isLoadingBrands = true;
   bool _isLoadingSummary = false;
+  bool _isLoadingTeamBrands = false;
+  bool _isSubmitting = false;
+  bool _isApproving = false;
+  bool _isRejecting = false;
+
+  String? _myApprovalStatus;
+  String? _myRejectionReason;
+  String? _subApprovalStatus;
+  String? _subRejectionReason;
 
   String _summarySpecialityFilter = 'All';
 
@@ -53,12 +65,22 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
   int get _totalTagCount =>
       _brands.fold(0, (s, b) => s + (int.tryParse(b['doctor_count']?.toString() ?? '0') ?? 0));
 
+  bool get _isMyListLocked =>
+      _myApprovalStatus == 'pending' || _myApprovalStatus == 'approved';
+
+  bool get _allBrandQuotasComplete =>
+      _brands.isNotEmpty && _brands.every((b) {
+        final quota = int.tryParse(b['quota']?.toString() ?? '0') ?? 0;
+        final count = int.tryParse(b['doctor_count']?.toString() ?? '0') ?? 0;
+        return quota <= 0 || count >= quota;
+      });
+
   // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() {
       if (_tabController.index == 1 && _doctorSummary.isEmpty && !_isLoadingSummary) {
         _loadDoctorSummary();
@@ -67,6 +89,7 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
     });
     _searchCtrl.addListener(() => setState(() {}));
     _loadBrands();
+    _loadSubordinates();
   }
 
   @override
@@ -79,8 +102,15 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
   Future<void> _loadBrands() async {
     setState(() => _isLoadingBrands = true);
     try {
-      final brands = await ApiService().getBrands();
-      if (mounted) setState(() => _brands = brands);
+      final user = await ApiService().getUser();
+      final brands = await ApiService().getBrands(userId: user?.employeeId);
+      if (mounted) {
+        setState(() {
+          _brands = brands;
+          _myApprovalStatus = _readApprovalStatus(brands);
+          _myRejectionReason = _readRejectionReason(brands);
+        });
+      }
     } catch (_) {}
     if (mounted) setState(() => _isLoadingBrands = false);
   }
@@ -92,6 +122,190 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
       if (mounted) setState(() => _doctorSummary = data);
     } catch (_) {}
     if (mounted) setState(() => _isLoadingSummary = false);
+  }
+
+  Future<void> _loadSubordinates() async {
+    try {
+      final list = await ApiService().getSubordinates();
+      if (mounted) setState(() => _subordinates = list);
+    } catch (_) {}
+  }
+
+  Future<void> _loadTeamBrands(int userId) async {
+    setState(() {
+      _isLoadingTeamBrands = true;
+      _subApprovalStatus = null;
+      _subRejectionReason = null;
+    });
+    try {
+      final brands = await ApiService().getBrands(userId: userId);
+      if (mounted) {
+        setState(() {
+          _teamBrands = brands;
+          _subApprovalStatus = _readApprovalStatus(brands);
+          _subRejectionReason = _readRejectionReason(brands);
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _teamBrands = []);
+    }
+    if (mounted) setState(() => _isLoadingTeamBrands = false);
+  }
+
+  Future<void> _submitForApproval() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.send_outlined, color: _purple),
+          SizedBox(width: 10),
+          Text('Submit for Approval',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        ]),
+        content: const Text(
+          'Submit brands list for manager approval?',
+          style: TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _purple,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      await ApiService().submitBrandsForApproval();
+      if (mounted) {
+        setState(() => _myApprovalStatus = 'pending');
+        await _loadBrands();
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Brands list submitted for approval!'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+    if (mounted) setState(() => _isSubmitting = false);
+  }
+
+  Future<void> _approveBrandList() async {
+    if (_selectedSubId == null) return;
+    setState(() => _isApproving = true);
+    try {
+      await ApiService().approveBrandList(_selectedSubId!);
+      if (mounted) {
+        setState(() => _subApprovalStatus = 'approved');
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Brands list approved!'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+    if (mounted) setState(() => _isApproving = false);
+  }
+
+  Future<void> _showRejectDialog() async {
+    final reasonCtrl = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          Icon(Icons.cancel_outlined, color: Colors.red.shade600),
+          const SizedBox(width: 10),
+          const Text('Reject List',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Please provide a reason for rejection:',
+                style: TextStyle(fontSize: 13)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonCtrl,
+              maxLines: 3,
+              decoration: InputDecoration(
+                hintText: 'Enter rejection reason...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                contentPadding: const EdgeInsets.all(10),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(context, reasonCtrl.text.trim()),
+            child: const Text('Reject'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null) return;
+    await _rejectBrandList(reason);
+  }
+
+  Future<void> _rejectBrandList(String reason) async {
+    if (_selectedSubId == null) return;
+    setState(() => _isRejecting = true);
+    try {
+      await ApiService().rejectBrandList(_selectedSubId!, reason);
+      if (mounted) {
+        setState(() {
+          _subApprovalStatus = 'rejected';
+          _subRejectionReason = reason;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Brands list rejected.'),
+          backgroundColor: Colors.orange,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Failed: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    }
+    if (mounted) setState(() => _isRejecting = false);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -155,13 +369,13 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
               indicatorWeight: 3,
               labelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
               unselectedLabelStyle: GoogleFonts.poppins(fontWeight: FontWeight.w400, fontSize: 13),
-              tabs: const [Tab(text: 'Brands'), Tab(text: 'Dr. Summary')],
+              tabs: const [Tab(text: 'Brands'), Tab(text: 'Dr. Summary'), Tab(text: 'Team View')],
             ),
           ),
         ],
         body: TabBarView(
           controller: _tabController,
-          children: [_buildBrandsTab(), _buildSummaryTab()],
+          children: [_buildBrandsTab(), _buildSummaryTab(), _buildTeamTab()],
         ),
       ),
     );
@@ -214,6 +428,11 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
             ),
           ),
         ),
+        if (!_isLoadingBrands)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
+            child: _buildSubmitSection(),
+          ),
         Expanded(
           child: _isLoadingBrands
               ? const Center(child: CircularProgressIndicator())
@@ -233,10 +452,16 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
     );
   }
 
-  Widget _buildBrandCard(Map<String, dynamic> brand) {
+  Widget _buildBrandCard(
+    Map<String, dynamic> brand, {
+    bool readOnly = false,
+    int? targetUserId,
+  }) {
     final name = brand['name']?.toString() ?? '';
     final division = brand['division']?.toString() ?? '';
     final count = int.tryParse(brand['doctor_count']?.toString() ?? '0') ?? 0;
+    final quota = int.tryParse(brand['quota']?.toString() ?? '0') ?? 0;
+    final quotaMet = quota > 0 && count >= quota;
     final preferredSps = _parsePreferredSpecialities(brand['preferred_specialities']);
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final color = _brandColor(name);
@@ -246,9 +471,17 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
       child: InkWell(
         onTap: () async {
           await Navigator.push(context,
-              MaterialPageRoute(builder: (_) => BrandDoctorScreen(brand: brand)));
-          _loadBrands();
-          if (_tabController.index == 1) _loadDoctorSummary();
+              MaterialPageRoute(builder: (_) => BrandDoctorScreen(
+                brand: brand,
+                targetUserId: targetUserId,
+                readOnly: readOnly || _isMyListLocked,
+              )));
+          if (targetUserId == null) {
+            _loadBrands();
+            if (_tabController.index == 1) _loadDoctorSummary();
+          } else {
+            _loadTeamBrands(targetUserId);
+          }
         },
         borderRadius: BorderRadius.circular(14),
         child: Container(
@@ -306,17 +539,18 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
+                      color: quotaMet ? Colors.green.shade50 : color.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
+                      border: quotaMet ? Border.all(color: Colors.green.shade200) : null,
                     ),
                     child: Column(children: [
-                      Text('$count',
+                      Text(quota > 0 ? '$count/$quota' : '$count',
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                              color: color)),
+                              fontSize: quota > 0 ? 14 : 18,
+                              color: quotaMet ? Colors.green.shade700 : color)),
                       Text('Drs',
-                          style: TextStyle(fontSize: 9, color: color)),
+                          style: TextStyle(fontSize: 9, color: quotaMet ? Colors.green.shade700 : color)),
                     ]),
                   ),
                   const SizedBox(width: 4),
@@ -371,6 +605,59 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTeamTab() {
+    final brands = _teamBrands.where((b) {
+      final q = _searchCtrl.text.toLowerCase();
+      if (q.isEmpty) return true;
+      return (b['name'] ?? '').toString().toLowerCase().contains(q) ||
+          (b['division'] ?? '').toString().toLowerCase().contains(q);
+    }).toList();
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        if (_selectedSubId != null) await _loadTeamBrands(_selectedSubId!);
+      },
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+        children: [
+          if (_subordinates.isNotEmpty) ...[
+            _buildSubordinatePicker(),
+            const SizedBox(height: 10),
+          ],
+          if (_selectedSubId != null) ...[
+            _buildSubApprovalBanner(),
+            if (_subApprovalStatus == 'pending') ...[
+              const SizedBox(height: 8),
+              _buildApprovalButtons(),
+            ],
+            const SizedBox(height: 8),
+          ],
+          _buildSectionHeader(
+            _selectedSubId == null ? 'Select a team member' : '${brands.length} Brands',
+          ),
+          if (_isLoadingTeamBrands)
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_selectedSubId == null)
+            _emptyState(Icons.people_outline, 'Select a team member above to view their brands')
+          else if (brands.isEmpty)
+            _emptyState(Icons.medication_outlined, 'No brands found for selected member')
+          else
+            ...brands.map((b) => Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _buildBrandCard(
+                    b,
+                    readOnly: true,
+                    targetUserId: _selectedSubId,
+                  ),
+                )),
+        ],
       ),
     );
   }
@@ -559,6 +846,243 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
         ],
       ),
     );
+  }
+
+  Widget _buildSubmitSection() {
+    if (_myApprovalStatus == 'approved') {
+      return _statusBanner(
+        icon: Icons.verified,
+        color: Colors.green,
+        title: 'List Approved!',
+        subtitle: 'Your brands list has been approved by your manager.',
+      );
+    }
+    if (_myApprovalStatus == 'pending') {
+      return _statusBanner(
+        icon: Icons.hourglass_empty,
+        color: Colors.blue,
+        title: 'Pending Approval',
+        subtitle: 'Your brands list is submitted and awaiting manager review.',
+      );
+    }
+    if (_myApprovalStatus == 'rejected') {
+      return Column(children: [
+        _statusBanner(
+          icon: Icons.cancel,
+          color: Colors.red,
+          title: 'List Rejected',
+          subtitle: (_myRejectionReason != null && _myRejectionReason!.isNotEmpty)
+              ? 'Reason: $_myRejectionReason'
+              : 'Please update your brands and re-submit.',
+        ),
+        if (_allBrandQuotasComplete) ...[
+          const SizedBox(height: 8),
+          _submitButton(label: 'Re-submit brands list for approval'),
+        ],
+      ]);
+    }
+    if (_allBrandQuotasComplete) {
+      return Column(children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [Colors.green.shade400, Colors.green.shade600]),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Row(children: [
+            Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+            SizedBox(width: 10),
+            Expanded(child: Text('All brand quotas completed. Ready to submit.',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white))),
+          ]),
+        ),
+        const SizedBox(height: 8),
+        _submitButton(label: 'Submit brands list for approval'),
+      ]);
+    }
+    return const SizedBox.shrink();
+  }
+
+  Widget _submitButton({required String label}) {
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _purple,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          elevation: 2,
+        ),
+        onPressed: _isSubmitting ? null : _submitForApproval,
+        icon: _isSubmitting
+            ? const SizedBox(width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            : const Icon(Icons.send_outlined, size: 18),
+        label: Text(_isSubmitting ? 'Submitting...' : label,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+      ),
+    );
+  }
+
+  Widget _buildSubordinatePicker() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: _selectedSubId,
+          hint: const Text('Select team member'),
+          isExpanded: true,
+          items: _subordinates.map((s) {
+            final id = int.tryParse(s['id']?.toString() ?? '0') ?? 0;
+            final name = s['name']?.toString() ?? 'Unknown';
+            return DropdownMenuItem(value: id, child: Text(name));
+          }).toList(),
+          onChanged: (id) {
+            if (id == null) return;
+            setState(() => _selectedSubId = id);
+            _loadTeamBrands(id);
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubApprovalBanner() {
+    if (_subApprovalStatus == null) {
+      return _statusBanner(
+        icon: Icons.info_outline,
+        color: Colors.orange,
+        title: 'Not Submitted',
+        subtitle: 'This team member has not submitted brands for approval yet.',
+      );
+    }
+    switch (_subApprovalStatus) {
+      case 'approved':
+        return _statusBanner(
+          icon: Icons.verified,
+          color: Colors.green,
+          title: 'List Approved',
+          subtitle: 'This brands list has been approved.',
+        );
+      case 'pending':
+        return _statusBanner(
+          icon: Icons.hourglass_empty,
+          color: Colors.blue,
+          title: 'Pending Approval',
+          subtitle: 'List submitted and awaiting your review.',
+        );
+      default:
+        return _statusBanner(
+          icon: Icons.cancel,
+          color: Colors.red,
+          title: 'Previously Rejected',
+          subtitle: (_subRejectionReason != null && _subRejectionReason!.isNotEmpty)
+              ? 'Reason: $_subRejectionReason'
+              : 'This brands list was rejected.',
+        );
+    }
+  }
+
+  Widget _buildApprovalButtons() {
+    return Row(children: [
+      Expanded(
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: _isApproving || _isRejecting ? null : _approveBrandList,
+          icon: _isApproving
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.check_circle_outline, size: 18),
+          label: Text(_isApproving ? 'Approving...' : 'Approve',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        ),
+      ),
+      const SizedBox(width: 10),
+      Expanded(
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red.shade600,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: _isApproving || _isRejecting ? null : _showRejectDialog,
+          icon: _isRejecting
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.cancel_outlined, size: 18),
+          label: Text(_isRejecting ? 'Rejecting...' : 'Reject',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        ),
+      ),
+    ]);
+  }
+
+  Widget _statusBanner({
+    required IconData icon,
+    required MaterialColor color,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.shade300),
+      ),
+      child: Row(children: [
+        Icon(icon, color: color.shade600, size: 22),
+        const SizedBox(width: 10),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title,
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+                  color: color.shade800)),
+          Text(subtitle,
+              style: TextStyle(fontSize: 11, color: color.shade600)),
+        ])),
+      ]),
+    );
+  }
+
+  Widget _buildSectionHeader(String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(children: [
+        Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+        const SizedBox(width: 10),
+        Text(label,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                color: Colors.grey.shade500)),
+        const SizedBox(width: 10),
+        Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+      ]),
+    );
+  }
+
+  String? _readApprovalStatus(List<Map<String, dynamic>> brands) {
+    if (brands.isEmpty) return null;
+    final raw = brands.first['approval_status'] ??
+        brands.first['brand_approval_status'] ??
+        brands.first['status'];
+    final status = raw?.toString().toLowerCase();
+    if (status == 'submitted') return 'pending';
+    if (status == 'pending' || status == 'approved' || status == 'rejected') return status;
+    return null;
+  }
+
+  String? _readRejectionReason(List<Map<String, dynamic>> brands) {
+    if (brands.isEmpty) return null;
+    return (brands.first['rejection_reason'] ?? brands.first['reject_reason'])?.toString();
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────────

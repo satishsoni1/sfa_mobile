@@ -24,7 +24,8 @@ class _ExternalLinksScreenState extends State<ExternalLinksScreen> {
   }
 
   Future<List<_ExternalLink>> _loadLinks() async {
-    final response = await ApiService().getExternalLinks();
+    final response =
+        await ApiService().getExternalLinks(employeeCode: widget.employeeCode);
 
     return response
         .whereType<Map<String, dynamic>>()
@@ -36,25 +37,9 @@ class _ExternalLinksScreenState extends State<ExternalLinksScreen> {
   }
 
   String _buildEmployeeUrl(String rawUrl) {
+    // Employee code is already sent while fetching /links; use backend URLs as-is.
     final uri = Uri.tryParse(rawUrl.trim());
-    if (uri == null) return rawUrl;
-
- if (uri.host == 'zorvia.globalspace.in' &&
-        uri.pathSegments.contains('dcrapproval')) {
-      final pathSegments = uri.pathSegments
-          .where((segment) => segment.isNotEmpty)
-          .toList();
-      return uri
-          .replace(pathSegments: [...pathSegments, widget.employeeCode])
-          .toString();
-    }
-
-    // Other backend links can have different URL shapes, so employee_code is
-    // added as a query parameter instead of assuming every system accepts /CODE.
-    final updatedParams = Map<String, String>.from(uri.queryParameters);
-    updatedParams['employee_code'] = widget.employeeCode;
-
-    return uri.replace(queryParameters: updatedParams).toString();
+    return uri?.toString() ?? rawUrl;
   }
 
  Future<void> _openLink(_ExternalLink link) async {

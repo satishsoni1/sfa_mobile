@@ -402,7 +402,10 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
         widget.mslTargets.fold<int>(0, (sum, t) => sum + t.quota);
     if (fullMclTarget > 0) {
       final maxAllowed = (fullMclTarget * 11) ~/ 10;
-      if (_otherDoctors.length + 1 > maxAllowed) {
+      final fullMclCount = _otherDoctors
+          .where((d) => d.specialtyPracticeType.isNotEmpty)
+          .length;
+      if (fullMclCount + 1 > maxAllowed) {
         return 'Full MCL complete list limit reached ($maxAllowed max for $fullMclTarget target).';
       }
     }

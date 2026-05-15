@@ -4,7 +4,14 @@ import '../../data/services/api_service.dart';
 
 class BrandDoctorScreen extends StatefulWidget {
   final Map<String, dynamic> brand;
-  const BrandDoctorScreen({super.key, required this.brand});
+  final int? targetUserId;
+  final bool readOnly;
+  const BrandDoctorScreen({
+    super.key,
+    required this.brand,
+    this.targetUserId,
+    this.readOnly = false,
+  });
 
   @override
   State<BrandDoctorScreen> createState() => _BrandDoctorScreenState();
@@ -17,6 +24,8 @@ class _BrandDoctorScreenState extends State<BrandDoctorScreen> {
 
   int get _brandId => int.tryParse(widget.brand['id']?.toString() ?? '0') ?? 0;
   String get _brandName => widget.brand['name']?.toString() ?? '';
+  int get _quota => int.tryParse(widget.brand['quota']?.toString() ?? '0') ?? 0;
+  bool get _isQuotaFull => _quota > 0 && _doctors.length >= _quota;
 
   @override
   void initState() {
@@ -27,7 +36,7 @@ class _BrandDoctorScreenState extends State<BrandDoctorScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final data = await ApiService().getBrandDoctors(_brandId);
+      final data = await ApiService().getBrandDoctors(_brandId, userId: widget.targetUserId);
       if (mounted) {
         setState(() {
           _doctors = List<Map<String, dynamic>>.from(data['data'] ?? []);
@@ -66,6 +75,7 @@ class _BrandDoctorScreenState extends State<BrandDoctorScreen> {
   }
 
   Future<void> _removeDoctor(int doctorId) async {
+    if (widget.readOnly) return;
     try {
       await ApiService().removeDoctorFromBrand(_brandId, doctorId);
       setState(() => _doctors.removeWhere(
@@ -79,12 +89,21 @@ class _BrandDoctorScreenState extends State<BrandDoctorScreen> {
   }
 
   Future<void> _openAddSheet() async {
+    // Brand quota validation: once the backend quota is filled, no more doctors can be added.
+    if (_isQuotaFull) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Quota already fulfilled for $_brandName ($_quota/$_quota).'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
     final added = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => _AddDoctorSheet(
         brandId: _brandId,
+        quotaRemaining: _quota > 0 ? (_quota - _doctors.length) : null,
         alreadyAdded: _doctors
             .map((d) => int.tryParse(d['id']?.toString() ?? '0') ?? 0)
             .toSet(),
@@ -121,17 +140,52 @@ class _BrandDoctorScreenState extends State<BrandDoctorScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openAddSheet,
-        backgroundColor: const Color(0xFF4A148C),
-        icon: const Icon(Icons.person_add, color: Colors.white),
-        label: const Text('Add Doctor',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-      ),
+      floatingActionButton: widget.readOnly
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _openAddSheet,
+              backgroundColor: const Color(0xFF4A148C),
+              icon: const Icon(Icons.person_add, color: Colors.white),
+              label: const Text('Add Doctor',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
+                if (_quota > 0)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _isQuotaFull ? Colors.green.shade50 : Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _isQuotaFull ? Colors.green.shade200 : Colors.orange.shade200,
+                      ),
+                    ),
+                    child: Row(children: [
+                      Icon(
+                        _isQuotaFull ? Icons.check_circle_outline : Icons.track_changes,
+                        color: _isQuotaFull ? Colors.green.shade700 : Colors.orange.shade700,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _isQuotaFull
+                              ? 'Brand quota fulfilled ($_quota/$_quota)'
+                              : '${_doctors.length}/$_quota doctors added',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: _isQuotaFull ? Colors.green.shade800 : Colors.orange.shade800,
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ),
                 // Speciality filter chips
                 if (_specialities.length > 1)
                   Container(
@@ -277,12 +331,13 @@ class _BrandDoctorScreenState extends State<BrandDoctorScreen> {
               ],
             ),
           ),
-          IconButton(
-            icon: const Icon(Icons.remove_circle_outline,
-                color: Colors.red, size: 20),
-            onPressed: () => _confirmRemove(id, name),
-            tooltip: 'Remove',
-          ),
+          if (!widget.readOnly)
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline,
+                  color: Colors.red, size: 20),
+              onPressed: () => _confirmRemove(id, name),
+              tooltip: 'Remove',
+            ),
         ],
       ),
     );
@@ -381,8 +436,13 @@ class _BrandDoctorScreenState extends State<BrandDoctorScreen> {
 
 class _AddDoctorSheet extends StatefulWidget {
   final int brandId;
+  final int? quotaRemaining;
   final Set<int> alreadyAdded;
-  const _AddDoctorSheet({required this.brandId, required this.alreadyAdded});
+  const _AddDoctorSheet({
+    required this.brandId,
+    required this.alreadyAdded,
+    required this.quotaRemaining,
+  });
 
   @override
   State<_AddDoctorSheet> createState() => _AddDoctorSheetState();
@@ -444,6 +504,13 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
 
   Future<void> _save() async {
     if (_selected.isEmpty) return;
+    if (widget.quotaRemaining != null && _selected.length > widget.quotaRemaining!) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('You can add only ${widget.quotaRemaining} more doctor(s) to this brand.'),
+        backgroundColor: Colors.orange,
+      ));
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       await ApiService().addDoctorsToBrand(widget.brandId, _selected.toList());
@@ -503,6 +570,17 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
                               fontWeight: FontWeight.bold,
                               fontSize: 12)),
                     ),
+                  if (widget.quotaRemaining != null) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '${widget.quotaRemaining} left',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -560,6 +638,16 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
                               value: sel,
                               activeColor: const Color(0xFF4A148C),
                               onChanged: (v) {
+                                // Prevent selecting more doctors than the remaining brand quota.
+                                if (v == true &&
+                                    widget.quotaRemaining != null &&
+                                    _selected.length >= widget.quotaRemaining!) {
+                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                    content: Text('Brand quota allows only ${widget.quotaRemaining} more doctor(s).'),
+                                    backgroundColor: Colors.orange,
+                                  ));
+                                  return;
+                                }
                                 setState(() {
                                   if (v == true) {
                                     _selected.add(id);
