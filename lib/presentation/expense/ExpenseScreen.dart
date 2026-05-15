@@ -1004,7 +1004,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _manualTaController.clear();
       });
       _recalculateTotal();
-      return;
+      //return;
     }
 
     setState(() => _endLocation = town);
