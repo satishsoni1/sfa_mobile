@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -846,7 +846,7 @@ class _AddClaimSheet extends StatefulWidget {
 class _AddClaimSheetState extends State<_AddClaimSheet> {
   String _selectedType = 'Mobile';
   final _amtController = TextEditingController();
-  File? _billFile;
+  PlatformFile? _billFile;
   bool _isSubmitting = false;
   double? _mobileRate;
   double? _internetRate;
@@ -1044,7 +1044,16 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
                 final picked = await ImagePicker()
                     .pickImage(source: src, imageQuality: 70);
                 if (picked != null) {
-                  setState(() => _billFile = File(picked.path));
+                  // CHANGED: Read bytes directly into memory for Web support
+                  final bytes = await picked.readAsBytes();
+                  
+                  setState(() {
+                    _billFile = PlatformFile(
+                      name: picked.name,
+                      size: bytes.length,
+                      bytes: bytes,
+                    );
+                  });
                 }
               }
             },
@@ -1078,11 +1087,15 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
                               : Colors.grey.shade600),
                     ),
                   ),
-                  if (_billFile != null)
+                  if (_billFile != null && _billFile!.bytes != null)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: Image.file(_billFile!,
-                          width: 40, height: 40, fit: BoxFit.cover),
+                      child: Image.memory(
+                          _billFile!.bytes!,
+                          width: 40, 
+                          height: 40, 
+                          fit: BoxFit.cover
+                      ),
                     ),
                 ],
               ),

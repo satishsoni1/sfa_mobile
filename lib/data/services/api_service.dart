@@ -778,35 +778,54 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
   }
 
   // Submit Expense with Image
+  // Submit Expense with Image (WEB SAFE)
   Future<void> submitExpense(
     Map<String, String> payload,
-    List<File> attachments, {
+    List<PlatformFile> attachments, { // CHANGED: from List<File> to List<PlatformFile>
     List<Map<String, dynamic>> otherItems = const [],
   }) async {
     final token = await getToken();
     var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/app/expense/submit'));
+    
     request.headers.addAll({
       'Authorization': 'Bearer $token',
       'Accept': 'application/json',
     });
+    
     request.fields.addAll(payload);
+    
+    // CHANGED: Use fromBytes for Web compatibility
     for (final file in attachments) {
-      request.files.add(
-        await http.MultipartFile.fromPath('attachments[]', file.path),
-      );
+      if (file.bytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'attachments[]', 
+            file.bytes!, 
+            filename: file.name
+          ),
+        );
+      }
     }
+    
     // Itemized other expenses (Toll, Courier, Parking, Food Bill, etc.)
     for (var i = 0; i < otherItems.length; i++) {
       final item = otherItems[i];
       request.fields['other_items[$i][type]'] = item['type']?.toString() ?? 'Other';
       request.fields['other_items[$i][amount]'] = item['amount']?.toString() ?? '0';
-      final bill = item['bill'] as File?;
-      if (bill != null) {
+      
+      // CHANGED: Ensure the UI passes a PlatformFile here instead of dart:io File
+      final bill = item['bill'] as PlatformFile?; 
+      if (bill != null && bill.bytes != null) {
         request.files.add(
-          await http.MultipartFile.fromPath('other_bills[$i]', bill.path),
+          http.MultipartFile.fromBytes(
+            'other_bills[$i]', 
+            bill.bytes!, 
+            filename: bill.name
+          ),
         );
       }
     }
+    
     var streamedResponse = await request.send();
     var response = await http.Response.fromStream(streamedResponse);
     if (response.statusCode != 200) {
@@ -1879,32 +1898,42 @@ Future<void> submitFullMonth(int month, int year) async {
   }
 
   // POST add a monthly claim — amount auto-fetched server-side for Mobile/Internet
+  // POST add a monthly claim (WEB SAFE)
   Future<void> addMonthlyClaim({
     required int month,
     required int year,
     required String claimType,
-    double? amount, // null for Mobile/Internet (server fetches from expense_rates)
-    File? bill,
+    double? amount,
+    PlatformFile? bill, // CHANGED: from File to PlatformFile
   }) async {
     final token = await getToken();
     final request = http.MultipartRequest(
       'POST',
       Uri.parse('$baseUrl/app/expense/monthly-claim'),
     );
+    
     request.headers.addAll({
       'Authorization': 'Bearer $token',
       'Accept': 'application/json',
     });
+    
     request.fields['month'] = month.toString();
     request.fields['year'] = year.toString();
     request.fields['claim_type'] = claimType;
+    
     if (amount != null) {
       request.fields['amount'] = amount.toString();
     }
 
-    if (bill != null) {
+    // CHANGED: Use fromBytes for Web compatibility
+    if (bill != null && bill.bytes != null) {
       request.files.add(
-          await http.MultipartFile.fromPath('bill', bill.path));
+        http.MultipartFile.fromBytes(
+          'bill', 
+          bill.bytes!, 
+          filename: bill.name
+        )
+      );
     }
 
     final streamed = await request.send();

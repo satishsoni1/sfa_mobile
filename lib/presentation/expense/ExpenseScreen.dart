@@ -1,8 +1,6 @@
-import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../data/services/api_service.dart';
 
@@ -10,7 +8,7 @@ import '../../data/services/api_service.dart';
 class OtherExpenseItem {
   String type;
   final TextEditingController amountController;
-  File? bill;
+  PlatformFile? bill;
 
   OtherExpenseItem({required this.type, String amount = '', this.bill})
       : amountController = TextEditingController(text: amount);
@@ -39,7 +37,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   String? _expenseMode; // 'FIELD', 'NFW', 'TRANSIT'
   bool _isLoading = false;
   bool _isSubmitting = false;
-  List<File> _attachments = [];
+  List<PlatformFile> _attachments = [];
   double _displayTotal = 0.0;
   bool _isLocked = false;
 
@@ -1935,7 +1933,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             runSpacing: 8,
             children: List.generate(_attachments.length, (i) {
               final file = _attachments[i];
-              final ext = file.path.split('.').last.toLowerCase();
+              final ext = file.extension?.toLowerCase() ?? '';
               final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
               return Stack(
                 clipBehavior: Clip.none,
@@ -1948,11 +1946,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       border: Border.all(color: Colors.grey.shade300),
                       color: Colors.grey.shade100,
                     ),
-                    child: isImage
+                    child: isImage && file.bytes != null
                         ? ClipRRect(
                             borderRadius: BorderRadius.circular(7),
-                            child: Image.file(file,
-                                fit: BoxFit.cover, width: 68, height: 68),
+                            child: Image.memory(
+  file.bytes!,
+  fit: BoxFit.cover,
+  width: 68,
+  height: 68,
+),
                           )
                         : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -2128,11 +2130,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
             ),
           ),
-          if (item.bill != null) ...[
+          if (item.bill != null && item.bill!.bytes != null) ...[
             const SizedBox(width: 6),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: Image.file(item.bill!, width: 30, height: 30, fit: BoxFit.cover),
+              child: Image.memory(item.bill!.bytes!, width: 30, height: 30, fit: BoxFit.cover),
             ),
           ],
           if (!_isLocked) ...[
@@ -2174,59 +2176,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Future<void> _pickAttachment() async {
-    final choice = await showModalBottomSheet<String>(
-      context: context,
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
-                onTap: () => Navigator.pop(context, 'camera')),
-            ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Gallery (multiple)'),
-                onTap: () => Navigator.pop(context, 'gallery')),
-            ListTile(
-                leading: const Icon(Icons.attach_file),
-                title: const Text('File / PDF'),
-                onTap: () => Navigator.pop(context, 'file')),
-          ],
-        ),
-      ),
-    );
-    if (choice == null || !mounted) return;
-    if (choice == 'camera') {
-      final picked = await ImagePicker()
-          .pickImage(source: ImageSource.camera, imageQuality: 70);
-      if (picked != null && mounted) {
-        setState(() => _attachments.add(File(picked.path)));
-      }
-    } else if (choice == 'gallery') {
-      final picked = await ImagePicker().pickMultiImage(imageQuality: 70);
-      if (mounted) {
-        setState(() {
-          for (final img in picked) {
-            _attachments.add(File(img.path));
-          }
-        });
-      }
-    } else {
-      final result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
-      );
-      if (result != null && mounted) {
-        setState(() {
-          for (final f in result.files) {
-            if (f.path != null) _attachments.add(File(f.path!));
-          }
-        });
-      }
-    }
+  final result = await FilePicker.platform.pickFiles(
+    allowMultiple: true,
+    type: FileType.any,
+    withData: true,
+  );
+
+  if (result != null) {
+    setState(() {
+      _attachments.addAll(result.files);
+    });
   }
+}
 
   // ─── Locked Details Card ──────────────────────────────────────────────────────
 
@@ -2464,7 +2425,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 // ─── Add Other Expense Bottom Sheet ──────────────────────────────────────────
 
 class _AddOtherExpenseSheet extends StatefulWidget {
-  final void Function(String type, double amount, File? bill) onAdd;
+  final void Function(String type, double amount, PlatformFile? bill) onAdd;
   const _AddOtherExpenseSheet({required this.onAdd});
 
   @override
@@ -2476,7 +2437,7 @@ class _AddOtherExpenseSheetState extends State<_AddOtherExpenseSheet> {
   String _selectedType = 'Toll';
   final _amtController = TextEditingController();
   final _customTypeController = TextEditingController();
-  File? _bill;
+  PlatformFile? _bill;
 
   @override
   void dispose() {
@@ -2574,30 +2535,13 @@ class _AddOtherExpenseSheetState extends State<_AddOtherExpenseSheet> {
           // Bill attachment
           InkWell(
             onTap: () async {
-              final choice = await showModalBottomSheet<String>(
-                context: context,
-                builder: (_) => SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                          leading: const Icon(Icons.camera_alt),
-                          title: const Text('Camera'),
-                          onTap: () => Navigator.pop(context, 'camera')),
-                      ListTile(
-                          leading: const Icon(Icons.photo_library),
-                          title: const Text('Gallery'),
-                          onTap: () => Navigator.pop(context, 'gallery')),
-                    ],
-                  ),
-                ),
+              final result = await FilePicker.platform.pickFiles(
+                type: FileType.image,
+                withData: true,
               );
-              if (choice == null || !mounted) return;
-              final picked = await ImagePicker().pickImage(
-                source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
-                imageQuality: 70,
-              );
-              if (picked != null && mounted) setState(() => _bill = File(picked.path));
+              if (result != null && result.files.isNotEmpty && mounted) {
+                setState(() => _bill = result.files.first);
+              }
             },
             borderRadius: BorderRadius.circular(10),
             child: Container(
@@ -2628,10 +2572,10 @@ class _AddOtherExpenseSheetState extends State<_AddOtherExpenseSheet> {
                           fontSize: 13),
                     ),
                   ),
-                  if (_bill != null)
+                  if (_bill != null && _bill!.bytes != null)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(6),
-                      child: Image.file(_bill!, width: 36, height: 36, fit: BoxFit.cover),
+                      child: Image.memory(_bill!.bytes!, width: 36, height: 36, fit: BoxFit.cover),
                     ),
                 ],
               ),
