@@ -294,6 +294,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     final total = _toDouble(item['da_amount']) +
         _toDouble(item['ta_amount']) +
         _toDouble(item['other_amount']);
+    final fromLoc = (item['from_location'] ?? item['start_location'] ?? '').toString();
+    final toLoc = (item['to_location'] ?? item['end_location'] ?? '').toString();
+    final taDir = (item['ta_direction'] ?? 'one_way').toString();
+    final hotelBillClaimed =
+        item['hotel_bill_claimed'] == 1 || item['hotel_bill_claimed'] == true;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -353,6 +358,57 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       'DA ₹${_fmt(_toDouble(item['da_amount']))}  •  TA ${_fmt(_toDouble(item['ta_distance']))}km ₹${_fmt(_toDouble(item['ta_amount']))}  •  Other ₹${_fmt(_toDouble(item['other_amount']))}',
                       style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                     ),
+                    if (fromLoc.isNotEmpty || toLoc.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Icon(Icons.location_on,
+                              size: 10, color: Colors.grey.shade400),
+                          const SizedBox(width: 3),
+                          Expanded(
+                            child: Text(
+                              [
+                                if (fromLoc.isNotEmpty) fromLoc,
+                                if (toLoc.isNotEmpty) toLoc,
+                              ].join(' → '),
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.grey.shade500),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (taDir == 'two_way') ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: Text('2-way',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                          if (hotelBillClaimed) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                  color: Colors.green.shade50,
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: Text('Hotel Bill',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      color: Colors.green.shade700,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

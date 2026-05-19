@@ -1083,6 +1083,37 @@ Future<void> submitFullMonth(int month, int year) async {
     return {};
   }
 
+  Future<Map<String, dynamic>> getCalendarStatus(int month, int year) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/calendar-status?month=$month&year=$year'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(json.decode(response.body));
+      }
+    } catch (_) {}
+    return {};
+  }
+
+  Future<List<Map<String, dynamic>>> getGstBills(int month, int year, {int? employeeId}) async {
+    try {
+      final token = await getToken();
+      var url = '$baseUrl/app/expense/gst-bills?month=$month&year=$year';
+      if (employeeId != null) url += '&employee_id=$employeeId';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(body['data'] ?? body);
+      }
+    } catch (_) {}
+    return [];
+  }
+
   // ─── Expense TA Routes (expense_rates_ta) ───────────────────────────────────
 
   Future<Map<String, dynamic>> getTransitFromLocation(String date) async {
@@ -1140,8 +1171,16 @@ Future<void> submitFullMonth(int month, int year) async {
   /// TA (FIXED / train-slab / km×3.5) and DA (by station_type) for that route.
   /// Returns {da_type, da_amount, total_km, road_km, ta_amount, ta_mode, station_type, from_town, to_town}
   Future<Map<String, dynamic>> recalculateOnLastLocation(
-      String date, String fromTown, String toTown) async {
+      String date, String fromTown, String toTown, {String? nfwType}) async {
     final token = await getToken();
+    final body = <String, dynamic>{
+      'date'      : date,
+      'from_town' : fromTown,
+      'to_town'   : toTown,
+    };
+    if (nfwType != null && nfwType.isNotEmpty) {
+      body['nfw_type'] = nfwType.toLowerCase();
+    }
     final response = await http.post(
       Uri.parse('$baseUrl/app/expense/recalculate-location'),
       headers: {
@@ -1149,11 +1188,7 @@ Future<void> submitFullMonth(int month, int year) async {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
       },
-      body: json.encode({
-        'date'      : date,
-        'from_town' : fromTown,
-        'to_town'   : toTown,
-      }),
+      body: json.encode(body),
     );
     if (response.statusCode == 200) return json.decode(response.body);
     throw Exception(

@@ -1,8 +1,26 @@
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../data/services/api_service.dart';
+
+// Per-attachment GST metadata
+class _AttachmentMeta {
+  bool isGst = false;
+  String billType = 'other';
+  String gstNumber = '';
+  String vendorName = '';
+  double billAmount = 0;
+
+  Map<String, dynamic> toJson() => {
+        'is_gst': isGst ? 1 : 0,
+        'bill_type': billType,
+        'gst_number': gstNumber,
+        'vendor_name': vendorName,
+        'bill_amount': billAmount,
+      };
+}
 
 // Represents one itemized other-expense entry (Toll, Courier, Parking, etc.)
 class OtherExpenseItem {
@@ -46,31 +64,43 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   String? _startLocation;
   String? _endLocation;
   String? _fromLocation; // NFW / TRANSIT from dropdown
-  double? _endLocationKm; // km_from_hq of selected end location
+  double? _endLocationKm;
   List<Map<String, dynamic>> _taRoutes = [];
   String? _userHq;
-  double _autoTaKm = 0;
-  double _autoTaFare = 0;
   double _nfwDaAmount = 0;
-  bool _nfwRateLoaded = false;
   bool _isLoadingNfwRate = false;
   String _nfwType = 'Meeting'; // 'Meeting' | 'Training'
   String? _transitFromTown; // last DCR area or HQ for TRANSIT
   bool _isLoadingTransitFrom = false;
-  Map<String, dynamic> _allRates = {}; // all DA rates from expense_rates by designation
-  String? _destStationType; // station_type of selected destination: HQ | EXHQ | OS
   String? _selectedFrom; // user-selected from location (overrides auto-detected)
-  bool _isTwoWay = false;
-  double _baseRouteKm = 0;
-  double _baseRouteFare = 0;
-  bool _isRecalculating = false; // true while server recalc API call is in flight
-  String _serverTaMode = 'road'; // 'road' | 'train' — returned by recalculate API
+  bool _isTwoWay = false; // display only — auto-set from backend ta_direction
+  bool _isRecalculating = false;
+  String _serverTaMode = 'road'; // 'road' | 'train'
+
+  // All calculation values come from backend — no client-side math
+  String _serverDaType = 'HQ';
+  double _serverDaAmount = 0;
+  double _serverTaKm = 0;
+  double _serverTaAmount = 0;
+
+  // New SFA fields from backend
+  bool _hotelBillClaimed = false;
+  bool _isOsReturn = false;
+  bool _canOsReturn = false;
+  String _taDirection = 'one_way'; // 'one_way' | 'two_way' — auto from DCR
+  // Hotel / meal bill fields (OS/EX_OS with hotel_bill_flag=1)
+  bool _hotelBillFlag = false;
+  double _pocketAllowance = 0;
+  double _hotelBillLimit = 0;
+  double _mealBillLimit = 0;
+  double _hotelAmount = 0;
+  double _mealAmount = 0;
+  final TextEditingController _hotelAmountController = TextEditingController();
+  final TextEditingController _mealAmountController = TextEditingController();
+  List<_AttachmentMeta> _attachmentsMeta = [];
 
   // Itemized other expenses (Toll, Courier, Parking, Food Bill, Others)
   List<OtherExpenseItem> _otherExpenses = [];
-  // DA overrides when user selects a destination (field mode)
-  String? _fieldDaTypeOverride;
-  double? _fieldDaAmountOverride;
 
   @override
   void initState() {
@@ -113,7 +143,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _manualDaController.addListener(_recalculateTotal);
     _manualTaController.addListener(_recalculateTotal);
     _loadTaRoutes();
-    _loadAllExpenseRates(); 
     _fetchCalculation();
   }
 
@@ -126,6 +155,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _manualDaController.dispose();
     _manualKmController.dispose();
     _manualTaController.dispose();
+    _hotelAmountController.dispose();
+    _mealAmountController.dispose();
     super.dispose();
   }
 
@@ -135,18 +166,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void _recalculateTotal() {
     double da = 0, ta = 0;
     if (_expenseMode == 'FIELD' && _calcData != null) {
-      da = _fieldDaAmountOverride ?? _toDouble(_calcData!['da_amount']);
-      // SFA route TA takes precedence over DCR-based TA when destination selected
-      ta = _autoTaFare > 0
-          ? _autoTaFare
-          : _toDouble(_calcData!['ta_amount']);
+      if (_hotelBillClaimed && _hotelBillFlag) {
+        // DA = pocket_allowance (fixed) + user hotel bill + user meal bill
+        da = _pocketAllowance + _hotelAmount + _mealAmount;
+      } else {
+        da = _serverDaAmount;
+      }
+      ta = _serverTaAmount;
     } else if (_expenseMode == 'NFW') {
       da = double.tryParse(_manualDaController.text) ?? _nfwDaAmount;
-      // Include TA when user has selected a destination for travel
-      ta = _autoTaFare;
+      ta = _serverTaAmount;
     } else if (_expenseMode == 'TRANSIT') {
-      ta = _autoTaFare > 0
-          ? _autoTaFare
+      ta = _serverTaAmount > 0
+          ? _serverTaAmount
           : (double.tryParse(_manualTaController.text) ?? 0);
     }
     setState(() => _displayTotal = da + ta + _totalOtherAmount);
@@ -167,10 +199,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       setState(() {
         _calcData = data;
         _expenseMode = 'FIELD';
-        final dt = (_calcData!['da_type'] ?? '').toString().toUpperCase();
-        _startLocation = (dt == 'HQ' || dt == 'EX')
+        // All values come from backend
+        _serverDaType   = (data['da_type'] ?? 'HQ').toString().toUpperCase();
+        _serverDaAmount = (data['da_amount'] as num?)?.toDouble() ?? 0;
+        _serverTaKm     = (data['total_km']  as num?)?.toDouble() ?? 0;
+        _serverTaAmount = (data['ta_amount'] as num?)?.toDouble() ?? 0;
+        _serverTaMode   = data['ta_mode']?.toString() ?? 'road';
+        _taDirection    = data['ta_direction']?.toString() ?? 'one_way';
+        _isTwoWay       = _taDirection == 'two_way';
+        _canOsReturn    = data['can_os_return'] == true || data['can_os_return'] == 1;
+        _hotelBillFlag  = data['hotel_bill_flag'] == 1 || data['hotel_bill_flag'] == true;
+        _pocketAllowance = (data['pocket_allowance'] as num?)?.toDouble() ?? 0;
+        _hotelBillLimit = (data['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
+        _mealBillLimit  = (data['meal_bill_limit']  as num?)?.toDouble() ?? 0;
+        // Reset hotel/meal amounts when date changes
+        _hotelBillClaimed = false;
+        _hotelAmount = 0;
+        _mealAmount = 0;
+        _hotelAmountController.clear();
+        _mealAmountController.clear();
+        final dt = _serverDaType;
+        _startLocation  = (dt == 'HQ' || dt == 'EX')
             ? 'HQ'
-            : (_calcData!['start_location']?.toString() ?? 'HQ');
+            : (data['start_location']?.toString() ?? 'HQ');
+        _manualKmController.text = _serverTaKm.toStringAsFixed(1);
+        _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
       });
       _recalculateTotal();
     } catch (_) {
@@ -561,11 +614,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       ? null
                       : () {
                           if (_nfwType != type) {
-                            setState(() {
-                              _nfwType = type;
-                              _nfwRateLoaded = false;
-                            });
-                            _fetchNfwDaRate();
+                            setState(() => _nfwType = type);
+                            // If destination already selected, refresh DA+TA together
+                            if (_endLocation != null) {
+                              _recalculateFromServer(_endLocation!);
+                            } else {
+                              // No destination yet — just refresh the flat DA rate
+                              _fetchNfwDaRate();
+                            }
                           }
                         },
                   child: AnimatedContainer(
@@ -605,7 +661,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
           // From + To — drives TA and (for Meeting) DA rate
           _buildFromToSection(accent: Colors.blue.shade600),
-          if (_autoTaKm > 0) ...[
+          if (_serverTaKm > 0) ...[
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -619,12 +675,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   Icon(Icons.directions_car_outlined,
                       color: Colors.blue.shade700, size: 18),
                   const SizedBox(width: 10),
-                  Text('${_fmt(_autoTaKm)} km',
+                  Text('${_fmt(_serverTaKm)} km',
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.blue.shade800)),
                   const SizedBox(width: 12),
-                  Text('TA: ₹${_fmt(_autoTaFare)}',
+                  Text('TA: ₹${_fmt(_serverTaAmount)}',
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Colors.blue.shade800,
@@ -679,22 +735,35 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                                   ? 'Training Allowance'
                                   : _nfwType == 'Transit'
                                       ? 'Transit Day Allowance'
-                                      : 'Meeting Allowance (HQ)',
+                                      : _endLocation != null
+                                          ? 'Meeting DA ($_serverDaType)'
+                                          : 'Meeting Allowance (HQ)',
                               style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.blue.shade600),
                             ),
-                            Text('₹${_fmt(daAmt)}',
-                                style: GoogleFonts.poppins(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.blue.shade800)),
+                            _isRecalculating
+                                ? const SizedBox(
+                                    height: 28,
+                                    child: Center(
+                                        child: SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2))))
+                                : Text('₹${_fmt(daAmt)}',
+                                    style: GoogleFonts.poppins(
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.blue.shade800)),
                             Text(
-                              _nfwType == 'Training'
-                                  ? 'From: expense_rates → training'
-                                  : _nfwType == 'Transit'
-                                      ? 'From: expense_rates → transit'
-                                      : 'From: expense_rates → da_hq_non_metro',
+                              _endLocation != null
+                                  ? 'Updated for ${_endLocation!} ($_nfwType)'
+                                  : _nfwType == 'Training'
+                                      ? 'Fixed: expense_rates → training'
+                                      : _nfwType == 'Transit'
+                                          ? 'Fixed: expense_rates → transit'
+                                          : 'Fixed: expense_rates → da_hq_non_metro',
                               style: TextStyle(
                                   fontSize: 10,
                                   color: Colors.blue.shade400),
@@ -769,7 +838,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           const SizedBox(height: 14),
 
           // Auto-calculated km + TA summary (also shown locked at 0 when same location)
-          if (_autoTaKm > 0 || _isSameLocation()) ...[
+          if (_serverTaKm > 0 || _isSameLocation()) ...[
             Container(
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
@@ -791,7 +860,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                                 fontSize: 11,
                                 color: Colors.orange.shade600)),
                         const SizedBox(height: 2),
-                        Text('${_fmt(_autoTaKm)} km',
+                        Text('${_fmt(_serverTaKm)} km',
                             style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18)),
@@ -837,7 +906,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           ],
                         ),
                         const SizedBox(height: 2),
-                        Text('₹${_fmt(_autoTaFare)}',
+                        Text('₹${_fmt(_serverTaAmount)}',
                             style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18,
@@ -930,13 +999,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     } catch (_) {}
   }
 
-  Future<void> _loadAllExpenseRates() async {
-    try {
-      final data = await ApiService().getAllExpenseRates();
-      if (mounted) setState(() => _allRates = data);
-    } catch (_) {}
-  }
-
   Future<void> _loadTransitFromLocation() async {
     setState(() => _isLoadingTransitFrom = true);
     try {
@@ -967,7 +1029,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final amount = (data['da_amount'] as num?)?.toDouble() ?? 0;
       setState(() {
         _nfwDaAmount = amount;
-        _nfwRateLoaded = true;
         _manualDaController.text = amount.toStringAsFixed(2);
       });
       _recalculateTotal();
@@ -991,15 +1052,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     // Same from/to → zero km
     if (from.isNotEmpty && from.toLowerCase() == town.toLowerCase()) {
-      _baseRouteKm = 0;
-      _baseRouteFare = 0;
       setState(() {
         _endLocation = town;
-        _destStationType = null;
-        _autoTaKm = 0;
-        _autoTaFare = 0;
-        _fieldDaTypeOverride = null;
-        _fieldDaAmountOverride = null;
+        _serverTaKm = 0;
+        _serverTaAmount = 0;
         _manualKmController.clear();
         _manualTaController.clear();
       });
@@ -1009,184 +1065,71 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     setState(() => _endLocation = town);
 
-    // FIELD mode: server recalculates full day route with all policies applied
-    if (_expenseMode == 'FIELD') {
-      _recalculateFromServer(town);
-    } else {
-      // NFW / TRANSIT: local lookup from _taRoutes
-      _recalculateFromLocalRoutes(town);
-    }
+    // All modes: backend calculates DA/TA with correct policy and direction
+    _recalculateFromServer(town);
   }
 
-  /// Called when last location changes in FIELD mode.
-  /// Hits recalculate-location API which applies:
-  ///   FIXED mode → fare, road km >150 → train slab, else km×3.5
-  ///   DA from station_type (OS > EX > HQ)
+  /// Called whenever from/to changes. Backend applies all policies:
+  ///   FIXED fare, road km >150 → train slab, else km×3.5, direction multiplier.
   Future<void> _recalculateFromServer(String toTown) async {
-    // Resolve the from location the same way _onDestinationSelected does
     final fromTown = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
-    if (fromTown.isEmpty) {
-      _recalculateFromLocalRoutes(toTown);
-      return;
-    }
+    if (fromTown.isEmpty) return;
 
     setState(() => _isRecalculating = true);
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final result  = await ApiService()
-          .recalculateOnLastLocation(dateStr, fromTown, toTown);
+      // Pass NFW type so backend returns the correct fixed DA (training/transit)
+      // or station-type-based DA (meeting).
+      final nfwTypeParam = _expenseMode == 'NFW' ? _nfwType.toLowerCase() : null;
+      final result = await ApiService().recalculateOnLastLocation(
+          dateStr, fromTown, toTown, nfwType: nfwTypeParam);
       if (!mounted) return;
 
-      final totalKm  = (result['total_km']  as num?)?.toDouble() ?? 0;
-      final fare     = (result['ta_amount'] as num?)?.toDouble() ?? 0;
-      final taMode   = result['ta_mode']?.toString() ?? 'road';
       final daType   = (result['da_type']?.toString() ?? 'HQ').toUpperCase();
       final daAmount = (result['da_amount'] as num?)?.toDouble() ?? 0;
+      final taKm     = (result['total_km']  as num?)?.toDouble() ?? 0;
+      final taAmount = (result['ta_amount'] as num?)?.toDouble() ?? 0;
+      final taMode   = result['ta_mode']?.toString() ?? 'road';
+      final taDir    = result['ta_direction']?.toString() ?? 'one_way';
 
-      // Use station_type from server response when available;
-      // otherwise derive it from da_type for the badge display
-      final rawStation = result['station_type']?.toString() ?? '';
-      String stationType;
-      if (rawStation.contains('OS') || rawStation.contains('OUT')) {
-        stationType = 'OS';
-      } else if (rawStation.contains('EX')) {
-        stationType = 'EXHQ';
-      } else {
-        stationType = daType == 'OS' ? 'OS' : daType == 'EX' ? 'EXHQ' : 'HQ';
+      // For NFW: DA always updates from server (Meeting=station-based, Training/Transit=fixed)
+      if (_expenseMode == 'NFW') {
+        _nfwDaAmount = daAmount;
+        _manualDaController.text = daAmount.toStringAsFixed(2);
       }
 
-      _baseRouteKm   = totalKm;
-      _baseRouteFare = fare;
-
+      final flag = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
       setState(() {
-        _serverTaMode          = taMode;
-        _destStationType       = stationType;
-        _fieldDaTypeOverride   = daType;
-        _fieldDaAmountOverride = daAmount;
-        _autoTaKm   = _isTwoWay ? totalKm * 2 : totalKm;
-        _autoTaFare = _isTwoWay ? fare    * 2 : fare;
-        _manualKmController.text = _autoTaKm.toStringAsFixed(1);
-        _manualTaController.text = _autoTaFare.toStringAsFixed(2);
+        _serverDaType    = daType;
+        _serverDaAmount  = daAmount;
+        _serverTaKm      = taKm;
+        _serverTaAmount  = taAmount;
+        _serverTaMode    = taMode;
+        _taDirection     = taDir;
+        _isTwoWay        = taDir == 'two_way';
+        _hotelBillFlag   = flag;
+        _pocketAllowance = (result['pocket_allowance'] as num?)?.toDouble() ?? 0;
+        _hotelBillLimit  = (result['hotel_bill_limit']  as num?)?.toDouble() ?? 0;
+        _mealBillLimit   = (result['meal_bill_limit']   as num?)?.toDouble() ?? 0;
+        // Reset hotel/meal claims when route changes
+        if (!flag) {
+          _hotelBillClaimed = false;
+          _hotelAmount = 0;
+          _mealAmount = 0;
+          _hotelAmountController.clear();
+          _mealAmountController.clear();
+        }
+        _manualKmController.text = taKm.toStringAsFixed(1);
+        _manualTaController.text = taAmount.toStringAsFixed(2);
       });
       _recalculateTotal();
     } catch (_) {
-      // Fallback to local route table if server call fails
-      _recalculateFromLocalRoutes(toTown);
+      // Server unavailable — leave current values
     } finally {
       if (mounted) setState(() => _isRecalculating = false);
     }
   }
 
-  /// NFW / TRANSIT local fare lookup from _taRoutes.
-  /// Supports A→B and B→A vice-versa.
-  /// FIXED mode_of_travel → uses fare column directly.
-  void _recalculateFromLocalRoutes(String town) {
-    final from = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
-
-    // Resolve station_type for DA
-    final locationRoutes = _taRoutes.where((r) {
-      final to = (r['to_town_code']?.toString() ?? '').toLowerCase();
-      final fr = (r['from_town_code']?.toString() ?? '').toLowerCase();
-      return to == town.toLowerCase() || fr == town.toLowerCase();
-    }).toList();
-
-    String stationType = 'HQ';
-    if (locationRoutes.isNotEmpty) {
-      final raw = (locationRoutes.first['station_type']?.toString() ?? '').toUpperCase();
-      if (raw.contains('OS') || raw.contains('OUT')) {
-        stationType = 'OS';
-      } else if (raw.contains('EX')) {
-        stationType = 'EXHQ';
-      }
-    }
-
-    // Route candidates: A→B then B→A (vice versa)
-    bool matches(Map r, String f, String t) =>
-        (r['from_town_code']?.toString() ?? '').toLowerCase() == f.toLowerCase() &&
-        (r['to_town_code']?.toString() ?? '').toLowerCase() == t.toLowerCase();
-
-    var candidates = _taRoutes.where((r) => matches(r, from, town)).toList();
-    if (candidates.isEmpty) {
-      candidates = _taRoutes.where((r) => matches(r, town, from)).toList();
-    }
-    if (candidates.isEmpty) {
-      candidates = locationRoutes;
-    }
-
-    double km = 0, ta = 0;
-    if (candidates.isNotEmpty) {
-      final autoMode = _normalizeModeOfTravel(
-          candidates.first['mode_of_travel']?.toString() ?? '');
-      if (autoMode != null) _modeOfTravel = autoMode;
-
-      final route = candidates.firstWhere(
-        (r) => (r['mode_of_travel']?.toString() ?? '').toLowerCase() ==
-            _modeOfTravel.toLowerCase(),
-        orElse: () => candidates.first,
-      );
-
-      km = double.tryParse(route['kms']?.toString() ?? '0') ?? 0;
-      final fareRaw = route['fare']?.toString() ?? '';
-      final fareFromTable = (fareRaw == 'EMPTY' || fareRaw.isEmpty)
-          ? 0.0
-          : (double.tryParse(fareRaw) ?? 0.0);
-      final modeUpper = (route['mode_of_travel']?.toString() ?? '').toUpperCase();
-
-      // Fare policy: FIXED → table fare, Bike → km×3.5, others → table fare or km×3.5
-      if (modeUpper == 'FIXED') {
-        ta = fareFromTable;
-      } else if (_modeOfTravel == 'Bike') {
-        ta = km * 3.5;
-      } else {
-        ta = fareFromTable > 0 ? fareFromTable : km * 3.5;
-      }
-    }
-
-    // DA: NFW Meeting adjusts by station_type
-    if (_expenseMode == 'NFW' && _nfwType == 'Meeting') {
-      final daAmount = stationType == 'OS'
-          ? ((_allRates['da_os'] as num?)?.toDouble() ?? _nfwDaAmount)
-          : stationType == 'EXHQ'
-              ? ((_allRates['da_exhq'] as num?)?.toDouble() ?? _nfwDaAmount)
-              : ((_allRates['da_hq_non_metro'] as num?)?.toDouble() ?? _nfwDaAmount);
-      _nfwDaAmount = daAmount;
-      _manualDaController.text = daAmount.toStringAsFixed(2);
-    }
-
-    _baseRouteKm  = km;
-    _baseRouteFare = ta;
-    setState(() {
-      _destStationType = stationType;
-      _autoTaKm   = _isTwoWay ? km * 2 : km;
-      _autoTaFare = _isTwoWay ? ta * 2 : ta;
-      _manualKmController.text = _autoTaKm.toStringAsFixed(1);
-      _manualTaController.text = _autoTaFare.toStringAsFixed(2);
-    });
-    _recalculateTotal();
-  }
-
-  void _applyWayMultiplier() {
-    if (_baseRouteKm <= 0) return;
-    setState(() {
-      _autoTaKm = _isTwoWay ? _baseRouteKm * 2 : _baseRouteKm;
-      _autoTaFare = _isTwoWay ? _baseRouteFare * 2 : _baseRouteFare;
-      _manualKmController.text = _autoTaKm.toStringAsFixed(1);
-      _manualTaController.text = _autoTaFare.toStringAsFixed(2);
-    });
-    _recalculateTotal();
-  }
-
-  String? _normalizeModeOfTravel(String raw) {
-    final m = raw.toLowerCase();
-    if (m.contains('train') || m.contains('rail')) return 'Train';
-    if (m.contains('bike') || m.contains('motor') || m.contains('two')) return 'Bike';
-    if (m.contains('car') || m.contains('taxi') || m.contains('cab')) return 'Car';
-    if (m.contains('bus')) return 'Bus';
-    if (m.contains('auto')) return 'Auto';
-    return null;
-  }
-
-  // Kept for backward compatibility — delegates to unified handler
   void _updateTaFromSelection() => _onDestinationSelected(_endLocation);
 
 
@@ -1267,13 +1210,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   setState(() {
                     _selectedFrom = val;
                     _endLocation = null;
-                    _autoTaKm = 0;
-                    _autoTaFare = 0;
-                    _baseRouteKm = 0;
-                    _baseRouteFare = 0;
-                    _destStationType = null;
-                    _fieldDaTypeOverride = null;
-                    _fieldDaAmountOverride = null;
+                    _serverTaKm = 0;
+                    _serverTaAmount = 0;
+                    _serverDaAmount = 0;
                     _manualKmController.clear();
                     _manualTaController.clear();
                   });
@@ -1315,9 +1254,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 onChanged: _isLocked ? null : _onDestinationSelected,
               ),
             ),
-            if (_destStationType != null) ...[
+            if (_serverDaType.isNotEmpty && _endLocation != null) ...[
               const SizedBox(width: 8),
-              _buildStationTypeBadge(_destStationType),
+              _buildStationTypeBadge(_serverDaType == 'OS' ? 'OS' : _serverDaType == 'EX' ? 'EXHQ' : 'HQ'),
             ],
           ],
         ),
@@ -1330,18 +1269,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             const SizedBox(width: 12),
             _buildWayChip(label: 'One Way', selected: !_isTwoWay, onTap: () {
               if (_isTwoWay) {
-                setState(() => _isTwoWay = false);
-                _applyWayMultiplier();
+                // setState(() => _isTwoWay = false);
+                // _applyWayMultiplier();
               }
             }),
             const SizedBox(width: 8),
             _buildWayChip(label: 'Two Way', selected: _isTwoWay, onTap: () {
               if (!_isTwoWay) {
-                setState(() => _isTwoWay = true);
-                _applyWayMultiplier();
+                // setState(() => _isTwoWay = true);
+                // _applyWayMultiplier();
               }
             }),
-            if (_isTwoWay && _autoTaKm > 0) ...[
+            if (_isTwoWay && _serverTaKm > 0) ...[
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -1350,11 +1289,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(color: Colors.deepPurple.shade200),
                 ),
-                child: Text('× 2 = ${_fmt(_autoTaKm)} km',
+                child: Text('${_fmt(_serverTaKm)} km (2-way)',
                     style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                         color: Colors.deepPurple.shade700)),
+              ),
+            ],
+            if (_expenseMode == 'FIELD' && _taDirection.isNotEmpty) ...[
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Text(
+                  'Auto: ${_taDirection == 'two_way' ? '2-way' : '1-way'}',
+                  style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue.shade700),
+                ),
               ),
             ],
           ],
@@ -1441,9 +1398,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // ─── Field Travel Section ─────────────────────────────────────────────────────
 
   Widget _buildFieldTravelSection() {
-    // Prefer SFA route KM when destination selected; fallback to DCR total_km
-    final autoKm = _autoTaKm > 0 ? _autoTaKm : _toDouble(_calcData!['total_km']);
-    final kmSource = _autoTaKm > 0 ? 'SFA Route' : 'DCR Route';
+    // Server km takes priority; fallback to DCR total_km from calcData
+    final autoKm = _serverTaKm > 0 ? _serverTaKm : _toDouble(_calcData!['total_km']);
+    final kmSource = _serverTaKm > 0 ? 'Server' : 'DCR Route';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1486,7 +1443,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   style:
                       TextStyle(fontSize: 11, color: Colors.grey.shade500)),
               const SizedBox(height: 4),
-              _endLocation != null && _autoTaKm == 0 && !_isSameLocation()
+              _endLocation != null && _serverTaKm == 0 && !_isSameLocation()
                   ? TextField(
                       controller: _manualKmController,
                       keyboardType: const TextInputType.numberWithOptions(
@@ -1661,6 +1618,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Widget _buildAllowanceCards() {
     return Column(
       children: [
+        if (_canOsReturn && !_isLocked) ...[
+          _buildOsReturnToggle(),
+          const SizedBox(height: 10),
+        ],
         _buildDaCard(),
         const SizedBox(height: 10),
         _buildTaCard(),
@@ -1668,18 +1629,67 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
+  Widget _buildOsReturnToggle() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.reply, color: Colors.orange.shade700, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('OS Return',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.orange.shade800,
+                        fontSize: 13)),
+                Text(
+                  _isOsReturn
+                      ? 'Return travel from outstation included'
+                      : 'Yesterday was outstation — claim return?',
+                  style: TextStyle(fontSize: 11, color: Colors.orange.shade600),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _isOsReturn,
+            onChanged: (v) => setState(() => _isOsReturn = v),
+            activeColor: Colors.orange.shade700,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDaCard() {
-    final daType = (_fieldDaTypeOverride ?? (_calcData!['da_type'] ?? 'HQ')).toString().toUpperCase();
-    final daAmount = _fieldDaAmountOverride ?? _toDouble(_calcData!['da_amount']);
-    final labels = {
-      'HQ': 'HQ Daily Allowance',
-      'EX': 'Ex-HQ Daily Allowance',
-      'OS': 'Outstation Daily Allowance',
+    final daType = _serverDaType;
+    final isOsType = daType == 'OS' || daType == 'EX_OS';
+    final showHotelBill = isOsType && _hotelBillFlag && !_isLocked;
+
+    // Effective DA shown in header
+    final effectiveDa = (_hotelBillClaimed && showHotelBill)
+        ? _pocketAllowance + _hotelAmount + _mealAmount
+        : _serverDaAmount;
+
+    final Map<String, String> labels = {
+      'HQ':    'HQ Daily Allowance',
+      'EX':    'Ex-HQ Daily Allowance',
+      'OS':    _hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Outstation Daily Allowance',
+      'EX_OS': _hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Ex-Outstation Daily Allowance',
     };
-    final colors = {
-      'OS': Colors.red,
-      'EX': Colors.orange,
-      'HQ': const Color(0xFF4A148C),
+    final Map<String, Color> colors = {
+      'OS':    Colors.red,
+      'EX_OS': Colors.deepOrange,
+      'EX':    Colors.orange,
+      'HQ':    const Color(0xFF4A148C),
     };
     final label = labels[daType] ?? 'Daily Allowance';
     final color = colors[daType] ?? const Color(0xFF4A148C);
@@ -1690,60 +1700,254 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.grey.shade200)),
-      child: Row(
+      child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12)),
-            child: Icon(Icons.person_outline, color: color, size: 26),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(
-                        fontSize: 12, color: Colors.grey.shade600)),
-                const SizedBox(height: 4),
-                Text('₹${_fmt(daAmount)}',
-                    style: GoogleFonts.poppins(
-                        fontSize: 24,
+          // ── Header row ──────────────────────────────────────────────
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Icon(Icons.person_outline, color: color, size: 26),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                    const SizedBox(height: 4),
+                    Text('₹${_fmt(effectiveDa)}',
+                        style: GoogleFonts.poppins(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF4A148C))),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                    color: color, borderRadius: BorderRadius.circular(10)),
+                child: Text(daType,
+                    style: const TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF4A148C))),
+                        fontSize: 14)),
+              ),
+            ],
+          ),
+
+          // ── Hotel bill toggle (OS / EX_OS only when flag=1) ─────────
+          if (showHotelBill) ...[
+            const Divider(height: 24),
+            Row(
+              children: [
+                Icon(Icons.hotel_outlined, size: 18, color: Colors.teal.shade600),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Claim Hotel / Meal Bill',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade800)),
+                      Text(
+                        _hotelBillClaimed
+                            ? 'Flat DA ₹${_fmt(_serverDaAmount)} removed — enter actual bills below'
+                            : 'Flat OS DA ₹${_fmt(_serverDaAmount)} applies. Toggle to claim bills.',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: _hotelBillClaimed
+                                ? Colors.teal.shade700
+                                : Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _hotelBillClaimed,
+                  onChanged: (v) {
+                    setState(() {
+                      _hotelBillClaimed = v;
+                      if (!v) {
+                        _hotelAmount = 0;
+                        _mealAmount = 0;
+                        _hotelAmountController.clear();
+                        _mealAmountController.clear();
+                      }
+                    });
+                    _recalculateTotal();
+                  },
+                  activeThumbColor: Colors.teal.shade600,
+                ),
               ],
             ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-                color: color, borderRadius: BorderRadius.circular(10)),
-            child: Text(daType,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14)),
-          ),
+
+            // ── Bill entry fields (visible only when claimed) ─────────
+            if (_hotelBillClaimed) ...[
+              const SizedBox(height: 14),
+              // Pocket allowance chip
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                    color: Colors.teal.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.teal.shade200)),
+                child: Row(
+                  children: [
+                    Icon(Icons.wallet_outlined,
+                        size: 16, color: Colors.teal.shade700),
+                    const SizedBox(width: 8),
+                    Text('Pocket Allowance:',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.teal.shade700)),
+                    const Spacer(),
+                    Text('₹${_fmt(_pocketAllowance)}',
+                        style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.teal.shade800)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Hotel bill input
+              TextField(
+                controller: _hotelAmountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (v) {
+                  setState(() => _hotelAmount =
+                      (_hotelBillLimit > 0
+                          ? (double.tryParse(v) ?? 0).clamp(0, _hotelBillLimit)
+                          : (double.tryParse(v) ?? 0)));
+                  _recalculateTotal();
+                },
+                decoration: InputDecoration(
+                  labelText: 'Hotel Bill Amount',
+                  prefixText: '₹ ',
+                  suffixText: _hotelBillLimit > 0
+                      ? 'Max ₹${_fmt(_hotelBillLimit)}'
+                      : null,
+                  suffixStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  helperText: _hotelBillLimit > 0
+                      ? 'Capped at ₹${_fmt(_hotelBillLimit)}'
+                      : 'No limit configured',
+                  helperStyle: TextStyle(fontSize: 10, color: Colors.orange.shade600),
+                  border:
+                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide:
+                          BorderSide(color: Colors.teal.shade600)),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Meal bill input
+              TextField(
+                controller: _mealAmountController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (v) {
+                  setState(() => _mealAmount =
+                      (_mealBillLimit > 0
+                          ? (double.tryParse(v) ?? 0).clamp(0, _mealBillLimit)
+                          : (double.tryParse(v) ?? 0)));
+                  _recalculateTotal();
+                },
+                decoration: InputDecoration(
+                  labelText: 'Meal Bill Amount',
+                  prefixText: '₹ ',
+                  suffixText: _mealBillLimit > 0
+                      ? 'Max ₹${_fmt(_mealBillLimit)}'
+                      : null,
+                  suffixStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  helperText: _mealBillLimit > 0
+                      ? 'Capped at ₹${_fmt(_mealBillLimit)}'
+                      : 'No limit configured',
+                  helperStyle: TextStyle(fontSize: 10, color: Colors.orange.shade600),
+                  border:
+                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide:
+                          BorderSide(color: Colors.teal.shade600)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              // DA breakdown summary
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade200)),
+                child: Column(
+                  children: [
+                    _daBreakdownRow('Pocket Allowance', _pocketAllowance, Colors.teal),
+                    if (_hotelAmount > 0)
+                      _daBreakdownRow('Hotel Bill', _hotelAmount, Colors.indigo),
+                    if (_mealAmount > 0)
+                      _daBreakdownRow('Meal Bill', _mealAmount, Colors.deepOrange),
+                    const Divider(height: 12),
+                    Row(
+                      children: [
+                        const Text('Total DA',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13)),
+                        const Spacer(),
+                        Text(
+                            '₹${_fmt(_pocketAllowance + _hotelAmount + _mealAmount)}',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: Color(0xFF4A148C))),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _daBreakdownRow(String label, double amount, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(width: 8, height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+          const Spacer(),
+          Text('₹${_fmt(amount)}',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
     );
   }
 
   Widget _buildTaCard() {
-    final sfaBased = _autoTaKm > 0;
-    final isTrain  = _serverTaMode == 'train';
-    final totalKm  = sfaBased ? _autoTaKm  : _toDouble(_calcData!['total_km']);
-    final taAmount = sfaBased ? _autoTaFare : _toDouble(_calcData!['ta_amount']);
-
-    final taColor = isTrain ? Colors.indigo : (sfaBased ? Colors.teal : Colors.green);
-    final taLabel = isTrain
+    final isTrain   = _serverTaMode == 'train';
+    final hasRoute  = _endLocation != null && _serverTaKm > 0;
+    final taColor   = isTrain ? Colors.indigo : (hasRoute ? Colors.teal : Colors.green);
+    final taLabel   = isTrain
         ? 'Travel Allowance (Train)'
-        : sfaBased
-            ? 'Travel Allowance (SFA Route)'
-            : 'Travel Allowance (DCR Route)';
-    final taIcon = isTrain ? Icons.train : Icons.directions_car_outlined;
+        : hasRoute
+            ? 'Travel Allowance (Route)'
+            : 'Travel Allowance (DCR)';
+    final taIcon    = isTrain ? Icons.train : Icons.directions_car_outlined;
+    // Derive station type badge from server DA type
+    final stationType = _serverDaType == 'OS' ? 'OS'
+        : _serverDaType == 'EX' ? 'EXHQ' : 'HQ';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -1751,11 +1955,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: isTrain
-                  ? Colors.indigo.shade200
-                  : sfaBased
-                      ? Colors.teal.shade200
-                      : Colors.grey.shade200)),
+              color: isTrain ? Colors.indigo.shade200
+                  : hasRoute ? Colors.teal.shade200 : Colors.grey.shade200)),
       child: _isRecalculating
           ? const SizedBox(
               height: 72,
@@ -1768,7 +1969,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2)),
                     SizedBox(width: 12),
-                    Text('Recalculating fare…',
+                    Text('Recalculating…',
                         style: TextStyle(fontSize: 13, color: Colors.grey)),
                   ],
                 ),
@@ -1788,51 +1989,51 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          Text(taLabel,
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade600)),
-                          if (isTrain) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                  color: Colors.indigo.shade600,
-                                  borderRadius: BorderRadius.circular(4)),
-                              child: const Text('TRAIN',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold)),
-                            ),
-                          ] else if (sfaBased && _modeOfTravel == 'Bike') ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 2),
-                              decoration: BoxDecoration(
-                                  color: Colors.teal.shade600,
-                                  borderRadius: BorderRadius.circular(4)),
-                              child: const Text('₹3.5/km',
-                                  style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold)),
-                            ),
-                          ],
+                      Row(children: [
+                        Text(taLabel,
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.grey.shade600)),
+                        if (isTrain) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: Colors.indigo.shade600,
+                                borderRadius: BorderRadius.circular(4)),
+                            child: const Text('TRAIN',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold)),
+                          ),
                         ],
-                      ),
+                        if (_isTwoWay) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: Colors.deepPurple.shade50,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.deepPurple.shade200)),
+                            child: Text('2-way',
+                                style: TextStyle(
+                                    color: Colors.deepPurple.shade700,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ]),
                       const SizedBox(height: 4),
-                      Text('₹${_fmt(taAmount)}',
+                      Text('₹${_fmt(_serverTaAmount)}',
                           style: GoogleFonts.poppins(
                               fontSize: 24,
                               fontWeight: FontWeight.bold,
                               color: taColor.shade700)),
-                      if (sfaBased && _destStationType != null)
+                      if (_endLocation != null)
                         Row(children: [
-                          _buildStationTypeBadge(_destStationType),
+                          _buildStationTypeBadge(stationType),
                           const SizedBox(width: 6),
                           Text('→ $_endLocation',
                               style: TextStyle(
@@ -1844,14 +2045,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('${_fmt(totalKm)} km',
+                    Text('${_fmt(_serverTaKm)} km',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 18,
                             color: taColor.shade700)),
-                    Text(isTrain ? 'train km' : sfaBased ? 'SFA km' : 'DCR km',
-                        style:
-                            TextStyle(fontSize: 10, color: Colors.grey.shade500)),
+                    Text(isTrain ? 'train km' : 'km',
+                        style: TextStyle(
+                            fontSize: 10, color: Colors.grey.shade500)),
                   ],
                 ),
               ],
@@ -1928,66 +2129,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         ),
         if (_attachments.isNotEmpty) ...[
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: List.generate(_attachments.length, (i) {
-              final file = _attachments[i];
-              final ext = file.extension?.toLowerCase() ?? '';
-              final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
-              return Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 68,
-                    height: 68,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade300),
-                      color: Colors.grey.shade100,
-                    ),
-                    child: isImage && file.bytes != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(7),
-                            child: Image.memory(
-  file.bytes!,
-  fit: BoxFit.cover,
-  width: 68,
-  height: 68,
-),
-                          )
-                        : Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.picture_as_pdf,
-                                  color: Colors.red.shade400, size: 26),
-                              const SizedBox(height: 2),
-                              Text(ext.toUpperCase(),
-                                  style: TextStyle(
-                                      fontSize: 9,
-                                      color: Colors.grey.shade600,
-                                      fontWeight: FontWeight.bold)),
-                            ],
-                          ),
-                  ),
-                  Positioned(
-                    top: -6,
-                    right: -6,
-                    child: GestureDetector(
-                      onTap: () => setState(() => _attachments.removeAt(i)),
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(
-                            color: Colors.red, shape: BoxShape.circle),
-                        child: const Icon(Icons.close,
-                            size: 12, color: Colors.white),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            }),
-          ),
+          ...List.generate(_attachments.length, (i) => _buildAttachmentRow(i)),
         ],
         const SizedBox(height: 8),
         InkWell(
@@ -2007,8 +2149,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     color: Colors.grey.shade500, size: 20),
                 const SizedBox(width: 8),
                 Text('Add Bill / Receipt / Document',
-                    style:
-                        TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
               ],
             ),
           ),
@@ -2016,6 +2157,175 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ],
     );
   }
+
+  Widget _buildAttachmentRow(int i) {
+    final file = _attachments[i];
+    final meta = _attachmentsMeta[i];
+    final ext = file.extension?.toLowerCase() ?? '';
+    final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+            color: meta.isGst ? Colors.green.shade300 : Colors.grey.shade200),
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: isImage && file.bytes != null
+                      ? Image.memory(file.bytes!, width: 48, height: 48, fit: BoxFit.cover)
+                      : Container(
+                          width: 48,
+                          height: 48,
+                          color: Colors.grey.shade100,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.picture_as_pdf,
+                                  color: Colors.red.shade400, size: 22),
+                              Text(ext.toUpperCase(),
+                                  style: TextStyle(
+                                      fontSize: 8, color: Colors.grey.shade600)),
+                            ],
+                          ),
+                        ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(file.name,
+                      style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                if (!_isLocked) ...[
+                  GestureDetector(
+                    onTap: () => _showGstSheet(i),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: meta.isGst
+                            ? Colors.green.shade50
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: meta.isGst
+                                ? Colors.green.shade400
+                                : Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            meta.isGst
+                                ? Icons.verified_outlined
+                                : Icons.receipt_long_outlined,
+                            size: 12,
+                            color: meta.isGst
+                                ? Colors.green.shade700
+                                : Colors.grey.shade500,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            meta.isGst ? 'GST' : 'No GST',
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: meta.isGst
+                                    ? Colors.green.shade700
+                                    : Colors.grey.shade500),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _attachments.removeAt(i);
+                      _attachmentsMeta.removeAt(i);
+                    }),
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      decoration:
+                          const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                      child: const Icon(Icons.close, size: 12, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (meta.isGst)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+              child: Row(
+                children: [
+                  const SizedBox(width: 58),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                                color: Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(4)),
+                            child: Text(
+                              _capitalize(meta.billType),
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          if (meta.vendorName.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Text(meta.vendorName,
+                                style: TextStyle(
+                                    fontSize: 10, color: Colors.grey.shade600)),
+                          ],
+                        ]),
+                        if (meta.gstNumber.isNotEmpty)
+                          Text('GST: ${meta.gstNumber}',
+                              style: TextStyle(
+                                  fontSize: 10, color: Colors.grey.shade500)),
+                      ],
+                    ),
+                  ),
+                  if (meta.billAmount > 0)
+                    Text('₹${_fmt(meta.billAmount)}',
+                        style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF4A148C))),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _showGstSheet(int index) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _GstDetailsSheet(meta: _attachmentsMeta[index]),
+    ).then((_) => setState(() {}));
+  }
+
+  String _capitalize(String s) =>
+      s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
   // ─── Other Expenses Section ───────────────────────────────────────────────────
 
@@ -2176,18 +2486,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Future<void> _pickAttachment() async {
-  final result = await FilePicker.platform.pickFiles(
-    allowMultiple: true,
-    type: FileType.any,
-    withData: true,
-  );
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.any,
+      withData: true,
+    );
 
-  if (result != null) {
-    setState(() {
-      _attachments.addAll(result.files);
-    });
+    if (result != null) {
+      setState(() {
+        _attachments.addAll(result.files);
+        _attachmentsMeta.addAll(result.files.map((_) => _AttachmentMeta()));
+      });
+    }
   }
-}
 
   // ─── Locked Details Card ──────────────────────────────────────────────────────
 
@@ -2327,18 +2638,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
       if (_expenseMode == 'FIELD') {
         final kmManual = _manualKmController.text.trim();
-        // Route km from expense_rates_ta takes priority; manual if no route matched; DCR as fallback
-        final kmAuto = _autoTaKm > 0
-            ? _autoTaKm.toStringAsFixed(2)
-            : (kmManual.isNotEmpty
-                ? kmManual
-                : _calcData!['total_km'].toString());
+        final kmFinal = _serverTaKm > 0
+            ? _serverTaKm.toStringAsFixed(2)
+            : (kmManual.isNotEmpty ? kmManual : (_calcData!['total_km'] ?? '0').toString());
+        final daAmt = _hotelBillClaimed
+            ? ((_calcData!['pocket_allowance'] as num?)?.toDouble() ?? _serverDaAmount)
+            : _serverDaAmount;
         payload = {
           'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
-          'da_type': _fieldDaTypeOverride ?? _calcData!['da_type'].toString(),
-          'da_amount': (_fieldDaAmountOverride ?? _toDouble(_calcData!['da_amount'])).toStringAsFixed(2),
-          'ta_distance': kmAuto,
-          'ta_amount': (_autoTaFare > 0 ? _autoTaFare : _toDouble(_calcData!['ta_amount'])).toStringAsFixed(2),
+          'da_type': _serverDaType,
+          'da_amount': daAmt.toStringAsFixed(2),
+          'ta_distance': kmFinal,
+          'ta_amount': _serverTaAmount.toStringAsFixed(2),
           'other_amount': _totalOtherAmount.toStringAsFixed(2),
           'remarks': _remarkController.text.trim(),
           ...travelFields,
@@ -2352,25 +2663,23 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ? 'TRANSIT_DA'
               : _nfwType.toUpperCase(),
           'da_amount': daAmt.toStringAsFixed(2),
-          'ta_distance': _autoTaKm.toStringAsFixed(2),
-          'ta_amount': _autoTaFare.toStringAsFixed(2),
+          'ta_distance': _serverTaKm.toStringAsFixed(2),
+          'ta_amount': _serverTaAmount.toStringAsFixed(2),
           'other_amount': _totalOtherAmount.toStringAsFixed(2),
           'remarks': _remarkController.text.trim(),
           'mode_of_travel': _modeOfTravel,
           'start_location': _userHq ?? 'HQ',
-          'end_location': '',
+          'end_location': _endLocation ?? '',
         };
       } else {
-        // TRANSIT — prefer auto-calculated values, fall back to manual
-        final kmTransit = _autoTaKm > 0
-            ? _autoTaKm.toStringAsFixed(2)
+        // TRANSIT — prefer server-calculated values, fall back to manual
+        final kmTransit = _serverTaKm > 0
+            ? _serverTaKm.toStringAsFixed(2)
             : (_manualKmController.text.trim().isEmpty
-                ? (_endLocationKm != null
-                    ? _endLocationKm!.toStringAsFixed(2)
-                    : '0')
+                ? (_endLocationKm != null ? _endLocationKm!.toStringAsFixed(2) : '0')
                 : _manualKmController.text.trim());
-        final taTransit = _autoTaFare > 0
-            ? _autoTaFare.toStringAsFixed(2)
+        final taTransit = _serverTaAmount > 0
+            ? _serverTaAmount.toStringAsFixed(2)
             : (_manualTaController.text.trim().isEmpty
                 ? '0'
                 : _manualTaController.text.trim());
@@ -2387,6 +2696,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           'end_location': _endLocation ?? '',
         };
       }
+
+      // New SFA fields — common across all expense modes
+      payload.addAll({
+        'hotel_bill_claimed': _hotelBillClaimed ? '1' : '0',
+        'hotel_amount': _hotelAmount.toStringAsFixed(2),
+        'meal_amount': _mealAmount.toStringAsFixed(2),
+        'is_os_return': _isOsReturn ? '1' : '0',
+        'ta_direction': _taDirection,
+        'from_location': _selectedFrom ?? _transitFromTown ?? _userHq ?? '',
+        'to_location': _endLocation ?? '',
+        'attachments_meta':
+            jsonEncode(_attachmentsMeta.map((m) => m.toJson()).toList()),
+      });
 
       await ApiService().submitExpense(
         payload,
@@ -2608,6 +2930,186 @@ class _AddOtherExpenseSheetState extends State<_AddOtherExpenseSheet> {
                 widget.onAdd(type, amount, _bill);
               },
               child: Text('Add Expense',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600, fontSize: 15)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── GST Details Bottom Sheet ─────────────────────────────────────────────────
+
+class _GstDetailsSheet extends StatefulWidget {
+  final _AttachmentMeta meta;
+  const _GstDetailsSheet({required this.meta});
+
+  @override
+  State<_GstDetailsSheet> createState() => _GstDetailsSheetState();
+}
+
+class _GstDetailsSheetState extends State<_GstDetailsSheet> {
+  static const _types = ['hotel', 'food', 'travel', 'other'];
+
+  late bool _isGst;
+  late String _billType;
+  final _gstController = TextEditingController();
+  final _vendorController = TextEditingController();
+  final _amountController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _isGst = widget.meta.isGst;
+    _billType = widget.meta.billType;
+    _gstController.text = widget.meta.gstNumber;
+    _vendorController.text = widget.meta.vendorName;
+    _amountController.text =
+        widget.meta.billAmount > 0 ? widget.meta.billAmount.toStringAsFixed(2) : '';
+  }
+
+  @override
+  void dispose() {
+    _gstController.dispose();
+    _vendorController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        left: 20,
+        right: 20,
+        top: 8,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          Text('Bill Details',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 18)),
+          const SizedBox(height: 12),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('GST Invoice'),
+            subtitle: const Text('Vendor is GST-registered',
+                style: TextStyle(fontSize: 11)),
+            value: _isGst,
+            activeColor: const Color(0xFF4A148C),
+            onChanged: (v) => setState(() => _isGst = v),
+          ),
+          Text('Bill Type',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: _types.map((t) {
+              final sel = _billType == t;
+              return GestureDetector(
+                onTap: () => setState(() => _billType = t),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: sel
+                        ? const Color(0xFF4A148C)
+                        : const Color(0xFFEDE7F6),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    t[0].toUpperCase() + t.substring(1),
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: sel ? Colors.white : const Color(0xFF4A148C)),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _amountController,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: InputDecoration(
+              labelText: 'Bill Amount',
+              prefixText: '₹ ',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFF4A148C))),
+            ),
+          ),
+          if (_isGst) ...[
+            const SizedBox(height: 12),
+            TextField(
+              controller: _vendorController,
+              textCapitalization: TextCapitalization.words,
+              decoration: InputDecoration(
+                labelText: 'Vendor Name',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF4A148C))),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _gstController,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                labelText: 'GST Number',
+                hintText: '22AAAAA0000A1Z5',
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF4A148C))),
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4A148C),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: () {
+                widget.meta.isGst = _isGst;
+                widget.meta.billType = _billType;
+                widget.meta.gstNumber = _gstController.text.trim();
+                widget.meta.vendorName = _vendorController.text.trim();
+                widget.meta.billAmount =
+                    double.tryParse(_amountController.text) ?? 0;
+                Navigator.pop(context);
+              },
+              child: Text('Save',
                   style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w600, fontSize: 15)),
             ),
