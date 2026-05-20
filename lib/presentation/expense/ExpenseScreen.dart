@@ -38,7 +38,8 @@ class OtherExpenseItem {
 
 class ExpenseScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
-  const ExpenseScreen({super.key, this.editData});
+  final DateTime? initialDate;
+  const ExpenseScreen({super.key, this.editData, this.initialDate});
 
   @override
   State<ExpenseScreen> createState() => _ExpenseScreenState();
@@ -50,7 +51,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   final _manualKmController = TextEditingController();
   final _manualTaController = TextEditingController();
 
-  DateTime _selectedDate = DateTime.now();
+  late DateTime _selectedDate;
   Map<String, dynamic>? _calcData;
   String? _expenseMode; // 'FIELD', 'NFW', 'TRANSIT'
   bool _isLoading = false;
@@ -105,6 +106,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialise date: edit data wins, then explicit initialDate, then today
+    _selectedDate = widget.editData != null
+        ? (DateTime.tryParse(widget.editData!['expense_date'] ?? '') ?? DateTime.now())
+        : (widget.initialDate ?? DateTime.now());
     if (widget.editData != null) {
       _restoreEditData(widget.editData!);
     }
@@ -118,8 +123,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// and again inside _fetchCalculation() after the API result so that fresh
   /// config values (hotel_bill_limit etc.) are kept but saved amounts win.
   void _restoreEditData(Map<String, dynamic> d) {
-    _selectedDate = DateTime.tryParse(d['expense_date'] ?? '') ?? DateTime.now();
-    _isLocked     = d['is_submitted_for_month'] == 1;
+    // _selectedDate already set in initState from expense_date
+    _isLocked = d['is_submitted_for_month'] == 1;
     _modeOfTravel = (d['mode_of_travel'] ?? 'Bike').toString();
     _remarkController.text = d['remarks'] ?? '';
 
@@ -218,14 +223,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void _recalculateTotal() {
     double da = 0, ta = 0;
     if (_expenseMode == 'FIELD' && _calcData != null) {
-      if (_hotelBillClaimed && _hotelBillFlag) {
+      if (_isOsReturn) {
+        // OS Return replaces the regular OS/EX_OS DA entirely
+        da = _osReturnAmount;
+      } else if (_hotelBillClaimed && _hotelBillFlag) {
         // DA = pocket_allowance (fixed) + user hotel bill + user meal bill
         da = _pocketAllowance + _hotelAmount + _mealAmount;
       } else {
         da = _serverDaAmount;
       }
-      // OS Return allowance added on top when user claims return trip
-      if (_isOsReturn) da += _osReturnAmount;
       ta = _serverTaAmount;
     } else if (_expenseMode == 'NFW') {
       da = double.tryParse(_manualDaController.text) ?? _nfwDaAmount;
@@ -1216,6 +1222,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // ─── Shared: Station Type Badge ───────────────────────────────────────────────
 
   Widget _buildStationTypeBadge(String? type) {
+    print(type);
     final t = type?.toUpperCase() ?? 'HQ';
     Color bg, fg;
     String label;
@@ -1762,8 +1769,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 const SizedBox(height: 2),
                 Text(
                   _isOsReturn
-                      ? 'Return allowance ₹${_fmt(_osReturnAmount)} added to DA'
-                      : 'Claim OS return allowance for today\'s outstation trip',
+                      ? 'OS/EX_OS DA replaced by return allowance ₹${_fmt(_osReturnAmount)}'
+                      : 'Claim OS return allowance (replaces OS/EX_OS DA)',
                   style: TextStyle(
                       fontSize: 11,
                       color: _isOsReturn
@@ -1776,8 +1783,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           Switch(
             value: _isOsReturn,
             onChanged: (v) {
-              setState(() => _isOsReturn = v);
-              _recalculateTotal();
+              _isOsReturn = v;
+              _recalculateTotal(); // calls setState internally
             },
             activeThumbColor: Colors.orange.shade700,
           ),
@@ -1789,18 +1796,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Widget _buildDaCard() {
     final daType = _serverDaType;
     final isOsType = daType == 'OS' || daType == 'EX_OS';
-    final showHotelBill = isOsType && _hotelBillFlag && !_isLocked;
+    // Hotel bill section only shown when OS return is NOT active
+    final showHotelBill = isOsType && _hotelBillFlag && !_isLocked && !_isOsReturn;
 
-    // Effective DA shown in header
-    final effectiveDa = (_hotelBillClaimed && showHotelBill)
-        ? _pocketAllowance + _hotelAmount + _mealAmount
-        : _serverDaAmount;
+    // Effective DA shown in header — OS return takes priority over everything
+    final effectiveDa = _isOsReturn
+        ? _osReturnAmount
+        : (_hotelBillClaimed && showHotelBill)
+            ? _pocketAllowance + _hotelAmount + _mealAmount
+            : _serverDaAmount;
 
     final Map<String, String> labels = {
       'HQ':    'HQ Daily Allowance',
       'EX':    'Ex-HQ Daily Allowance',
-      'OS':    _hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Outstation Daily Allowance',
-      'EX_OS': _hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Ex-Outstation Daily Allowance',
+      'OS':    _isOsReturn ? 'OS Return Allowance' : (_hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Outstation Daily Allowance'),
+      'EX_OS': _isOsReturn ? 'OS Return Allowance' : (_hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Ex-Outstation Daily Allowance'),
     };
     final Map<String, Color> colors = {
       'OS':    Colors.red,
@@ -2063,8 +2073,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             : 'Travel Allowance (DCR)';
     final taIcon    = isTrain ? Icons.train : Icons.directions_car_outlined;
     // Derive station type badge from server DA type
-    final stationType = _serverDaType == 'OS' ? 'OS'
-        : _serverDaType == 'EX' ? 'EXHQ' : 'HQ';
+    print('Server DA Type: $_serverDaType');
+    final stationType = _serverDaType == 'EX-OS' || _serverDaType == 'EX_OS' ? 'EX_OS'
+        : _serverDaType == 'OS' ? 'OS'
+        : _serverDaType == 'EX' ? 'EX' : 'HQ';
 
     return Container(
       padding: const EdgeInsets.all(16),

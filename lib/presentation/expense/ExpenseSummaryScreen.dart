@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../../data/services/api_service.dart';
+import 'ExpenseCalendarScreen.dart';
 import 'ExpenseScreen.dart';
 
 class ExpenseSummaryScreen extends StatefulWidget {
@@ -111,7 +112,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               backgroundColor: const Color(0xFF4A148C),
               onPressed: () {
                 if (_tabController.index == 0) {
-                  _openDailyExpense(null);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ExpenseCalendarScreen()),
+                  ).then((_) => _loadData());
                 } else {
                   _showAddClaimSheet();
                 }
