@@ -86,7 +86,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // New SFA fields from backend
   bool _hotelBillClaimed = false;
   bool _isOsReturn = false;
-  bool _canOsReturn = false;
+  double _osReturnAmount = 0; // from expense_rates.os_return
   String _taDirection = 'one_way'; // 'one_way' | 'two_way' — auto from DCR
   // Hotel / meal bill fields (OS/EX_OS with hotel_bill_flag=1)
   bool _hotelBillFlag = false;
@@ -106,44 +106,96 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   void initState() {
     super.initState();
     if (widget.editData != null) {
-      final d = widget.editData!;
-      // Restore legacy single other_amount as one item for backward compat
-      final legacyOther = double.tryParse((d['other_amount'] ?? '0').toString()) ?? 0;
-      if (legacyOther > 0) {
-        final item = OtherExpenseItem(type: 'Other', amount: legacyOther.toStringAsFixed(2));
-        item.amountController.addListener(_recalculateTotal);
-        _otherExpenses.add(item);
-      }
-      _remarkController.text = d['remarks'] ?? '';
-      _selectedDate = DateTime.tryParse(d['expense_date'] ?? '') ?? DateTime.now();
-      _isLocked = d['is_submitted_for_month'] == 1;
-
-      final daType = (d['da_type'] ?? '').toString().toUpperCase();
-      if (daType == 'NFW' || daType == 'MEETING' || daType == 'TRAINING' ||
-          daType == 'TRANSIT_DA') {
-        _expenseMode = 'NFW';
-        _nfwType = daType == 'TRAINING'
-            ? 'Training'
-            : daType == 'TRANSIT_DA'
-                ? 'Transit'
-                : 'Meeting';
-        _manualDaController.text = (d['da_amount'] ?? '0').toString();
-      } else if (daType == 'TRANSIT') {
-        _expenseMode = 'TRANSIT';
-        _manualKmController.text = (d['ta_distance'] ?? '0').toString();
-        _manualTaController.text = (d['ta_amount'] ?? '0').toString();
-        _transitFromTown = d['start_location']?.toString();
-        _selectedFrom = d['start_location']?.toString();
-      }
-      _modeOfTravel = (d['mode_of_travel'] ?? 'Bike').toString();
-      _startLocation = (d['start_location'] ?? 'HQ').toString();
-      _endLocation = d['end_location']?.toString();
-      _fromLocation = d['start_location']?.toString();
+      _restoreEditData(widget.editData!);
     }
     _manualDaController.addListener(_recalculateTotal);
     _manualTaController.addListener(_recalculateTotal);
     _loadTaRoutes();
     _fetchCalculation();
+  }
+
+  /// Restores all saved expense fields into state. Called on init (edit mode)
+  /// and again inside _fetchCalculation() after the API result so that fresh
+  /// config values (hotel_bill_limit etc.) are kept but saved amounts win.
+  void _restoreEditData(Map<String, dynamic> d) {
+    _selectedDate = DateTime.tryParse(d['expense_date'] ?? '') ?? DateTime.now();
+    _isLocked     = d['is_submitted_for_month'] == 1;
+    _modeOfTravel = (d['mode_of_travel'] ?? 'Bike').toString();
+    _remarkController.text = d['remarks'] ?? '';
+
+    // Locations
+    final savedFrom = d['from_location']?.toString()
+        ?? d['start_location']?.toString();
+    final savedTo   = d['to_location']?.toString()
+        ?? d['end_location']?.toString();
+    _selectedFrom  = savedFrom;
+    _startLocation = (d['start_location'] ?? 'HQ').toString();
+    _endLocation   = savedTo?.isNotEmpty == true ? savedTo : null;
+    _fromLocation  = savedFrom;
+
+    // Direction
+    _taDirection = d['ta_direction']?.toString() ?? 'one_way';
+    _isTwoWay    = _taDirection == 'two_way';
+
+    // OS return
+    _isOsReturn     = d['is_os_return'] == 1 || d['is_os_return'] == '1';
+
+    // Hotel / meal bill
+    _hotelBillClaimed = d['hotel_bill_claimed'] == 1 || d['hotel_bill_claimed'] == '1';
+    _hotelAmount = _toDouble(d['hotel_amount']);
+    _mealAmount  = _toDouble(d['meal_amount']);
+    if (_hotelAmount > 0) {
+      _hotelAmountController.text = _hotelAmount.toStringAsFixed(2);
+    }
+    if (_mealAmount > 0) {
+      _mealAmountController.text = _mealAmount.toStringAsFixed(2);
+    }
+
+    // DA type determines expense mode
+    final daType = (d['da_type'] ?? '').toString().toUpperCase();
+    if (daType == 'NFW' || daType == 'MEETING' || daType == 'TRAINING' ||
+        daType == 'TRANSIT_DA') {
+      _expenseMode = 'NFW';
+      _nfwType = daType == 'TRAINING'
+          ? 'Training'
+          : daType == 'TRANSIT_DA'
+              ? 'Transit'
+              : 'Meeting';
+      _nfwDaAmount = _toDouble(d['da_amount']);
+      _manualDaController.text = _nfwDaAmount.toStringAsFixed(2);
+      // TA fields for NFW
+      _serverTaKm     = _toDouble(d['ta_distance']);
+      _serverTaAmount = _toDouble(d['ta_amount']);
+      _manualKmController.text = _serverTaKm.toStringAsFixed(1);
+      _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
+    } else if (daType == 'TRANSIT') {
+      _expenseMode    = 'TRANSIT';
+      _serverTaKm     = _toDouble(d['ta_distance']);
+      _serverTaAmount = _toDouble(d['ta_amount']);
+      _manualKmController.text = _serverTaKm.toStringAsFixed(1);
+      _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
+      _transitFromTown = savedFrom;
+    } else {
+      // FIELD mode — set saved financial values; _fetchCalculation() will add
+      // the route timeline from DCR but we'll re-apply these amounts after.
+      _serverDaType   = daType.isEmpty ? 'HQ' : daType;
+      _serverDaAmount = _toDouble(d['da_amount']);
+      _serverTaKm     = _toDouble(d['ta_distance']);
+      _serverTaAmount = _toDouble(d['ta_amount']);
+      _manualKmController.text = _serverTaKm.toStringAsFixed(1);
+      _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
+    }
+
+    // Restore legacy other_amount as one item (only on first call from initState)
+    if (_otherExpenses.isEmpty) {
+      final legacyOther = _toDouble(d['other_amount']);
+      if (legacyOther > 0) {
+        final item = OtherExpenseItem(
+            type: 'Other', amount: legacyOther.toStringAsFixed(2));
+        item.amountController.addListener(_recalculateTotal);
+        _otherExpenses.add(item);
+      }
+    }
   }
 
   @override
@@ -172,6 +224,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       } else {
         da = _serverDaAmount;
       }
+      // OS Return allowance added on top when user claims return trip
+      if (_isOsReturn) da += _osReturnAmount;
       ta = _serverTaAmount;
     } else if (_expenseMode == 'NFW') {
       da = double.tryParse(_manualDaController.text) ?? _nfwDaAmount;
@@ -197,31 +251,56 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final data = await ApiService()
           .calculateExpense(DateFormat('yyyy-MM-dd').format(_selectedDate));
       setState(() {
-        _calcData = data;
+        _calcData    = data;
         _expenseMode = 'FIELD';
-        // All values come from backend
-        _serverDaType   = (data['da_type'] ?? 'HQ').toString().toUpperCase();
-        _serverDaAmount = (data['da_amount'] as num?)?.toDouble() ?? 0;
-        _serverTaKm     = (data['total_km']  as num?)?.toDouble() ?? 0;
-        _serverTaAmount = (data['ta_amount'] as num?)?.toDouble() ?? 0;
-        _serverTaMode   = data['ta_mode']?.toString() ?? 'road';
-        _taDirection    = data['ta_direction']?.toString() ?? 'one_way';
-        _isTwoWay       = _taDirection == 'two_way';
-        _canOsReturn    = data['can_os_return'] == true || data['can_os_return'] == 1;
-        _hotelBillFlag  = data['hotel_bill_flag'] == 1 || data['hotel_bill_flag'] == true;
+        // Fresh values from backend (used for new expense)
+        _serverTaMode    = data['ta_mode']?.toString() ?? 'road';
+        _osReturnAmount  = (data['os_return_amount'] as num?)?.toDouble() ?? 0;
+        _hotelBillFlag   = data['hotel_bill_flag'] == 1 || data['hotel_bill_flag'] == true;
         _pocketAllowance = (data['pocket_allowance'] as num?)?.toDouble() ?? 0;
-        _hotelBillLimit = (data['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
-        _mealBillLimit  = (data['meal_bill_limit']  as num?)?.toDouble() ?? 0;
-        // Reset hotel/meal amounts when date changes
-        _hotelBillClaimed = false;
-        _hotelAmount = 0;
-        _mealAmount = 0;
-        _hotelAmountController.clear();
-        _mealAmountController.clear();
-        final dt = _serverDaType;
-        _startLocation  = (dt == 'HQ' || dt == 'EX')
-            ? 'HQ'
-            : (data['start_location']?.toString() ?? 'HQ');
+        _hotelBillLimit  = (data['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
+        _mealBillLimit   = (data['meal_bill_limit']  as num?)?.toDouble() ?? 0;
+
+        if (widget.editData != null) {
+          // Edit mode: route timeline comes from DCR (above), but financial
+          // values come from the saved record — don't overwrite them.
+          // _restoreEditData already ran in initState; re-apply FIELD amounts
+          // in case _fetchCalculation setState() would reset them.
+          final d = widget.editData!;
+          final savedDaType = (d['da_type'] ?? '').toString().toUpperCase();
+          final isField = savedDaType.isNotEmpty
+              && !['NFW','MEETING','TRAINING','TRANSIT_DA','TRANSIT'].contains(savedDaType);
+          if (isField) {
+            _serverDaType   = savedDaType.isEmpty ? 'HQ' : savedDaType;
+            _serverDaAmount = _toDouble(d['da_amount']);
+            _serverTaKm     = _toDouble(d['ta_distance']);
+            _serverTaAmount = _toDouble(d['ta_amount']);
+            _taDirection    = d['ta_direction']?.toString() ?? 'one_way';
+            _isTwoWay       = _taDirection == 'two_way';
+            _isOsReturn     = d['is_os_return'] == 1 || d['is_os_return'] == '1';
+            _hotelBillClaimed = d['hotel_bill_claimed'] == 1 || d['hotel_bill_claimed'] == '1';
+            _hotelAmount    = _toDouble(d['hotel_amount']);
+            _mealAmount     = _toDouble(d['meal_amount']);
+          }
+        } else {
+          // New expense: use fresh API values
+          _serverDaType   = (data['da_type'] ?? 'HQ').toString().toUpperCase();
+          _serverDaAmount = (data['da_amount'] as num?)?.toDouble() ?? 0;
+          _serverTaKm     = (data['total_km']  as num?)?.toDouble() ?? 0;
+          _serverTaAmount = (data['ta_amount'] as num?)?.toDouble() ?? 0;
+          _taDirection    = data['ta_direction']?.toString() ?? 'one_way';
+          _isTwoWay       = _taDirection == 'two_way';
+          _isOsReturn     = false;
+          _hotelBillClaimed = false;
+          _hotelAmount = 0;
+          _mealAmount  = 0;
+          _hotelAmountController.clear();
+          _mealAmountController.clear();
+          final dt = _serverDaType;
+          _startLocation = (dt == 'HQ' || dt == 'EX')
+              ? 'HQ'
+              : (data['start_location']?.toString() ?? 'HQ');
+        }
         _manualKmController.text = _serverTaKm.toStringAsFixed(1);
         _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
       });
@@ -1102,6 +1181,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       setState(() {
         _serverDaType    = daType;
         _serverDaAmount  = daAmount;
+        _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
         _serverTaKm      = taKm;
         _serverTaAmount  = taAmount;
         _serverTaMode    = taMode;
@@ -1139,7 +1219,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final t = type?.toUpperCase() ?? 'HQ';
     Color bg, fg;
     String label;
-    if (t == 'OS') {
+    if (t == 'EX-OS' || t == 'EX_OS') {
+      bg = Colors.red.shade100; fg = Colors.red.shade700; label = 'EX_OS';
+    } else if (t == 'OS') {
       bg = Colors.red.shade100; fg = Colors.red.shade700; label = 'Outstation';
     } else if (t == 'EXHQ') {
       bg = Colors.orange.shade100; fg = Colors.orange.shade700; label = 'Ex-HQ';
@@ -1256,7 +1338,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ),
             if (_serverDaType.isNotEmpty && _endLocation != null) ...[
               const SizedBox(width: 8),
-              _buildStationTypeBadge(_serverDaType == 'OS' ? 'OS' : _serverDaType == 'EX' ? 'EXHQ' : 'HQ'),
+              _buildStationTypeBadge(_serverDaType == 'EX-OS' || _serverDaType == 'EX_OS' ? 'EX-OS' : _serverDaType == 'OS' ? 'OS' : _serverDaType == 'EX' ? 'EXHQ' : 'HQ'),
             ],
           ],
         ),
@@ -1618,7 +1700,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Widget _buildAllowanceCards() {
     return Column(
       children: [
-        if (_canOsReturn && !_isLocked) ...[
+        if ((_serverDaType == 'OS' || _serverDaType == 'EX_OS') && !_isLocked) ...[
           _buildOsReturnToggle(),
           const SizedBox(height: 10),
         ],
@@ -1633,36 +1715,71 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.orange.shade50,
+        color: _isOsReturn ? Colors.orange.shade50 : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
+        border: Border.all(
+            color: _isOsReturn ? Colors.orange.shade300 : Colors.grey.shade300),
       ),
       child: Row(
         children: [
-          Icon(Icons.reply, color: Colors.orange.shade700, size: 20),
+          Icon(Icons.reply_outlined,
+              color: _isOsReturn ? Colors.orange.shade700 : Colors.grey.shade500,
+              size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('OS Return',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.orange.shade800,
-                        fontSize: 13)),
+                Row(
+                  children: [
+                    Text('OS Return Allowance',
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: _isOsReturn
+                                ? Colors.orange.shade800
+                                : Colors.grey.shade700,
+                            fontSize: 13)),
+                    if (_osReturnAmount > 0) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _isOsReturn
+                              ? Colors.orange.shade600
+                              : Colors.grey.shade400,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('₹${_fmt(_osReturnAmount)}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 2),
                 Text(
                   _isOsReturn
-                      ? 'Return travel from outstation included'
-                      : 'Yesterday was outstation — claim return?',
-                  style: TextStyle(fontSize: 11, color: Colors.orange.shade600),
+                      ? 'Return allowance ₹${_fmt(_osReturnAmount)} added to DA'
+                      : 'Claim OS return allowance for today\'s outstation trip',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: _isOsReturn
+                          ? Colors.orange.shade700
+                          : Colors.grey.shade500),
                 ),
               ],
             ),
           ),
           Switch(
             value: _isOsReturn,
-            onChanged: (v) => setState(() => _isOsReturn = v),
-            activeColor: Colors.orange.shade700,
+            onChanged: (v) {
+              setState(() => _isOsReturn = v);
+              _recalculateTotal();
+            },
+            activeThumbColor: Colors.orange.shade700,
           ),
         ],
       ),
