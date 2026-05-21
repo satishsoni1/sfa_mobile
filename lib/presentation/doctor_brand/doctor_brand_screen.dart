@@ -89,6 +89,7 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
     });
     _searchCtrl.addListener(() => setState(() {}));
     _loadBrands();
+    _loadDoctorSummary();
     _loadSubordinates();
   }
 
@@ -478,7 +479,7 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
               )));
           if (targetUserId == null) {
             _loadBrands();
-            if (_tabController.index == 1) _loadDoctorSummary();
+            _loadDoctorSummary();
           } else {
             _loadTeamBrands(targetUserId);
           }

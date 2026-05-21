@@ -54,7 +54,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.19";
+  static const String CURRENT_APP_VERSION = "1.0.20";
 
   // --- STATE ---
   bool _isCheckedIn = false;

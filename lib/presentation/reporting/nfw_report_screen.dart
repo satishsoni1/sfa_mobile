@@ -247,9 +247,6 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
     "Conference",
     "Meeting",
     "Closing",
-    "Casual Leave",
-    "Sick Leave",
-    "Loss of Pay",
   ];
 
   Future<void> _submit() async {
