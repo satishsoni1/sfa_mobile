@@ -137,6 +137,9 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     return true;
   }
 
+  bool get _canEditMyList =>
+      _myApprovalStatus != 'pending' && _myApprovalStatus != 'approved';
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
@@ -401,6 +404,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   }
 
   void _openAddEdit([NewDoctor? doc]) async {
+    if (!_canEditMyList) return;
     if (_isLoadingTargets) await _loadSpecialityTargets();
     if (!mounted) return;
     final result = await Navigator.push(
@@ -445,11 +449,13 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _purple,
-        onPressed: () => _openAddEdit(),
-        child: const Icon(Icons.person_add_alt_1, color: Colors.white),
-      ),
+      floatingActionButton: _canEditMyList
+          ? FloatingActionButton(
+              backgroundColor: _purple,
+              onPressed: () => _openAddEdit(),
+              child: const Icon(Icons.person_add_alt_1, color: Colors.white),
+            )
+          : null,
       body: Column(
         children: [
           Padding(
@@ -518,7 +524,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           if (docs.isEmpty)
             _buildEmptyState('No doctors added yet. Tap + to add your first doctor.')
           else
-            ...docs.map((d) => _buildDoctorCard(d, canEdit: true)),
+            ...docs.map((d) => _buildDoctorCard(d, canEdit: _canEditMyList)),
         ],
       ),
     );
@@ -980,18 +986,26 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
 
   Widget _buildSubmitSection() {
     if (_myApprovalStatus == 'approved') {
-      return _statusBanner(
-        icon: Icons.verified, color: Colors.green,
-        title: 'List Approved!',
-        subtitle: 'Your doctor list has been approved by your manager.',
-      );
+      return Column(children: [
+        _statusBanner(
+          icon: Icons.verified, color: Colors.green,
+          title: 'List Approved!',
+          subtitle: 'Your doctor list has been approved by your manager.',
+        ),
+        const SizedBox(height: 8),
+        _editLockedBanner(),
+      ]);
     }
     if (_myApprovalStatus == 'pending') {
-      return _statusBanner(
-        icon: Icons.hourglass_empty, color: Colors.blue,
-        title: 'Pending Approval',
-        subtitle: 'Your list is submitted and awaiting manager review.',
-      );
+      return Column(children: [
+        _statusBanner(
+          icon: Icons.hourglass_empty, color: Colors.blue,
+          title: 'Pending Approval',
+          subtitle: 'Your list is submitted and awaiting manager review.',
+        ),
+        const SizedBox(height: 8),
+        _editLockedBanner(),
+      ]);
     }
     if (_myApprovalStatus == 'rejected') {
       return Column(children: [
@@ -1099,6 +1113,16 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           ),
         ),
       ]),
+    );
+  }
+
+  Widget _editLockedBanner() {
+    return _statusBanner(
+      icon: Icons.lock_outline,
+      color: Colors.orange,
+      title: 'Editing Locked',
+      subtitle:
+          'You cannot add a new Dr or update Dr details because the list has already been submitted to the manager.',
     );
   }
 
