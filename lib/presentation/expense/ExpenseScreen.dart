@@ -92,13 +92,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // Hotel / meal bill fields (OS/EX_OS with hotel_bill_flag=1)
   bool _hotelBillFlag = false;
   double _pocketAllowance = 0;
-  double _hotelBillLimit = 0;
+  double _hotelBillLimit = 0;   // active limit based on city class
+  double _hotelBillALimit = 0;  // hotel_a_bill from rates (A-class city)
+  double _hotelBillBLimit = 0;  // hotel_b_bill from rates (B-class city)
+  String _hotelCityClass = '';  // 'A', 'B', 'metro', ''
   double _mealBillLimit = 0;
   double _hotelAmount = 0;
   double _mealAmount = 0;
   final TextEditingController _hotelAmountController = TextEditingController();
   final TextEditingController _mealAmountController = TextEditingController();
   List<_AttachmentMeta> _attachmentsMeta = [];
+
+  // Multi-stop route (FIELD mode)
+  List<String?> _fieldWaypoints = [null, null]; // first=from, last=to, any middle=via
+  bool _userDirectionOverride = false; // user explicitly chose one/two-way for EX/EX_OS
+  bool _userPrefersOneWay = false;
+  int _recalcToken = 0; // incremented on each recalc; stale async results are discarded
 
   // Itemized other expenses (Toll, Courier, Parking, Food Bill, Others)
   List<OtherExpenseItem> _otherExpenses = [];
@@ -137,6 +146,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _startLocation = (d['start_location'] ?? 'HQ').toString();
     _endLocation   = savedTo?.isNotEmpty == true ? savedTo : null;
     _fromLocation  = savedFrom;
+
+    // Restore multi-stop waypoints from saved from/to
+    _fieldWaypoints = [
+      savedFrom?.isNotEmpty == true ? savedFrom : null,
+      savedTo?.isNotEmpty == true ? savedTo : null,
+    ];
 
     // Direction
     _taDirection = d['ta_direction']?.toString() ?? 'one_way';
@@ -264,6 +279,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _osReturnAmount  = (data['os_return_amount'] as num?)?.toDouble() ?? 0;
         _hotelBillFlag   = data['hotel_bill_flag'] == 1 || data['hotel_bill_flag'] == true;
         _pocketAllowance = (data['pocket_allowance'] as num?)?.toDouble() ?? 0;
+        _hotelBillALimit = (data['hotel_a_limit'] as num?)?.toDouble() ?? 0;
+        _hotelBillBLimit = (data['hotel_b_limit'] as num?)?.toDouble() ?? 0;
+        _hotelCityClass  = data['hotel_city_class']?.toString() ?? '';
         _hotelBillLimit  = (data['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
         _mealBillLimit   = (data['meal_bill_limit']  as num?)?.toDouble() ?? 0;
 
@@ -346,7 +364,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     const SizedBox(height: 14),
                     _buildFieldTravelSection(),
                     const SizedBox(height: 14),
-                    _buildAllowanceCards(),
+                    if (_bothWaypointsReady) ...[
+                      _buildAllowanceCards(),
+                      const SizedBox(height: 14),
+                    ] else
+                      _buildSelectBothLocationsHint(),
                     const SizedBox(height: 14),
                     if (!_isLocked)
                       _buildManualInputCard()
@@ -1072,11 +1094,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final hqLocation = result['hq_location'] as String?;
       setState(() {
         _taRoutes = routes;
-        // Prefer from_town_code from first route; fallback to gst_employee_profile.head_qtr
-        _userHq = routes.isNotEmpty
-            ? routes.first['from_town_code']?.toString()
-            : hqLocation;
-        _userHq ??= hqLocation;
+        // hq_location from API (from expense_rates_ta or gst_employee_profile) is authoritative
+        _userHq = hqLocation ?? (routes.isNotEmpty ? routes.first['from_town_code']?.toString() : null);
+        // Pre-fill the "From" waypoint with HQ when user hasn't picked one yet
+        if (_userHq != null && _fieldWaypoints.isNotEmpty && _fieldWaypoints[0] == null) {
+          _fieldWaypoints[0] = _userHq;
+        }
       });
       if (_expenseMode == 'TRANSIT' && _endLocation != null) {
         _updateTaFromSelection();
@@ -1122,6 +1145,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
+  // True when FIELD mode has both a valid FROM (explicit or HQ pre-fill) and a TO set.
+  bool get _bothWaypointsReady {
+    final from = _fieldWaypoints.isNotEmpty ? (_fieldWaypoints[0] ?? _userHq) : _userHq;
+    final to   = _fieldWaypoints.isNotEmpty ? _fieldWaypoints.last : null;
+    return from != null && from.isNotEmpty && to != null && to.isNotEmpty;
+  }
+
   // Unified destination selection handler — called by all three expense modes.
   // Determines station_type → DA, and kms/fare → TA from expense_rates_ta.
   bool _isSameLocation() {
@@ -1131,6 +1161,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   void _onDestinationSelected(String? town) {
+    print('Selected destination: $town');
     if (town == null) return;
 
     final from = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
@@ -1158,6 +1189,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   ///   FIXED fare, road km >150 → train slab, else km×3.5, direction multiplier.
   Future<void> _recalculateFromServer(String toTown) async {
     final fromTown = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
+    print('Recalculating from: $fromTown to: $toTown');
     if (fromTown.isEmpty) return;
 
     setState(() => _isRecalculating = true);
@@ -1195,7 +1227,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _isTwoWay        = taDir == 'two_way';
         _hotelBillFlag   = flag;
         _pocketAllowance = (result['pocket_allowance'] as num?)?.toDouble() ?? 0;
-        _hotelBillLimit  = (result['hotel_bill_limit']  as num?)?.toDouble() ?? 0;
+        _hotelBillALimit = (result['hotel_a_limit'] as num?)?.toDouble() ?? 0;
+        _hotelBillBLimit = (result['hotel_b_limit'] as num?)?.toDouble() ?? 0;
+        _hotelCityClass  = result['hotel_city_class']?.toString() ?? '';
+        // Active limit driven by city class
+        final cityClass = _hotelCityClass;
+        if (_hotelBillALimit > 0 && cityClass == 'A') {
+          _hotelBillLimit = _hotelBillALimit;
+        } else if (_hotelBillBLimit > 0 && cityClass == 'B') {
+          _hotelBillLimit = _hotelBillBLimit;
+        } else {
+          _hotelBillLimit = (result['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
+        }
         _mealBillLimit   = (result['meal_bill_limit']   as num?)?.toDouble() ?? 0;
         // Reset hotel/meal claims when route changes
         if (!flag) {
@@ -1218,6 +1261,315 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   void _updateTaFromSelection() => _onDestinationSelected(_endLocation);
 
+
+  // ─── Multi-stop Route (FIELD mode) ────────────────────────────────────────────
+
+  /// Finds a route entry for two towns in either direction.
+  Map<String, dynamic>? _findRoute(String a, String b) {
+    final au = a.toUpperCase(), bu = b.toUpperCase();
+    for (final r in _taRoutes) {
+      final f = (r['from_town_code']?.toString() ?? '').toUpperCase();
+      final t = (r['to_town_code']?.toString() ?? '').toUpperCase();
+      if ((f == au && t == bu) || (f == bu && t == au)) return r;
+    }
+    return null;
+  }
+
+  void _onWaypointChanged(int index, String? value) {
+    print('Waypoint $index changed to: $value');
+    setState(() => _fieldWaypoints[index] = value);
+    _recalcFieldRoute();
+  }
+
+  /// Client-side KM sum across all waypoint segments.
+  /// Calls server for DA type+amount using first→last stop.
+  /// Uses a cancel token so only the most-recent call applies its result.
+  Future<void> _recalcFieldRoute() async {
+    print(_expenseMode);
+    if (_expenseMode != 'FIELD') return;
+
+    final myToken = ++_recalcToken;
+
+    // ── 1. Client-side KM calculation (instant) ─────────────────────────────
+    const stPriority = {'EX_OS': 4, 'OS': 3, 'EX': 2, 'HQ': 1};
+    double roadKm = 0, fixedFare = 0;
+    String topStation = '';
+
+    // Resolve effective waypoints: use _userHq for null first slot
+    final resolved = List<String?>.from(_fieldWaypoints);
+    if (resolved.isNotEmpty && resolved[0] == null && _userHq != null) {
+      resolved[0] = _userHq;
+    }
+    final stops = resolved.where((w) => w != null && w.isNotEmpty).cast<String>().toList();
+
+    for (int i = 0; i < stops.length - 1; i++) {
+      final route = _findRoute(stops[i], stops[i + 1]);
+      if (route == null) continue;
+      final km = double.tryParse(route['kms']?.toString() ?? '') ?? 0;
+      final mode = (route['mode_of_travel']?.toString() ?? '').toUpperCase();
+      final st = (route['station_type']?.toString() ?? '').toUpperCase().replaceAll('-', '_');
+      if (mode == 'FIXED') {
+        fixedFare += double.tryParse(route['fare']?.toString() ?? '') ?? 0;
+      } else {
+        roadKm += km;
+      }
+      final existingP = stPriority[topStation] ?? 0;
+      final newP = stPriority[st] ?? 0;
+      if (newP > existingP) topStation = st;
+    }
+
+    final isEx = topStation == 'EX' || topStation == 'EX_OS';
+    final dirMult = isEx
+        ? (_userDirectionOverride ? (_userPrefersOneWay ? 1 : 2) : 2)
+        : 1;
+
+    final totalRoadKm = roadKm * dirMult;
+    final totalFixed = fixedFare * dirMult;
+    final taAmount = totalRoadKm * 3.5 + totalFixed;
+    final taDir = dirMult == 2 ? 'two_way' : 'one_way';
+
+    if (!mounted || myToken != _recalcToken) return;
+
+    // Apply client-side result immediately so UI is responsive
+    setState(() {
+      _serverTaKm     = totalRoadKm;
+      _serverTaAmount = taAmount;
+      _taDirection    = taDir;
+      _isTwoWay       = dirMult == 2;
+      _serverDaType   = topStation.isEmpty ? 'HQ' : topStation;
+      _selectedFrom   = stops.isNotEmpty ? stops.first : _selectedFrom;
+      _endLocation    = stops.length > 1 ? stops.last : null;
+    });
+    _recalculateTotal();
+    print(stops.join(' → '));
+    // ── 2. Server call for DA amount + hotel flags ───────────────────────────
+    // Only fire when both from and to are set
+    if (stops.length < 2) return;
+
+    // Debounce: wait briefly so rapid selections don't spam the server
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted || myToken != _recalcToken) return;
+
+    setState(() => _isRecalculating = true);
+    try {
+      final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+      final result  = await ApiService().recalculateOnLastLocation(
+          dateStr, stops.first, stops.last);
+
+      // Discard if a newer call has already started
+      if (!mounted || myToken != _recalcToken) return;
+
+      setState(() {
+        _serverDaType    = (result['da_type']?.toString() ?? _serverDaType).toUpperCase();
+        _serverDaAmount  = (result['da_amount'] as num?)?.toDouble() ?? _serverDaAmount;
+        _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
+        _hotelBillFlag   = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
+        _pocketAllowance = (result['pocket_allowance'] as num?)?.toDouble() ?? 0;
+        _hotelBillALimit = (result['hotel_a_limit'] as num?)?.toDouble() ?? 0;
+        _hotelBillBLimit = (result['hotel_b_limit'] as num?)?.toDouble() ?? 0;
+        _hotelCityClass  = result['hotel_city_class']?.toString() ?? '';
+        if (_hotelBillALimit > 0 && _hotelCityClass == 'A') {
+          _hotelBillLimit = _hotelBillALimit;
+        } else if (_hotelBillBLimit > 0 && _hotelCityClass == 'B') {
+          _hotelBillLimit = _hotelBillBLimit;
+        } else {
+          _hotelBillLimit = (result['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
+        }
+        _mealBillLimit = (result['meal_bill_limit'] as num?)?.toDouble() ?? 0;
+        if (!_hotelBillFlag) {
+          _hotelBillClaimed = false;
+          _hotelAmount = 0;
+          _mealAmount  = 0;
+          _hotelAmountController.clear();
+          _mealAmountController.clear();
+        }
+      });
+      _recalculateTotal();
+    } catch (_) {
+      // Server unreachable — client-side KM/TA already applied; DA keeps last value
+    } finally {
+      if (mounted && myToken == _recalcToken) {
+        setState(() => _isRecalculating = false);
+      }
+    }
+  }
+
+  Widget _buildFieldRouteSection() {
+    final allLocs = _allLocations();
+    if (allLocs.isEmpty) return const SizedBox.shrink();
+
+    final isExType = _serverDaType == 'EX' || _serverDaType == 'EX_OS';
+    final effectiveOneWay = _userDirectionOverride ? _userPrefersOneWay : !_isTwoWay;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.route, size: 15, color: Color(0xFF4A148C)),
+            const SizedBox(width: 6),
+            Text('Route (drag to reorder)',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            const Spacer(),
+            if (!_isLocked)
+              TextButton.icon(
+                onPressed: () {
+                  setState(() => _fieldWaypoints.insert(_fieldWaypoints.length - 1, null));
+                },
+                icon: const Icon(Icons.add_location_alt_outlined, size: 15),
+                label: const Text('Add Stop', style: TextStyle(fontSize: 12)),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF4A148C),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  minimumSize: const Size(0, 0),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ReorderableListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _fieldWaypoints.length,
+          onReorder: _isLocked
+              ? (_, __) {}
+              : (oldIndex, newIndex) {
+                  setState(() {
+                    if (newIndex > oldIndex) newIndex--;
+                    final item = _fieldWaypoints.removeAt(oldIndex);
+                    _fieldWaypoints.insert(newIndex, item);
+                  });
+                  _recalcFieldRoute();
+                },
+          itemBuilder: (context, index) {
+            final isFirst = index == 0;
+            final isLast  = index == _fieldWaypoints.length - 1;
+            // For the "From" slot, fall back to HQ when not yet chosen
+            final val  = _fieldWaypoints[index] ?? (isFirst ? _userHq : null);
+            final safe = allLocs.contains(val) ? val : null;
+            final icon    = isFirst ? Icons.my_location : isLast ? Icons.location_on : Icons.radio_button_unchecked;
+            final iconColor = isFirst ? Colors.green.shade600 : isLast ? Colors.red.shade600 : Colors.blue.shade400;
+            final hint    = isFirst ? 'From' : isLast ? 'To' : 'Via';
+
+            return Padding(
+              key: ValueKey('wp_$index'),
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  if (!_isLocked)
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Icon(Icons.drag_handle, color: Colors.grey.shade400, size: 20),
+                    )
+                  else
+                    const SizedBox(width: 20),
+                  const SizedBox(width: 6),
+                  Icon(icon, color: iconColor, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      value: safe,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        hintText: hint,
+                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                      ),
+                      items: allLocs
+                          .map((l) => DropdownMenuItem(value: l, child: Text(l, overflow: TextOverflow.ellipsis)))
+                          .toList(),
+                      onChanged: _isLocked ? null : (v) => _onWaypointChanged(index, v),
+                    ),
+                  ),
+                  if (!isFirst && !isLast && !_isLocked) ...[
+                    const SizedBox(width: 4),
+                    IconButton(
+                      onPressed: () {
+                        setState(() => _fieldWaypoints.removeAt(index));
+                        _recalcFieldRoute();
+                      },
+                      icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade400, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    ),
+                  ] else
+                    const SizedBox(width: 36),
+                ],
+              ),
+            );
+          },
+        ),
+
+        // Route KM summary
+        if (_serverTaKm > 0 || _isRecalculating) ...[
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFEDE7F6),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: _isRecalculating
+                ? const Row(mainAxisSize: MainAxisSize.min, children: [
+                    SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+                    SizedBox(width: 8),
+                    Text('Calculating…', style: TextStyle(fontSize: 12, color: Color(0xFF4A148C))),
+                  ])
+                : Row(
+                    children: [
+                      const Icon(Icons.straighten, size: 14, color: Color(0xFF4A148C)),
+                      const SizedBox(width: 6),
+                      Text('${_fmt(_serverTaKm)} km total',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A148C), fontSize: 13)),
+                      const SizedBox(width: 12),
+                      Text('TA: ₹${_fmt(_serverTaAmount)}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A148C), fontSize: 13)),
+                      if (_isTwoWay) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: const Color(0xFF4A148C), borderRadius: BorderRadius.circular(4)),
+                          child: const Text('2-way', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ],
+                  ),
+          ),
+        ],
+
+        // One Way / Two Way selector — only for EX / EX_OS
+        if (isExType && _serverTaKm > 0 && !_isLocked) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text('Journey Type', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+              const SizedBox(width: 12),
+              _buildWayChip(
+                label: 'One Way',
+                selected: effectiveOneWay,
+                onTap: () {
+                  _userDirectionOverride = true;
+                  _userPrefersOneWay = true;
+                  _recalcFieldRoute();
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildWayChip(
+                label: 'Two Way',
+                selected: !effectiveOneWay,
+                onTap: () {
+                  _userDirectionOverride = true;
+                  _userPrefersOneWay = false;
+                  _recalcFieldRoute();
+                },
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
 
   // ─── Shared: Station Type Badge ───────────────────────────────────────────────
 
@@ -1245,9 +1597,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   // ─── Shared: From + To Route Section ─────────────────────────────────────────
 
-  // All unique locations — union of from_town_code and to_town_code
+  // All unique locations — union of from_town_code, to_town_code, and HQ.
+  // HQ is always included so it can be selected even if not part of any route.
   List<String> _allLocations() {
     final locs = <String>{};
+    if (_userHq != null && _userHq!.isNotEmpty) locs.add(_userHq!);
     for (final r in _taRoutes) {
       final f = r['from_town_code']?.toString() ?? '';
       final t = r['to_town_code']?.toString() ?? '';
@@ -1487,10 +1841,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // ─── Field Travel Section ─────────────────────────────────────────────────────
 
   Widget _buildFieldTravelSection() {
-    // Server km takes priority; fallback to DCR total_km from calcData
-    final autoKm = _serverTaKm > 0 ? _serverTaKm : _toDouble(_calcData!['total_km']);
-    final kmSource = _serverTaKm > 0 ? 'Server' : 'DCR Route';
-
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -1512,8 +1862,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ),
           const SizedBox(height: 14),
 
-          // From + To — shared picker used across all expense types
-          _buildFromToSection(accent: const Color(0xFF4A148C)),
+          // Multi-stop draggable route
+          _buildFieldRouteSection(),
           const SizedBox(height: 14),
 
           // Mode of Travel
@@ -1521,64 +1871,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
           const SizedBox(height: 6),
           _buildModeChips(),
-          const SizedBox(height: 14),
-
-          // KM — read-only when route km found; manual entry only when
-          // destination is selected but no matching route exists in expense_rates_ta
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Distance ($kmSource)',
-                  style:
-                      TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-              const SizedBox(height: 4),
-              _endLocation != null && _serverTaKm == 0 && !_isSameLocation()
-                  ? TextField(
-                      controller: _manualKmController,
-                      keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true),
-                      onChanged: (_) => _recalculateTotal(),
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 10),
-                        suffixText: 'km',
-                        hintText: 'Enter distance',
-                        helperText:
-                            'No route found for this destination — enter km manually',
-                        helperStyle:
-                            TextStyle(fontSize: 10, color: Colors.orange.shade600),
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(
-                                color: Color(0xFF4A148C))),
-                      ),
-                    )
-                  : Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEDE7F6),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.straighten,
-                              size: 14, color: Color(0xFF4A148C)),
-                          const SizedBox(width: 6),
-                          Text('${_fmt(autoKm)} km',
-                              style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF4A148C))),
-                          const Spacer(),
-                          Icon(Icons.lock_outline,
-                              size: 12, color: Colors.purple.shade300),
-                        ],
-                      ),
-                    ),
-            ],
-          ),
         ],
       ),
     );
@@ -1703,6 +1995,29 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   // ─── DA + TA Cards ────────────────────────────────────────────────────────────
+
+  Widget _buildSelectBothLocationsHint() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEDE7F6),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF4A148C).withValues(alpha: 0.2)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.location_searching, color: const Color(0xFF4A148C), size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Select both From and To locations to view DA & TA allowances.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildAllowanceCards() {
     return Column(
@@ -1949,29 +2264,36 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 controller: _hotelAmountController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (v) {
-                  setState(() => _hotelAmount =
-                      (_hotelBillLimit > 0
-                          ? (double.tryParse(v) ?? 0).clamp(0, _hotelBillLimit)
-                          : (double.tryParse(v) ?? 0)));
+                  setState(() => _hotelAmount = double.tryParse(v) ?? 0);
                   _recalculateTotal();
                 },
                 decoration: InputDecoration(
                   labelText: 'Hotel Bill Amount',
                   prefixText: '₹ ',
-                  suffixText: _hotelBillLimit > 0
-                      ? 'Max ₹${_fmt(_hotelBillLimit)}'
-                      : null,
-                  suffixStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                  helperText: _hotelBillLimit > 0
-                      ? 'Capped at ₹${_fmt(_hotelBillLimit)}'
-                      : 'No limit configured',
-                  helperStyle: TextStyle(fontSize: 10, color: Colors.orange.shade600),
-                  border:
-                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  suffixText: _hotelBillLimit > 0 ? 'Limit ₹${_fmt(_hotelBillLimit)}' : null,
+                  suffixStyle: TextStyle(
+                    fontSize: 11,
+                    color: (_hotelBillLimit > 0 && _hotelAmount > _hotelBillLimit)
+                        ? Colors.red.shade600
+                        : Colors.grey.shade500,
+                  ),
+                  helperText: (_hotelBillLimit > 0 && _hotelAmount > _hotelBillLimit)
+                      ? '₹${_fmt(_hotelAmount - _hotelBillLimit)} above limit — may need manager approval'
+                      : (_hotelCityClass.isNotEmpty ? 'Class-$_hotelCityClass city limit applies' : null),
+                  helperStyle: TextStyle(
+                    fontSize: 10,
+                    color: (_hotelBillLimit > 0 && _hotelAmount > _hotelBillLimit)
+                        ? Colors.red.shade600
+                        : Colors.orange.shade700,
+                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide:
-                          BorderSide(color: Colors.teal.shade600)),
+                      borderSide: BorderSide(
+                        color: (_hotelBillLimit > 0 && _hotelAmount > _hotelBillLimit)
+                            ? Colors.red.shade400
+                            : Colors.teal.shade600,
+                      )),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1980,29 +2302,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 controller: _mealAmountController,
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (v) {
-                  setState(() => _mealAmount =
-                      (_mealBillLimit > 0
-                          ? (double.tryParse(v) ?? 0).clamp(0, _mealBillLimit)
-                          : (double.tryParse(v) ?? 0)));
+                  setState(() => _mealAmount = double.tryParse(v) ?? 0);
                   _recalculateTotal();
                 },
                 decoration: InputDecoration(
                   labelText: 'Meal Bill Amount',
                   prefixText: '₹ ',
-                  suffixText: _mealBillLimit > 0
-                      ? 'Max ₹${_fmt(_mealBillLimit)}'
+                  suffixText: _mealBillLimit > 0 ? 'Limit ₹${_fmt(_mealBillLimit)}' : null,
+                  suffixStyle: TextStyle(
+                    fontSize: 11,
+                    color: (_mealBillLimit > 0 && _mealAmount > _mealBillLimit)
+                        ? Colors.red.shade600
+                        : Colors.grey.shade500,
+                  ),
+                  helperText: (_mealBillLimit > 0 && _mealAmount > _mealBillLimit)
+                      ? '₹${_fmt(_mealAmount - _mealBillLimit)} above limit — may need manager approval'
                       : null,
-                  suffixStyle: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                  helperText: _mealBillLimit > 0
-                      ? 'Capped at ₹${_fmt(_mealBillLimit)}'
-                      : 'No limit configured',
-                  helperStyle: TextStyle(fontSize: 10, color: Colors.orange.shade600),
-                  border:
-                      OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  helperStyle: TextStyle(fontSize: 10, color: Colors.red.shade600),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                   focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(8),
-                      borderSide:
-                          BorderSide(color: Colors.teal.shade600)),
+                      borderSide: BorderSide(
+                        color: (_mealBillLimit > 0 && _mealAmount > _mealBillLimit)
+                            ? Colors.red.shade400
+                            : Colors.teal.shade600,
+                      )),
                 ),
               ),
               const SizedBox(height: 12),
