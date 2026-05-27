@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import '../../data/models/user_model.dart';
 import '../../data/services/api_service.dart';
 import 'ExpenseCalendarScreen.dart';
 import 'ExpenseScreen.dart';
@@ -795,89 +796,503 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   // ─── PDF Export ───────────────────────────────────────────────────────────────
 
   Future<void> _exportPdf() async {
+    final user = await ApiService().getUser();
     final pdf = pw.Document();
     final monthStr = DateFormat('MMMM yyyy').format(_selectedMonth);
+    
+    final empName = user?.fullName ?? '';
+    final designation = user?.designation ?? '';
+    final empCode = user?.employeeCode ?? '';
+    final headQuarter = user?.headQtr ?? '';
+    final division = user?.division ?? 'ZF1';
+
+    // Map daily expenses by day of month
+    final Map<int, Map<String, dynamic>> expenseByDay = {};
+    for (final exp in _expenses) {
+      final dateStr = (exp['expense_date'] ?? '').toString();
+      final date = DateTime.tryParse(dateStr);
+      if (date != null && date.month == _selectedMonth.month && date.year == _selectedMonth.year) {
+        expenseByDay[date.day] = Map<String, dynamic>.from(exp);
+      }
+    }
+
+    final daysInMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0).day;
+
+    double colTotalFare = 0;
+    double colTotalHq = 0;
+    double colTotalExHq = 0;
+    double colTotalOs = 0;
+    double colTotalExOs = 0;
+    double colTotalOsReturn = 0;
+    double colTotalPocket = 0;
+    double colTotalHotel = 0;
+    double colTotalMeal = 0;
+    double colTotalRowTotal = 0;
+    int colTotalDocVisits = 0;
+    int colTotalChemVisits = 0;
+
+    final List<List<String>> tableData = [];
+    for (int day = 1; day <= daysInMonth; day++) {
+      final exp = expenseByDay[day];
+      double fare = 0;
+      double hqAllow = 0;
+      double exHqAllow = 0;
+      double osAllow = 0;
+      double exOsAllow = 0;
+      double osReturnAllow = 0;
+      double pocket = 0;
+      double hotel = 0;
+      double meal = 0;
+      double rowTotal = 0;
+      int docVisits = 0;
+      int chemVisits = 0;
+      String townWorked = '';
+      String fromTown = '';
+      String toTown = '';
+      String remarks = '';
+
+      if (exp != null) {
+        remarks = (exp['remarks'] ?? '').toString();
+        final daType = (exp['da_type'] ?? '').toString().toUpperCase();
+        final daAmt = _toDouble(exp['da_amount']);
+        pocket = _toDouble(exp['pocket_allowance']);
+        hotel = _toDouble(exp['hotel_amount']);
+        meal = _toDouble(exp['meal_amount']);
+        fare = _toDouble(exp['ta_amount']);
+
+        docVisits = int.tryParse(exp['doctor_count']?.toString() ?? '0') ?? 0;
+        chemVisits = int.tryParse(exp['chemist_count']?.toString() ?? '0') ?? 0;
+
+        fromTown = (exp['from_location'] ?? exp['start_location'] ?? '').toString();
+        toTown = (exp['to_location'] ?? exp['end_location'] ?? '').toString();
+        if (fromTown.isNotEmpty || toTown.isNotEmpty) {
+          townWorked = [
+            if (fromTown.isNotEmpty) fromTown,
+            if (toTown.isNotEmpty) toTown,
+          ].join(' -> ');
+        }
+
+        final isOsRet = exp['is_os_return'] == 1 || exp['is_os_return'] == '1' || daType == 'OS_RETURN';
+
+        if (isOsRet) {
+          osReturnAllow = daAmt;
+        } else if (daType == 'HQ') {
+          hqAllow = daAmt;
+        } else if (daType == 'EX') {
+          exHqAllow = daAmt;
+        } else if (daType == 'EX_OS' || daType == 'EX-OS') {
+          exOsAllow = pocket > 0 ? pocket : (daAmt - hotel - meal);
+          if (exOsAllow < 0) exOsAllow = 0;
+        } else if (daType == 'OS') {
+          osAllow = pocket > 0 ? pocket : (daAmt - hotel - meal);
+          if (osAllow < 0) osAllow = 0;
+        } else {
+          if (daType == 'TRANSIT') {
+            // Transit mode
+          } else {
+            if (daType.contains('OS')) {
+              osAllow = daAmt;
+            } else if (daType.contains('EX')) {
+              exHqAllow = daAmt;
+            } else {
+              hqAllow = daAmt;
+            }
+          }
+        }
+
+        rowTotal = fare + hqAllow + exHqAllow + osAllow + exOsAllow + osReturnAllow + pocket + hotel + meal;
+        
+        colTotalFare += fare;
+        colTotalHq += hqAllow;
+        colTotalExHq += exHqAllow;
+        colTotalOs += osAllow;
+        colTotalExOs += exOsAllow;
+        colTotalOsReturn += osReturnAllow;
+        colTotalPocket += pocket;
+        colTotalHotel += hotel;
+        colTotalMeal += meal;
+        colTotalRowTotal += rowTotal;
+        colTotalDocVisits += docVisits;
+        colTotalChemVisits += chemVisits;
+
+        final otherAmt = _toDouble(exp['other_amount']);
+        if (otherAmt > 0) {
+          remarks = remarks.isEmpty ? "Other: Rs. ${_fmt(otherAmt)}" : "Other: Rs. ${_fmt(otherAmt)}. $remarks";
+        }
+      }
+
+      tableData.add([
+        day.toString(),
+        townWorked,
+        docVisits > 0 ? docVisits.toString() : "",
+        chemVisits > 0 ? chemVisits.toString() : "",
+        fromTown,
+        toTown,
+        fare > 0 ? _fmt(fare) : "",
+        hqAllow > 0 ? _fmt(hqAllow) : "",
+        exHqAllow > 0 ? _fmt(exHqAllow) : "",
+        osAllow > 0 ? _fmt(osAllow) : "",
+        exOsAllow > 0 ? _fmt(exOsAllow) : "",
+        osReturnAllow > 0 ? _fmt(osReturnAllow) : "",
+        pocket > 0 ? _fmt(pocket) : "",
+        hotel > 0 ? _fmt(hotel) : "",
+        meal > 0 ? _fmt(meal) : "",
+        rowTotal > 0 ? _fmt(rowTotal) : "",
+        remarks,
+      ]);
+    }
+
+    // Sum up monthly claims
+    double claimsStationery = 0;
+    double claimsCourier = 0;
+    double claimsMobileInternet = 0;
+    double claimsSample = 0;
+    double claimsMisc = 0;
+
+    for (final claim in _monthlyClaims) {
+      final type = (claim['claim_type'] ?? '').toString().toLowerCase();
+      final amt = _toDouble(claim['amount']);
+      if (type == 'stationery' || type == 'postage') {
+        claimsStationery += amt;
+      } else if (type == 'courier') {
+        claimsCourier += amt;
+      } else if (type == 'mobile' || type == 'internet') {
+        claimsMobileInternet += amt;
+      } else if (type == 'sample' || type == 'sample clearing') {
+        claimsSample += amt;
+      } else {
+        claimsMisc += amt;
+      }
+    }
+    final double claimsTotal = claimsStationery + claimsCourier + claimsMobileInternet + claimsSample + claimsMisc;
+    final double totalDailyWithOther = _toDouble(_summary['grand_total']);
+    final double overallReimbursementTotal = totalDailyWithOther + claimsTotal;
+
+    final tableHeaders = [
+      'DATE',
+      'TOWN WORKED',
+      'Doc Visits',
+      'Chem Visits',
+      'Travel From',
+      'Travel To',
+      'TA Rs.',
+      'HQ Rs.',
+      'EX-HQ Rs.',
+      'OS Rs.',
+      'EX-OS Rs.',
+      'OS Ret Rs.',
+      'Pocket Allow',
+      'Hotel Stay',
+      'Meal Rs.',
+      'Total Rs.',
+      'REMARKS',
+    ];
+
+    pw.Widget _cell(String text, {bool bold = false, bool isNumber = false, double fontSize = 5.0}) {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(horizontal: 1.0, vertical: 0.8),
+        child: pw.Text(
+          text,
+          style: pw.TextStyle(
+            fontSize: fontSize,
+            fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+          ),
+          textAlign: isNumber ? pw.TextAlign.right : pw.TextAlign.left,
+        ),
+      );
+    }
 
     pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(32),
-        build: (ctx) => [
-          pw.Header(
-            level: 0,
-            child: pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      pw.Page(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        build: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Header Title
+            pw.Center(
+              child: pw.Column(
+                children: [
+                  pw.Text('ZORVIA TOUR EXPENSE STATEMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: const PdfColor.fromInt(0xFF4A148C))),
+                  pw.SizedBox(height: 1),
+                  pw.Text('DIVISION: ${division.toUpperCase()}  |  ZONE: ${(_summary['zone'] ?? 'ZF').toString().toUpperCase()}  |  STATUS: ${_isSubmitted ? "SUBMITTED" : "PENDING"}',
+                      style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 3),
+            // Employee details table
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
               children: [
-                pw.Text('Expense Statement - $monthStr',
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 16)),
-                pw.Text(
-                    _isSubmitted ? 'SUBMITTED' : 'PENDING',
-                    style: pw.TextStyle(
-                        color: _isSubmitted ? PdfColors.green : PdfColors.orange,
-                        fontWeight: pw.FontWeight.bold)),
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
+                      pw.Text("EMP. NAME: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
+                      pw.Text(empName.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                    ])),
+                    pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
+                      pw.Text("DESIGNATION: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
+                      pw.Text(designation.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                    ])),
+                    pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
+                      pw.Text("EMPLOYEE CODE: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
+                      pw.Text(empCode.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                    ])),
+                  ],
+                ),
+                pw.TableRow(
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
+                      pw.Text("HEAD QUARTER: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
+                      pw.Text(headQuarter.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                    ])),
+                    pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
+                      pw.Text("TOUR FOR THE MONTH: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
+                      pw.Text(monthStr.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                    ])),
+                    pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
+                      pw.Text("DATE OF EXPORT: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
+                      pw.Text(DateFormat('dd-MM-yyyy').format(DateTime.now()), style: pw.TextStyle(fontSize: 6.0)),
+                    ])),
+                  ],
+                ),
               ],
             ),
-          ),
-          pw.SizedBox(height: 12),
-          pw.TableHelper.fromTextArray(
-            headers: ['Date', 'DA Type', 'DA ₹', 'TA km', 'TA ₹', 'Other ₹', 'Total ₹'],
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            headerDecoration: const pw.BoxDecoration(color: PdfColors.purple100),
-            data: _expenses.map((e) {
-              final total = _toDouble(e['da_amount']) +
-                  _toDouble(e['ta_amount']) +
-                  _toDouble(e['other_amount']);
-              return [
-                e['expense_date'] ?? '',
-                e['da_type'] ?? '',
-                _fmt(_toDouble(e['da_amount'])),
-                _fmt(_toDouble(e['ta_distance'])),
-                _fmt(_toDouble(e['ta_amount'])),
-                _fmt(_toDouble(e['other_amount'])),
-                _fmt(total),
-              ];
-            }).toList(),
-          ),
-          pw.SizedBox(height: 12),
-          pw.Row(
-            mainAxisAlignment: pw.MainAxisAlignment.end,
-            children: [
-              pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
-                pw.Text(
-                    'Total DA: ₹${_fmt(_toDouble(_summary['total_da']))}'),
-                pw.Text(
-                    'Total TA: ₹${_fmt(_toDouble(_summary['total_ta']))}'),
-                pw.Text(
-                    'Other: ₹${_fmt(_toDouble(_summary['total_other']))}'),
-                pw.Divider(),
-                pw.Text(
-                    'Grand Total: ₹${_fmt(_toDouble(_summary['grand_total']))}',
-                    style: pw.TextStyle(
-                        fontWeight: pw.FontWeight.bold, fontSize: 13)),
-              ]),
-            ],
-          ),
-          if (_monthlyClaims.isNotEmpty) ...[
-            pw.SizedBox(height: 20),
-            pw.Text('Monthly Claims',
-                style: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold, fontSize: 13)),
-            pw.SizedBox(height: 8),
-            pw.TableHelper.fromTextArray(
-              headers: ['Type', 'Amount', 'Bill'],
-              data: _monthlyClaims.map((c) => [
-                c['claim_type'] ?? '',
-                '₹${_fmt(_toDouble(c['amount']))}',
-                c['bill_attachment'] != null ? 'Yes' : 'No',
-              ]).toList(),
+            pw.SizedBox(height: 4),
+            // Daily Table
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+              columnWidths: {
+                0: const pw.FixedColumnWidth(20), // Date
+                1: const pw.FixedColumnWidth(90), // Town Worked
+                2: const pw.FixedColumnWidth(30), // Visits Doc
+                3: const pw.FixedColumnWidth(30), // Visits Chem
+                4: const pw.FixedColumnWidth(70), // From
+                5: const pw.FixedColumnWidth(70), // To
+                6: const pw.FixedColumnWidth(35), // TA Rs.
+                7: const pw.FixedColumnWidth(35), // HQ Rs.
+                8: const pw.FixedColumnWidth(35), // EX-HQ Rs.
+                9: const pw.FixedColumnWidth(35), // OS Rs.
+                10: const pw.FixedColumnWidth(35), // EX-OS Rs.
+                11: const pw.FixedColumnWidth(40), // OS Ret Rs.
+                12: const pw.FixedColumnWidth(35), // Pocket Allow
+                13: const pw.FixedColumnWidth(40), // Hotel Stay
+                14: const pw.FixedColumnWidth(35), // Meal
+                15: const pw.FixedColumnWidth(50), // Total Rs
+                16: const pw.FixedColumnWidth(85), // Remarks
+              },
+              children: [
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColor.fromInt(0xFF4A148C)),
+                  children: tableHeaders.map((h) => pw.Container(
+                    alignment: pw.Alignment.center,
+                    padding: const pw.EdgeInsets.symmetric(vertical: 2),
+                    child: pw.Text(h, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 5.0), textAlign: pw.TextAlign.center),
+                  )).toList(),
+                ),
+                ...List.generate(daysInMonth, (index) {
+                  final row = tableData[index];
+                  final isEven = index % 2 == 0;
+                  return pw.TableRow(
+                    decoration: pw.BoxDecoration(
+                      color: isEven ? PdfColors.grey50 : PdfColors.white,
+                    ),
+                    children: [
+                      _cell(row[0], bold: true, fontSize: 5.0),
+                      _cell(row[1], fontSize: 5.0),
+                      _cell(row[2], isNumber: true, fontSize: 5.0),
+                      _cell(row[3], isNumber: true, fontSize: 5.0),
+                      _cell(row[4], fontSize: 5.0),
+                      _cell(row[5], fontSize: 5.0),
+                      _cell(row[6], isNumber: true, fontSize: 5.0),
+                      _cell(row[7], isNumber: true, fontSize: 5.0),
+                      _cell(row[8], isNumber: true, fontSize: 5.0),
+                      _cell(row[9], isNumber: true, fontSize: 5.0),
+                      _cell(row[10], isNumber: true, fontSize: 5.0),
+                      _cell(row[11], isNumber: true, fontSize: 5.0),
+                      _cell(row[12], isNumber: true, fontSize: 5.0),
+                      _cell(row[13], isNumber: true, fontSize: 5.0),
+                      _cell(row[14], isNumber: true, fontSize: 5.0),
+                      _cell(row[15], isNumber: true, bold: true, fontSize: 5.0),
+                      _cell(row[16], fontSize: 4.5),
+                    ],
+                  );
+                }),
+                pw.TableRow(
+                  decoration: const pw.BoxDecoration(color: PdfColors.purple50),
+                  children: [
+                    _cell("TOTAL", bold: true, fontSize: 5.5),
+                    _cell("", fontSize: 5.5),
+                    _cell(colTotalDocVisits > 0 ? colTotalDocVisits.toString() : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalChemVisits > 0 ? colTotalChemVisits.toString() : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell("", fontSize: 5.5),
+                    _cell("", fontSize: 5.5),
+                    _cell(colTotalFare > 0 ? _fmt(colTotalFare) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalHq > 0 ? _fmt(colTotalHq) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalExHq > 0 ? _fmt(colTotalExHq) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 5.5),
+                    _cell("", fontSize: 5.5),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 5),
+            // Footer Section
+            pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                // Left Column: Signatures
+                pw.Expanded(
+                  flex: 10,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.SizedBox(height: 4),
+                      pw.Text("Checked & Approved By ABDM/RBDM/DBM/ZBM", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.5)),
+                      pw.SizedBox(height: 8),
+                      pw.Row(
+                        children: [
+                          pw.Text("Signature: ______________________", style: pw.TextStyle(fontSize: 6.0)),
+                          pw.Spacer(),
+                          pw.Text("Date: ______________", style: pw.TextStyle(fontSize: 6.0)),
+                        ],
+                      ),
+                      pw.SizedBox(height: 6),
+                      pw.Row(
+                        children: [
+                          pw.Text("Signature: ______________________", style: pw.TextStyle(fontSize: 6.0)),
+                          pw.Spacer(),
+                          pw.Text("Date: ______________", style: pw.TextStyle(fontSize: 6.0)),
+                        ],
+                      ),
+                      pw.SizedBox(height: 5),
+                      pw.Text("Name & Designation: ________________________________________________", style: pw.TextStyle(fontSize: 6.0)),
+                      pw.SizedBox(height: 6),
+                      pw.Text(
+                        "1st Copy -Head Office (Along with all Supporting Bills/Vouchers), 2nd Copy - ABM, 3rd Copy - RBDM/DBM/ZBM, 4th Copy - Self. H.O. Should Receive by 7th Day of Every Month",
+                        style: pw.TextStyle(fontSize: 4.5, color: PdfColors.grey600, fontStyle: pw.FontStyle.italic),
+                      ),
+                    ],
+                  ),
+                ),
+                pw.Spacer(flex: 1),
+                // Right Column: Monthly Claims & Summary Box
+                pw.Expanded(
+                  flex: 10,
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.SizedBox(height: 2),
+                      pw.Text("Monthly Claims Summary", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.5)),
+                      pw.SizedBox(height: 3),
+                      pw.Table(
+                        border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                        children: [
+                          pw.TableRow(
+                            decoration: const pw.BoxDecoration(color: PdfColors.grey100),
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("Claim Category", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("Amount (Rs.)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("A. Stationery & Postage", style: pw.TextStyle(fontSize: 5.5))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsStationery > 0 ? _fmt(claimsStationery) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("B. Couriers", style: pw.TextStyle(fontSize: 5.5))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsCourier > 0 ? _fmt(claimsCourier) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("C. Mobile / Internet", style: pw.TextStyle(fontSize: 5.5))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsMobileInternet > 0 ? _fmt(claimsMobileInternet) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("D. Sample Clearing", style: pw.TextStyle(fontSize: 5.5))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsSample > 0 ? _fmt(claimsSample) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("E. Misc. Claims (Hotel/Meal/Toll/etc.)", style: pw.TextStyle(fontSize: 5.5))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsMisc > 0 ? _fmt(claimsMisc) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            decoration: const pw.BoxDecoration(color: PdfColors.purple50),
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("TOTAL CLAIMS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(_fmt(claimsTotal), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                        ],
+                      ),
+                      pw.SizedBox(height: 5),
+                      // Highlights Box
+                      pw.Container(
+                        padding: const pw.EdgeInsets.all(3),
+                        decoration: pw.BoxDecoration(
+                          color: PdfColors.purple50,
+                          border: pw.Border.all(color: const PdfColor.fromInt(0xFF4A148C), width: 0.8),
+                          borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+                        ),
+                        child: pw.Column(
+                          children: [
+                            pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Text("Total Daily Expenses (+ TA):", style: pw.TextStyle(fontSize: 6.0, color: PdfColors.grey700)),
+                                pw.Text("Rs. ${_fmt(totalDailyWithOther)}", style: pw.TextStyle(fontSize: 6.0, fontWeight: pw.FontWeight.bold)),
+                              ],
+                            ),
+                            pw.SizedBox(height: 1),
+                            pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Text("Total Monthly Claims (A-E):", style: pw.TextStyle(fontSize: 6.0, color: PdfColors.grey700)),
+                                pw.Text("Rs. ${_fmt(claimsTotal)}", style: pw.TextStyle(fontSize: 6.0, fontWeight: pw.FontWeight.bold)),
+                              ],
+                            ),
+                            pw.Divider(color: const PdfColor.fromInt(0xFF4A148C), thickness: 0.4, height: 3),
+                            pw.Row(
+                              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                              children: [
+                                pw.Text("GRAND REIMBURSEMENT TOTAL:", style: pw.TextStyle(fontSize: 7.0, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF4A148C))),
+                                pw.Text("Rs. ${_fmt(overallReimbursementTotal)}", style: pw.TextStyle(fontSize: 8.0, fontWeight: pw.FontWeight.bold, color: const PdfColor.fromInt(0xFF4A148C))),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
-        ],
+        ),
       ),
     );
 
-    await Printing.layoutPdf(onLayout: (_) async => pdf.save());
+    await Printing.layoutPdf(
+      onLayout: (_) async => pdf.save(),
+      format: PdfPageFormat.a4.landscape,
+    );
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
