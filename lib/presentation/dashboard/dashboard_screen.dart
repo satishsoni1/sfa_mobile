@@ -54,7 +54,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.21";
+  static const String CURRENT_APP_VERSION = "1.0.23";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -646,13 +646,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.teal,
             () => _navigateTo(const RouteTourPlanScreen()),
           ),
-          _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
-            if (_isCheckedIn) {
-              _navigateTo(const DoctorListScreen());
-            } else {
-              _showSnack("Please Check In first!");
-            }
-          }),
+          // _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
+          //   if (_isCheckedIn) {
+          //     _navigateTo(const DoctorListScreen());
+          //   } else {
+          //     _showSnack("Please Check In first!");
+          //   }
+          // }),
           _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
             _navigateTo(ExpenseSummaryScreen());
           }),
@@ -669,12 +669,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
           }),
 
-          _MenuAction(
-            Icons.assignment_turned_in,
-            "Daily Report",
-            Colors.orange,
-            () => _navigateTo(const DailyReportScreen()),
-          ),
+          // _MenuAction(
+          //   Icons.assignment_turned_in,
+          //   "Daily Report",
+          //   Colors.orange,
+          //   () => _navigateTo(const DailyReportScreen()),
+          // ),
           _MenuAction(
             Icons.business_center,
             "NFW Report",
