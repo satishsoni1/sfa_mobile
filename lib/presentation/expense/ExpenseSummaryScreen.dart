@@ -988,9 +988,16 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'REMARKS',
     ];
 
-    pw.Widget _cell(String text, {bool bold = false, bool isNumber = false, double fontSize = 5.0}) {
+    pw.Widget _cell(String text, {
+  bool bold = false,
+  bool isNumber = false,
+  double fontSize = 7.5,
+}) {
       return pw.Padding(
-        padding: const pw.EdgeInsets.symmetric(horizontal: 1.0, vertical: 0.8),
+        padding: const pw.EdgeInsets.symmetric(
+  horizontal: 2,
+  vertical: 2,
+),
         child: pw.Text(
           text,
           style: pw.TextStyle(
@@ -1003,10 +1010,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     }
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        build: (ctx) => pw.Column(
+        build: (ctx) => [
+  pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             // Header Title
@@ -1016,7 +1024,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                   pw.Text('ZORVIA TOUR EXPENSE STATEMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: const PdfColor.fromInt(0xFF4A148C))),
                   pw.SizedBox(height: 1),
                   pw.Text('DIVISION: ${division.toUpperCase()}  |  ZONE: ${(_summary['zone'] ?? 'ZF').toString().toUpperCase()}  |  STATUS: ${_isSubmitted ? "SUBMITTED" : "PENDING"}',
-                      style: pw.TextStyle(fontSize: 5.5, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                      style: pw.TextStyle(fontSize: 7.0, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
                 ],
               ),
             ),
@@ -1029,32 +1037,32 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                   decoration: const pw.BoxDecoration(color: PdfColors.grey100),
                   children: [
                     pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
-                      pw.Text("EMP. NAME: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
-                      pw.Text(empName.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                      pw.Text("EMP. NAME: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.0)),
+                      pw.Text(empName.toUpperCase(), style: pw.TextStyle(fontSize: 8.0)),
                     ])),
                     pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
-                      pw.Text("DESIGNATION: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
-                      pw.Text(designation.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                      pw.Text("DESIGNATION: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.0)),
+                      pw.Text(designation.toUpperCase(), style: pw.TextStyle(fontSize: 8.0)),
                     ])),
                     pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
-                      pw.Text("EMPLOYEE CODE: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
-                      pw.Text(empCode.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                      pw.Text("EMPLOYEE CODE: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.0)),
+                      pw.Text(empCode.toUpperCase(), style: pw.TextStyle(fontSize: 8.0)),
                     ])),
                   ],
                 ),
                 pw.TableRow(
                   children: [
                     pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
-                      pw.Text("HEAD QUARTER: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
-                      pw.Text(headQuarter.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                      pw.Text("HEAD QUARTER: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.0)),
+                      pw.Text(headQuarter.toUpperCase(), style: pw.TextStyle(fontSize: 8.0)),
                     ])),
                     pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
-                      pw.Text("TOUR FOR THE MONTH: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
-                      pw.Text(monthStr.toUpperCase(), style: pw.TextStyle(fontSize: 6.0)),
+                      pw.Text("TOUR FOR THE MONTH: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.0)),
+                      pw.Text(monthStr.toUpperCase(), style: pw.TextStyle(fontSize: 8.0)),
                     ])),
                     pw.Padding(padding: const pw.EdgeInsets.all(2), child: pw.Row(children: [
-                      pw.Text("DATE OF EXPORT: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 6.0)),
-                      pw.Text(DateFormat('dd-MM-yyyy').format(DateTime.now()), style: pw.TextStyle(fontSize: 6.0)),
+                      pw.Text("DATE OF EXPORT: ", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 8.0)),
+                      pw.Text(DateFormat('dd-MM-yyyy').format(DateTime.now()), style: pw.TextStyle(fontSize: 8.0)),
                     ])),
                   ],
                 ),
@@ -1089,7 +1097,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                   children: tableHeaders.map((h) => pw.Container(
                     alignment: pw.Alignment.center,
                     padding: const pw.EdgeInsets.symmetric(vertical: 2),
-                    child: pw.Text(h, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 5.0), textAlign: pw.TextAlign.center),
+                    child: pw.Text(h, style: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 8.5), textAlign: pw.TextAlign.center),
                   )).toList(),
                 ),
                 ...List.generate(daysInMonth, (index) {
@@ -1100,22 +1108,22 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       color: isEven ? PdfColors.grey50 : PdfColors.white,
                     ),
                     children: [
-                      _cell(row[0], bold: true, fontSize: 5.0),
-                      _cell(row[1], fontSize: 5.0),
-                      _cell(row[2], isNumber: true, fontSize: 5.0),
-                      _cell(row[3], isNumber: true, fontSize: 5.0),
-                      _cell(row[4], fontSize: 5.0),
-                      _cell(row[5], fontSize: 5.0),
-                      _cell(row[6], isNumber: true, fontSize: 5.0),
-                      _cell(row[7], isNumber: true, fontSize: 5.0),
-                      _cell(row[8], isNumber: true, fontSize: 5.0),
-                      _cell(row[9], isNumber: true, fontSize: 5.0),
-                      _cell(row[10], isNumber: true, fontSize: 5.0),
-                      _cell(row[11], isNumber: true, fontSize: 5.0),
-                      _cell(row[12], isNumber: true, fontSize: 5.0),
-                      _cell(row[13], isNumber: true, fontSize: 5.0),
-                      _cell(row[14], isNumber: true, fontSize: 5.0),
-                      _cell(row[15], isNumber: true, bold: true, fontSize: 5.0),
+                      _cell(row[0], bold: true, fontSize: 7.0),
+                      _cell(row[1], fontSize: 7.0),
+                      _cell(row[2], isNumber: true, fontSize: 7.0),
+                      _cell(row[3], isNumber: true, fontSize: 7.0),
+                      _cell(row[4], fontSize: 7.0),
+                      _cell(row[5], fontSize: 7.0),
+                      _cell(row[6], isNumber: true, fontSize: 7.0),
+                      _cell(row[7], isNumber: true, fontSize: 7.0),
+                      _cell(row[8], isNumber: true, fontSize: 7.0),
+                      _cell(row[9], isNumber: true, fontSize: 7.0),
+                      _cell(row[10], isNumber: true, fontSize: 7.0),
+                      _cell(row[11], isNumber: true, fontSize: 7.0),
+                      _cell(row[12], isNumber: true, fontSize: 7.0),
+                      _cell(row[13], isNumber: true, fontSize: 7.0),
+                      _cell(row[14], isNumber: true, fontSize: 7.0),
+                      _cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
                       _cell(row[16], fontSize: 4.5),
                     ],
                   );
@@ -1123,23 +1131,23 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.purple50),
                   children: [
-                    _cell("TOTAL", bold: true, fontSize: 5.5),
-                    _cell("", fontSize: 5.5),
-                    _cell(colTotalDocVisits > 0 ? colTotalDocVisits.toString() : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalChemVisits > 0 ? colTotalChemVisits.toString() : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell("", fontSize: 5.5),
-                    _cell("", fontSize: 5.5),
-                    _cell(colTotalFare > 0 ? _fmt(colTotalFare) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalHq > 0 ? _fmt(colTotalHq) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalExHq > 0 ? _fmt(colTotalExHq) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 5.5),
-                    _cell("", fontSize: 5.5),
+                    _cell("TOTAL", bold: true, fontSize: 7.0),
+                    _cell("", fontSize: 7.0),
+                    _cell(colTotalDocVisits > 0 ? colTotalDocVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalChemVisits > 0 ? colTotalChemVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell("", fontSize: 7.0),
+                    _cell("", fontSize: 7.0),
+                    _cell(colTotalFare > 0 ? _fmt(colTotalFare) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalHq > 0 ? _fmt(colTotalHq) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalExHq > 0 ? _fmt(colTotalExHq) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    _cell("", fontSize: 7.0),
                   ],
                 ),
               ],
@@ -1160,21 +1168,21 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       pw.SizedBox(height: 8),
                       pw.Row(
                         children: [
-                          pw.Text("Signature: ______________________", style: pw.TextStyle(fontSize: 6.0)),
+                          pw.Text("Signature: ______________________", style: pw.TextStyle(fontSize: 8.0)),
                           pw.Spacer(),
-                          pw.Text("Date: ______________", style: pw.TextStyle(fontSize: 6.0)),
+                          pw.Text("Date: ______________", style: pw.TextStyle(fontSize: 8.0)),
                         ],
                       ),
                       pw.SizedBox(height: 6),
                       pw.Row(
                         children: [
-                          pw.Text("Signature: ______________________", style: pw.TextStyle(fontSize: 6.0)),
+                          pw.Text("Signature: ______________________", style: pw.TextStyle(fontSize: 8.0)),
                           pw.Spacer(),
-                          pw.Text("Date: ______________", style: pw.TextStyle(fontSize: 6.0)),
+                          pw.Text("Date: ______________", style: pw.TextStyle(fontSize: 8.0)),
                         ],
                       ),
                       pw.SizedBox(height: 5),
-                      pw.Text("Name & Designation: ________________________________________________", style: pw.TextStyle(fontSize: 6.0)),
+                      pw.Text("Name & Designation: ________________________________________________", style: pw.TextStyle(fontSize: 8.0)),
                       pw.SizedBox(height: 6),
                       pw.Text(
                         "1st Copy -Head Office (Along with all Supporting Bills/Vouchers), 2nd Copy - ABM, 3rd Copy - RBDM/DBM/ZBM, 4th Copy - Self. H.O. Should Receive by 7th Day of Every Month",
@@ -1199,45 +1207,45 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                           pw.TableRow(
                             decoration: const pw.BoxDecoration(color: PdfColors.grey100),
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("Claim Category", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5))),
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("Amount (Rs.)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("Claim Category", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("Amount (Rs.)", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
                           pw.TableRow(
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("A. Stationery & Postage", style: pw.TextStyle(fontSize: 5.5))),
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsStationery > 0 ? _fmt(claimsStationery) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("A. Stationery & Postage", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsStationery > 0 ? _fmt(claimsStationery) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
                           pw.TableRow(
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("B. Couriers", style: pw.TextStyle(fontSize: 5.5))),
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsCourier > 0 ? _fmt(claimsCourier) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("B. Couriers", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsCourier > 0 ? _fmt(claimsCourier) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
                           pw.TableRow(
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("C. Mobile / Internet", style: pw.TextStyle(fontSize: 5.5))),
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsMobileInternet > 0 ? _fmt(claimsMobileInternet) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("C. Mobile / Internet", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsMobileInternet > 0 ? _fmt(claimsMobileInternet) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
                           pw.TableRow(
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("D. Sample Clearing", style: pw.TextStyle(fontSize: 5.5))),
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsSample > 0 ? _fmt(claimsSample) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("D. Sample Clearing", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsSample > 0 ? _fmt(claimsSample) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
                           pw.TableRow(
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("E. Misc. Claims (Hotel/Meal/Toll/etc.)", style: pw.TextStyle(fontSize: 5.5))),
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsMisc > 0 ? _fmt(claimsMisc) : "0", style: pw.TextStyle(fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("E. Misc. Claims (Hotel/Meal/Toll/etc.)", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsMisc > 0 ? _fmt(claimsMisc) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
                           pw.TableRow(
                             decoration: const pw.BoxDecoration(color: PdfColors.purple50),
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("TOTAL CLAIMS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5))),
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(_fmt(claimsTotal), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 5.5), textAlign: pw.TextAlign.right)),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("TOTAL CLAIMS", style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(_fmt(claimsTotal), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
                         ],
@@ -1256,16 +1264,16 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                             pw.Row(
                               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                               children: [
-                                pw.Text("Total Daily Expenses (+ TA):", style: pw.TextStyle(fontSize: 6.0, color: PdfColors.grey700)),
-                                pw.Text("Rs. ${_fmt(totalDailyWithOther)}", style: pw.TextStyle(fontSize: 6.0, fontWeight: pw.FontWeight.bold)),
+                                pw.Text("Total Daily Expenses (+ TA):", style: pw.TextStyle(fontSize: 8.0, color: PdfColors.grey700)),
+                                pw.Text("Rs. ${_fmt(totalDailyWithOther)}", style: pw.TextStyle(fontSize: 8.0, fontWeight: pw.FontWeight.bold)),
                               ],
                             ),
                             pw.SizedBox(height: 1),
                             pw.Row(
                               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                               children: [
-                                pw.Text("Total Monthly Claims (A-E):", style: pw.TextStyle(fontSize: 6.0, color: PdfColors.grey700)),
-                                pw.Text("Rs. ${_fmt(claimsTotal)}", style: pw.TextStyle(fontSize: 6.0, fontWeight: pw.FontWeight.bold)),
+                                pw.Text("Total Monthly Claims (A-E):", style: pw.TextStyle(fontSize: 8.0, color: PdfColors.grey700)),
+                                pw.Text("Rs. ${_fmt(claimsTotal)}", style: pw.TextStyle(fontSize: 8.0, fontWeight: pw.FontWeight.bold)),
                               ],
                             ),
                             pw.Divider(color: const PdfColor.fromInt(0xFF4A148C), thickness: 0.4, height: 3),
@@ -1284,10 +1292,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 ),
               ],
             ),
-          ],
+                   ],
         ),
-      ),
-    );
+      ],
+    ),
+  );
 
     await Printing.layoutPdf(
       onLayout: (_) async => pdf.save(),
