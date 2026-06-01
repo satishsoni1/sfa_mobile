@@ -2,6 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Voice notes are recorded to capture key call observations after doctor detailing.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location is used to verify you are within 50 m of the doctor before starting a detailing session.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Your location is used to verify proximity to the doctor during field visits.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Your location is used to verify proximity to the doctor during field visits.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
