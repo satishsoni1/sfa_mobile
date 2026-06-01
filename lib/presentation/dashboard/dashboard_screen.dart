@@ -64,7 +64,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.24";
+  static const String CURRENT_APP_VERSION = "1.0.25";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -763,13 +763,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           _MenuAction(
             Icons.approval,
-            "Approvals",
+            "DCR Approvals (web)",
             Colors.green,
             () => _navigateTo(const ManagerJointWorkScreen()),
           ),
           _MenuAction(
             Icons.bar_chart,
-            "Team Reports",
+            "Reports",
             Colors.green,
             () => _navigateTo(const ReportsDashboardScreen()),
           ),
@@ -781,7 +781,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           _MenuAction(
             Icons.handshake_outlined,
-            "Tab Joint Work",
+            "DCR Approvals (Tab)",
             Colors.blue,
             _openTabJointWork,
           ),
