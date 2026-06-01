@@ -38,6 +38,16 @@ import '../tour_plan/tour_plan_screen.dart';
 import '../reporting/chemist_reporting_screen.dart';
 // (Make sure to adjust the import path above to wherever you saved the new file)
 
+// --- CLM MODULE ---
+import '../clm/clm_home_screen.dart';
+import '../../providers/clm_provider.dart';
+
+// --- AI HUB MODULE ---
+import '../ai_hub/ai_hub_screen.dart';
+import '../ai_hub/ai_sales_assistant_screen.dart';
+import '../ai_hub/ai_product_performance_screen.dart';
+import '../ai_hub/ai_doctor_review_screen.dart';
+
 // --- PROVIDERS & SERVICES ---
 import '../../providers/report_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -660,6 +670,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.teal,
             () => _navigateTo(const RouteTourPlanScreen()),
           ),
+          _MenuAction(
+            Icons.slideshow_outlined,
+            "VODOCLM",
+            const Color(0xFF4A148C),
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ChangeNotifierProvider(
+                  create: (_) => ClmProvider(),
+                  child: const ClmHomeScreen(),
+                ),
+              ),
+            ),
+          ),
           if (canUseWebDcr)
             _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
               if (_isCheckedIn) {
@@ -696,6 +720,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "NFW Report",
             Colors.brown,
             () => _navigateTo(const NfwReportScreen()),
+          ),
+        ]),
+        const SizedBox(height: 24),
+
+        _buildSectionTitle("AI Intelligence"),
+        _buildMenuGrid([
+          _MenuAction(
+            Icons.auto_awesome,
+            "AI Insights Hub",
+            const Color(0xFF4A148C),
+            () => _navigateTo(const AiHubScreen()),
+          ),
+          _MenuAction(
+            Icons.support_agent,
+            "Sales Assistant",
+            const Color(0xFF1565C0),
+            () => _navigateTo(const AiSalesAssistantScreen()),
+          ),
+          _MenuAction(
+            Icons.trending_up,
+            "Product Perf.",
+            const Color(0xFF2E7D32),
+            () => _navigateTo(const AiProductPerformanceScreen()),
+          ),
+          _MenuAction(
+            Icons.person_search,
+            "Doctor Review",
+            const Color(0xFF6A1B9A),
+            () => _navigateTo(const AiDoctorReviewScreen()),
           ),
         ]),
         const SizedBox(height: 24),

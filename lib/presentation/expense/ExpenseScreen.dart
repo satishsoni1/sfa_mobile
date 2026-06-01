@@ -1187,9 +1187,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   /// Called whenever from/to changes. Backend applies all policies:
   ///   FIXED fare, road km >150 → train slab, else km×3.5, direction multiplier.
-  Future<void> _recalculateFromServer(String toTown) async {
+  Future<void> _recalculateFromServer(String toTown, {String? taDirection}) async {
     final fromTown = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
-    print('Recalculating from: $fromTown to: $toTown');
+    // Capture direction immediately — caller may pass explicit value to avoid
+    // reading stale state if a concurrent call updates _taDirection mid-flight.
+    final capturedDir = taDirection ?? _taDirection;
+    print('Recalculating from: $fromTown to: $toTown dir: $capturedDir');
     if (fromTown.isEmpty) return;
 
     setState(() => _isRecalculating = true);
@@ -1199,7 +1202,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       // or station-type-based DA (meeting).
       final nfwTypeParam = _expenseMode == 'NFW' ? _nfwType.toLowerCase() : null;
       final result = await ApiService().recalculateOnLastLocation(
-          dateStr, fromTown, toTown, nfwType: nfwTypeParam);
+          dateStr, fromTown, toTown,
+          nfwType: nfwTypeParam, taDirection: capturedDir);
       if (!mounted) return;
 
       final daType   = (result['da_type']?.toString() ?? 'HQ').toUpperCase();
@@ -1291,8 +1295,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final myToken = ++_recalcToken;
 
     // ── 1. Client-side KM calculation (instant) ─────────────────────────────
-    const stPriority = {'EX_OS': 4, 'OS': 3, 'EX': 2, 'HQ': 1};
-    double roadKm = 0, fixedFare = 0;
+    const stPriority = {'EX_OS': 4, 'OS': 3, 'EX': 2, 'EX_HQ': 2, 'HQ': 1};
+    double roadKm = 0;
     String topStation = '';
 
     // Resolve effective waypoints: use _userHq for null first slot
@@ -1308,37 +1312,32 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final km = double.tryParse(route['kms']?.toString() ?? '') ?? 0;
       final mode = (route['mode_of_travel']?.toString() ?? '').toUpperCase();
       final st = (route['station_type']?.toString() ?? '').toUpperCase().replaceAll('-', '_');
-      if (mode == 'FIXED') {
-        fixedFare += double.tryParse(route['fare']?.toString() ?? '') ?? 0;
-      } else {
-        roadKm += km;
-      }
+      if (mode != 'FIXED') roadKm += km;
       final existingP = stPriority[topStation] ?? 0;
       final newP = stPriority[st] ?? 0;
       if (newP > existingP) topStation = st;
     }
 
-    final isEx = topStation == 'EX' || topStation == 'EX_OS';
+    final isEx = topStation == 'EX' || topStation == 'EX_OS' || topStation == 'EX_HQ';
     final dirMult = isEx
         ? (_userDirectionOverride ? (_userPrefersOneWay ? 1 : 2) : 2)
         : 1;
 
     final totalRoadKm = roadKm * dirMult;
-    final totalFixed = fixedFare * dirMult;
-    final taAmount = totalRoadKm * 3.5 + totalFixed;
     final taDir = dirMult == 2 ? 'two_way' : 'one_way';
 
     if (!mounted || myToken != _recalcToken) return;
 
-    // Apply client-side result immediately so UI is responsive
+    // Apply client-side KM + direction immediately so UI is responsive.
+    // TA amount is intentionally NOT set here — it must come from the server
+    // because train-slab / fixed-fare logic lives only in the controller.
     setState(() {
-      _serverTaKm     = totalRoadKm;
-      _serverTaAmount = taAmount;
-      _taDirection    = taDir;
-      _isTwoWay       = dirMult == 2;
-      _serverDaType   = topStation.isEmpty ? 'HQ' : topStation;
-      _selectedFrom   = stops.isNotEmpty ? stops.first : _selectedFrom;
-      _endLocation    = stops.length > 1 ? stops.last : null;
+      _serverTaKm   = totalRoadKm;
+      _taDirection  = taDir;
+      _isTwoWay     = dirMult == 2;
+      _serverDaType = topStation.isEmpty ? 'HQ' : topStation;
+      _selectedFrom = stops.isNotEmpty ? stops.first : _selectedFrom;
+      _endLocation  = stops.length > 1 ? stops.last : null;
     });
     _recalculateTotal();
     print(stops.join(' → '));
@@ -1354,7 +1353,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
       final result  = await ApiService().recalculateOnLastLocation(
-          dateStr, stops.first, stops.last);
+          dateStr, stops.first, stops.last, taDirection: taDir);
 
       // Discard if a newer call has already started
       if (!mounted || myToken != _recalcToken) return;
@@ -1362,6 +1361,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       setState(() {
         _serverDaType    = (result['da_type']?.toString() ?? _serverDaType).toUpperCase();
         _serverDaAmount  = (result['da_amount'] as num?)?.toDouble() ?? _serverDaAmount;
+        _serverTaKm      = (result['total_km']  as num?)?.toDouble() ?? _serverTaKm;
+        _serverTaAmount  = (result['ta_amount']  as num?)?.toDouble() ?? _serverTaAmount;
+        _serverTaMode    = result['ta_mode']?.toString() ?? _serverTaMode;
+        final serverDir  = result['ta_direction']?.toString() ?? _taDirection;
+        _taDirection     = serverDir;
+        _isTwoWay        = serverDir == 'two_way';
         _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
         _hotelBillFlag   = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
         _pocketAllowance = (result['pocket_allowance'] as num?)?.toDouble() ?? 0;
@@ -1386,7 +1391,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       });
       _recalculateTotal();
     } catch (_) {
-      // Server unreachable — client-side KM/TA already applied; DA keeps last value
+      // Server unreachable — KM shown but TA amount stays 0 until server responds
     } finally {
       if (mounted && myToken == _recalcToken) {
         setState(() => _isRecalculating = false);
@@ -1704,82 +1709,100 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        // One Way / Two Way toggle
-        Row(
-          children: [
-            Text('Journey Type',
-                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-            const SizedBox(width: 12),
-            _buildWayChip(label: 'One Way', selected: !_isTwoWay, onTap: () {
-              if (_isTwoWay) {
-                // setState(() => _isTwoWay = false);
-                // _applyWayMultiplier();
-              }
-            }),
-            const SizedBox(width: 8),
-            _buildWayChip(label: 'Two Way', selected: _isTwoWay, onTap: () {
-              if (!_isTwoWay) {
-                // setState(() => _isTwoWay = true);
-                // _applyWayMultiplier();
-              }
-            }),
-            if (_isTwoWay && _serverTaKm > 0) ...[
+        // Journey Type toggle — interactive only for EX / EX_OS; blocked for HQ / OS
+        Builder(builder: (ctx) {
+          final isExType = _serverDaType == 'EX' || _serverDaType == 'EX_OS';
+          return Row(
+            children: [
+              Text('Journey Type',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+              const SizedBox(width: 12),
+              _buildWayChip(
+                label: 'One Way',
+                selected: !_isTwoWay,
+                enabled: isExType,
+                onTap: () {
+                  if (_isTwoWay) {
+                    setState(() { _isTwoWay = false; _taDirection = 'one_way'; });
+                    if (_endLocation != null) _recalculateFromServer(_endLocation!, taDirection: 'one_way');
+                  }
+                },
+              ),
               const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.deepPurple.shade200),
+              _buildWayChip(
+                label: 'Two Way',
+                selected: _isTwoWay,
+                enabled: isExType,
+                onTap: () {
+                  if (!_isTwoWay) {
+                    setState(() { _isTwoWay = true; _taDirection = 'two_way'; });
+                    if (_endLocation != null) _recalculateFromServer(_endLocation!, taDirection: 'two_way');
+                  }
+                },
+              ),
+              if (_isTwoWay && _serverTaKm > 0) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.deepPurple.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.deepPurple.shade200),
+                  ),
+                  child: Text('${_fmt(_serverTaKm)} km (2-way)',
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepPurple.shade700)),
                 ),
-                child: Text('${_fmt(_serverTaKm)} km (2-way)',
+              ],
+              if (_expenseMode == 'FIELD' && _taDirection.isNotEmpty) ...[
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Text(
+                    'Auto: ${_taDirection == 'two_way' ? '2-way' : '1-way'}',
                     style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.deepPurple.shade700)),
-              ),
-            ],
-            if (_expenseMode == 'FIELD' && _taDirection.isNotEmpty) ...[
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.blue.shade200),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.blue.shade700),
+                  ),
                 ),
-                child: Text(
-                  'Auto: ${_taDirection == 'two_way' ? '2-way' : '1-way'}',
-                  style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.blue.shade700),
-                ),
-              ),
+              ],
             ],
-          ],
-        ),
+          );
+        }),
       ],
     );
   }
 
-  Widget _buildWayChip({required String label, required bool selected, required VoidCallback onTap}) {
+  Widget _buildWayChip({required String label, required bool selected, required VoidCallback onTap, bool enabled = true}) {
+    final active = enabled && !_isLocked;
     return GestureDetector(
-      onTap: _isLocked ? null : onTap,
+      onTap: active ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFF4A148C) : Colors.grey.shade100,
+          color: selected
+              ? (active ? const Color(0xFF4A148C) : Colors.grey.shade400)
+              : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-              color: selected ? const Color(0xFF4A148C) : Colors.grey.shade300),
+              color: selected
+                  ? (active ? const Color(0xFF4A148C) : Colors.grey.shade400)
+                  : Colors.grey.shade300),
         ),
         child: Text(label,
             style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: selected ? Colors.white : Colors.grey.shade700)),
+                color: selected ? Colors.white : (active ? Colors.grey.shade700 : Colors.grey.shade400))),
       ),
     );
   }

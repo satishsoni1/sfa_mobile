@@ -1176,7 +1176,8 @@ Future<void> submitFullMonth(int month, int year) async {
   /// TA (FIXED / train-slab / km×3.5) and DA (by station_type) for that route.
   /// Returns {da_type, da_amount, total_km, road_km, ta_amount, ta_mode, station_type, from_town, to_town}
   Future<Map<String, dynamic>> recalculateOnLastLocation(
-      String date, String fromTown, String toTown, {String? nfwType}) async {
+      String date, String fromTown, String toTown,
+      {String? nfwType, String? taDirection}) async {
     final token = await getToken();
     final body = <String, dynamic>{
       'date'      : date,
@@ -1185,6 +1186,9 @@ Future<void> submitFullMonth(int month, int year) async {
     };
     if (nfwType != null && nfwType.isNotEmpty) {
       body['nfw_type'] = nfwType.toLowerCase();
+    }
+    if (taDirection != null && taDirection.isNotEmpty) {
+      body['ta_direction'] = taDirection;
     }
     final response = await http.post(
       Uri.parse('$baseUrl/app/expense/recalculate-location'),
