@@ -1296,7 +1296,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
     // ── 1. Client-side KM calculation (instant) ─────────────────────────────
     const stPriority = {'EX_OS': 4, 'OS': 3, 'EX': 2, 'EX_HQ': 2, 'HQ': 1};
-    double roadKm = 0, fixedFare = 0;
+    double roadKm = 0;
     String topStation = '';
 
     // Resolve effective waypoints: use _userHq for null first slot
@@ -1312,11 +1312,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final km = double.tryParse(route['kms']?.toString() ?? '') ?? 0;
       final mode = (route['mode_of_travel']?.toString() ?? '').toUpperCase();
       final st = (route['station_type']?.toString() ?? '').toUpperCase().replaceAll('-', '_');
-      if (mode == 'FIXED') {
-        fixedFare += double.tryParse(route['fare']?.toString() ?? '') ?? 0;
-      } else {
-        roadKm += km;
-      }
+      if (mode != 'FIXED') roadKm += km;
       final existingP = stPriority[topStation] ?? 0;
       final newP = stPriority[st] ?? 0;
       if (newP > existingP) topStation = st;
@@ -1328,21 +1324,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         : 1;
 
     final totalRoadKm = roadKm * dirMult;
-    final totalFixed = fixedFare * dirMult;
-    final taAmount = totalRoadKm * 3.5 + totalFixed;
     final taDir = dirMult == 2 ? 'two_way' : 'one_way';
 
     if (!mounted || myToken != _recalcToken) return;
 
-    // Apply client-side result immediately so UI is responsive
+    // Apply client-side KM + direction immediately so UI is responsive.
+    // TA amount is intentionally NOT set here — it must come from the server
+    // because train-slab / fixed-fare logic lives only in the controller.
     setState(() {
-      _serverTaKm     = totalRoadKm;
-      _serverTaAmount = taAmount;
-      _taDirection    = taDir;
-      _isTwoWay       = dirMult == 2;
-      _serverDaType   = topStation.isEmpty ? 'HQ' : topStation;
-      _selectedFrom   = stops.isNotEmpty ? stops.first : _selectedFrom;
-      _endLocation    = stops.length > 1 ? stops.last : null;
+      _serverTaKm   = totalRoadKm;
+      _taDirection  = taDir;
+      _isTwoWay     = dirMult == 2;
+      _serverDaType = topStation.isEmpty ? 'HQ' : topStation;
+      _selectedFrom = stops.isNotEmpty ? stops.first : _selectedFrom;
+      _endLocation  = stops.length > 1 ? stops.last : null;
     });
     _recalculateTotal();
     print(stops.join(' → '));
@@ -1366,6 +1361,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       setState(() {
         _serverDaType    = (result['da_type']?.toString() ?? _serverDaType).toUpperCase();
         _serverDaAmount  = (result['da_amount'] as num?)?.toDouble() ?? _serverDaAmount;
+        _serverTaKm      = (result['total_km']  as num?)?.toDouble() ?? _serverTaKm;
+        _serverTaAmount  = (result['ta_amount']  as num?)?.toDouble() ?? _serverTaAmount;
+        _serverTaMode    = result['ta_mode']?.toString() ?? _serverTaMode;
+        final serverDir  = result['ta_direction']?.toString() ?? _taDirection;
+        _taDirection     = serverDir;
+        _isTwoWay        = serverDir == 'two_way';
         _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
         _hotelBillFlag   = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
         _pocketAllowance = (result['pocket_allowance'] as num?)?.toDouble() ?? 0;
@@ -1390,7 +1391,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       });
       _recalculateTotal();
     } catch (_) {
-      // Server unreachable — client-side KM/TA already applied; DA keeps last value
+      // Server unreachable — KM shown but TA amount stays 0 until server responds
     } finally {
       if (mounted && myToken == _recalcToken) {
         setState(() => _isRecalculating = false);
