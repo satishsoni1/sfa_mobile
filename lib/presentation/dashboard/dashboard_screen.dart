@@ -64,7 +64,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.20";
+  static const String CURRENT_APP_VERSION = "1.0.24";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -72,6 +72,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _statusText = "Loading...";
   bool _isLoadingAction = false;
   bool _isRefreshing = false;
+  bool? _attendanceWebDcrAllowed;
 
   // Expense Data
   String _expClaimed = "0";
@@ -206,8 +207,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       final status = statusData['status'];
       final data = statusData['data'];
+      final employee = statusData['employee'];
+      final webDcrAllowed = employee is Map<String, dynamic>
+          ? _flagEnabled(employee['is_web_dcr_allowed'])
+          : null;
 
       setState(() {
+        if (webDcrAllowed != null) {
+          _attendanceWebDcrAllowed = webDcrAllowed;
+        }
         if (status == 'Working' || status == 'On Break') {
           _isCheckedIn = true;
           _checkInTime = data != null && data['check_in_time'] != null
@@ -228,6 +236,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       // Handle silently
     }
+  }
+
+  bool _flagEnabled(dynamic value) {
+    return value == 1 || value == true || value?.toString() == '1';
   }
 
   Future<void> _fetchExpenseSummary(ApiService api) async {
@@ -639,6 +651,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildQuickActions() {
     final user = Provider.of<AuthProvider>(context).user;
+    final canUseWebDcr =
+        _attendanceWebDcrAllowed ?? user?.isWebDcrAllowed ?? false;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -670,13 +684,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ),
-          _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
-            if (_isCheckedIn) {
-              _navigateTo(const DoctorListScreen());
-            } else {
-              _showSnack("Please Check In first!");
-            }
-          }),
+          if (canUseWebDcr)
+            _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
+              if (_isCheckedIn) {
+                _navigateTo(const DoctorListScreen());
+              } else {
+                _showSnack("Please Check In first!");
+              }
+            }),
           _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
             _navigateTo(ExpenseSummaryScreen());
           }),
@@ -693,12 +708,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
             }
           }),
 
-          _MenuAction(
-            Icons.assignment_turned_in,
-            "Daily Report",
-            Colors.orange,
-            () => _navigateTo(const DailyReportScreen()),
-          ),
+          if (canUseWebDcr)
+            _MenuAction(
+              Icons.assignment_turned_in,
+              "Daily Report",
+              Colors.orange,
+              () => _navigateTo(const DailyReportScreen()),
+            ),
           _MenuAction(
             Icons.business_center,
             "NFW Report",

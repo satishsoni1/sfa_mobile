@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/new_doctor.dart';
 import '../../data/models/speciality_target.dart';
 import '../../data/services/api_service.dart';
+import '../../providers/auth_provider.dart';
 import 'add_edit_new_doctor_screen.dart';
 
 class NewDrMasterScreen extends StatefulWidget {
@@ -23,6 +26,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   bool _isSubmitting = false;
   bool _isApproving = false;
   bool _isRejecting = false;
+  bool _isDownloadingMclCsv = false;
 
   List<NewDoctor> _myDoctors = [];
   List<NewDoctor> _subDoctors = [];
@@ -137,6 +141,9 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     return true;
   }
 
+  bool get _canEditMyList =>
+      _myApprovalStatus != 'pending' && _myApprovalStatus != 'approved';
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   @override
@@ -249,6 +256,105 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   }
 
   // ── Actions ────────────────────────────────────────────────────────────────
+
+  Map<String, dynamic>? get _selectedSubordinate {
+    if (_selectedSubId == null) return null;
+    for (final sub in _subordinates) {
+      if (sub is Map && sub['id'] == _selectedSubId) {
+        return Map<String, dynamic>.from(sub);
+      }
+    }
+    return null;
+  }
+
+  String? get _selectedSubordinateEmployeeCode {
+    final sub = _selectedSubordinate;
+    if (sub == null) return null;
+
+    final rawCode = sub['employee_code'] ??
+        sub['emp_code'];
+    final code = rawCode?.toString().trim();
+    if (code != null && code.isNotEmpty) return code;
+
+    return null;
+  }
+
+  Future<void> _downloadSelectedSubordinateMclCsv() async {
+    final employeeCode = _selectedSubordinateEmployeeCode;
+    if (employeeCode == null || employeeCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Employee code not found for selected team member'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isDownloadingMclCsv = true);
+    try {
+      final uri = ApiService().getMclDoctorCsvExportUri(employeeCode);
+
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        throw Exception('Could not open download link');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download CSV: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() => _isDownloadingMclCsv = false);
+  }
+
+  Future<void> _downloadMyMclCsv() async {
+    final employeeCode = Provider.of<AuthProvider>(context, listen: false)
+        .user
+        ?.employeeCode
+        .trim();
+    if (employeeCode == null || employeeCode.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Employee code not found for logged-in user'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isDownloadingMclCsv = true);
+    try {
+      final uri = ApiService().getMclDoctorCsvExportUri(employeeCode);
+
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        throw Exception('Could not open download link');
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download CSV: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+    if (mounted) setState(() => _isDownloadingMclCsv = false);
+  }
 
   Future<void> _submitForApproval() async {
     final confirm = await showDialog<bool>(
@@ -401,6 +507,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   }
 
   void _openAddEdit([NewDoctor? doc]) async {
+    if (!_canEditMyList) return;
     if (_isLoadingTargets) await _loadSpecialityTargets();
     if (!mounted) return;
     final result = await Navigator.push(
@@ -445,11 +552,13 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: _purple,
-        onPressed: () => _openAddEdit(),
-        child: const Icon(Icons.person_add_alt_1, color: Colors.white),
-      ),
+      floatingActionButton: _canEditMyList
+          ? FloatingActionButton(
+              backgroundColor: _purple,
+              onPressed: () => _openAddEdit(),
+              child: const Icon(Icons.person_add_alt_1, color: Colors.white),
+            )
+          : null,
       body: Column(
         children: [
           Padding(
@@ -501,6 +610,8 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 100),
         children: [
+          _buildMyCsvDownloadButton(),
+          const SizedBox(height: 10),
           _buildCategoryRow(cat),
           const SizedBox(height: 10),
           _buildMslSummaryCard(_myDoctors),
@@ -518,7 +629,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           if (docs.isEmpty)
             _buildEmptyState('No doctors added yet. Tap + to add your first doctor.')
           else
-            ...docs.map((d) => _buildDoctorCard(d, canEdit: true)),
+            ...docs.map((d) => _buildDoctorCard(d, canEdit: _canEditMyList)),
         ],
       ),
     );
@@ -542,6 +653,8 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
             const SizedBox(height: 10),
           ],
           if (_selectedSubId != null) ...[
+            _buildTeamCsvDownloadButton(),
+            const SizedBox(height: 10),
             _buildSubApprovalBanner(),
             if (_subApprovalStatus != null) const SizedBox(height: 8),
             _buildCategoryRow(cat),
@@ -980,18 +1093,26 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
 
   Widget _buildSubmitSection() {
     if (_myApprovalStatus == 'approved') {
-      return _statusBanner(
-        icon: Icons.verified, color: Colors.green,
-        title: 'List Approved!',
-        subtitle: 'Your doctor list has been approved by your manager.',
-      );
+      return Column(children: [
+        _statusBanner(
+          icon: Icons.verified, color: Colors.green,
+          title: 'List Approved!',
+          subtitle: 'Your doctor list has been approved by your manager.',
+        ),
+        const SizedBox(height: 8),
+        _editLockedBanner(),
+      ]);
     }
     if (_myApprovalStatus == 'pending') {
-      return _statusBanner(
-        icon: Icons.hourglass_empty, color: Colors.blue,
-        title: 'Pending Approval',
-        subtitle: 'Your list is submitted and awaiting manager review.',
-      );
+      return Column(children: [
+        _statusBanner(
+          icon: Icons.hourglass_empty, color: Colors.blue,
+          title: 'Pending Approval',
+          subtitle: 'Your list is submitted and awaiting manager review.',
+        ),
+        const SizedBox(height: 8),
+        _editLockedBanner(),
+      ]);
     }
     if (_myApprovalStatus == 'rejected') {
       return Column(children: [
@@ -1099,6 +1220,16 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           ),
         ),
       ]),
+    );
+  }
+
+  Widget _editLockedBanner() {
+    return _statusBanner(
+      icon: Icons.lock_outline,
+      color: Colors.orange,
+      title: 'Editing Locked',
+      subtitle:
+          'You cannot add a new Dr or update Dr details because the list has already been submitted to the manager.',
     );
   }
 
@@ -1280,6 +1411,58 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   }
 
   // ── Doctor Card ────────────────────────────────────────────────────────────
+
+  Widget _buildTeamCsvDownloadButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _isDownloadingMclCsv ? null : _downloadSelectedSubordinateMclCsv,
+        icon: _isDownloadingMclCsv
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.download_outlined, size: 18),
+        label: Text(
+          _isDownloadingMclCsv ? 'Opening CSV...' : 'Download MCL CSV',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _purple,
+          side: BorderSide(color: _purple.withOpacity(0.35)),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMyCsvDownloadButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _isDownloadingMclCsv ? null : _downloadMyMclCsv,
+        icon: _isDownloadingMclCsv
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Icon(Icons.download_outlined, size: 18),
+        label: Text(
+          _isDownloadingMclCsv ? 'Opening CSV...' : 'Download MCL CSV',
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: _purple,
+          side: BorderSide(color: _purple.withOpacity(0.35)),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    );
+  }
 
   Widget _buildDoctorCard(NewDoctor doc, {required bool canEdit}) {
     final profileColors = {'H': Colors.blue, 'T': Colors.green, 'HT': Colors.purple};

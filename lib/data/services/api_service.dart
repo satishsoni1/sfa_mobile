@@ -602,6 +602,11 @@ class ApiService {
     return jsonDecode(response.body)['data'];
   }
 
+  Uri getMclDoctorCsvExportUri(String employeeCode) {
+    return Uri.parse('$baseUrl/export-mcl-dr-list')
+        .replace(queryParameters: {'employee_code': employeeCode});
+  }
+
   Future<List<Map<String, String>>> getSubordinatesUpload() async {
     final token = await getToken();
     final response = await http.get(

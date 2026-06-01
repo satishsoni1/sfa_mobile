@@ -9,6 +9,7 @@ class User {
   final String? headQtr;
   final String? division;
   final bool isFirstLogin;
+  final bool isWebDcrAllowed;
 
   User({
     required this.employeeId,
@@ -21,6 +22,7 @@ class User {
     this.headQtr,
     this.division,
     this.isFirstLogin = false,
+    this.isWebDcrAllowed = false,
   });
 
   // Factory: Create User object from JSON
@@ -36,6 +38,8 @@ class User {
       headQtr: json['head_qtr'],
       division: json['division'] ?? "zf1",
       isFirstLogin: json['is_first_login'] == 1 || json['is_first_login'] == true,
+      isWebDcrAllowed:
+          json['is_web_dcr_allowed'] == 1 || json['is_web_dcr_allowed'] == true,
     );
   }
 
@@ -51,6 +55,7 @@ class User {
       'designation': designation,
       'head_qtr': headQtr,
       'division': division,
+      'is_web_dcr_allowed': isWebDcrAllowed ? 1 : 0,
     };
   }
   
