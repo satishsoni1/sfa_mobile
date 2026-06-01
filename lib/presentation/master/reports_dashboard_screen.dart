@@ -71,17 +71,17 @@ class ReportsDashboardScreen extends StatelessWidget {
         'type': ReportType.visitSummary,
       },
       {
-        'title': 'Visit Report',
+        'title': 'Web DCR',
         'icon': Icons.assignment_outlined,
         'external_path': 'visit',
       },
       {
-        'title': 'DCR',
+        'title': 'Tab DCR',
         'icon': Icons.description_outlined,
         'external_path': 'dcrview',
       },
       {
-        'title': 'MCL Updation report',
+        'title': 'MCL Updation',
         'icon': Icons.list_alt_outlined,
         'external_path': 'mcl-updation',
       },
