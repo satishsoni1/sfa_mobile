@@ -150,11 +150,25 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _endLocation   = savedTo?.isNotEmpty == true ? savedTo : null;
     _fromLocation  = savedFrom;
 
-    // Restore multi-stop waypoints from saved from/to
-    _fieldWaypoints = [
-      savedFrom?.isNotEmpty == true ? savedFrom : null,
-      savedTo?.isNotEmpty == true ? savedTo : null,
-    ];
+    // Restore multi-stop waypoints: JSON array wins, otherwise fall back to from/to pair
+    final savedWp = d['waypoints']?.toString() ?? '';
+    bool wpRestored = false;
+    if (savedWp.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(savedWp) as List;
+        final wps = decoded.map((w) => w?.toString()).toList();
+        if (wps.length >= 2) {
+          _fieldWaypoints = List<String?>.from(wps);
+          wpRestored = true;
+        }
+      } catch (_) {}
+    }
+    if (!wpRestored) {
+      _fieldWaypoints = [
+        savedFrom?.isNotEmpty == true ? savedFrom : null,
+        savedTo?.isNotEmpty == true ? savedTo : null,
+      ];
+    }
 
     // Direction
     _taDirection = d['ta_direction']?.toString() ?? 'one_way';
@@ -3179,6 +3193,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         final daAmt = _hotelBillClaimed
             ? ((_calcData!['pocket_allowance'] as num?)?.toDouble() ?? _serverDaAmount)
             : _serverDaAmount;
+        final activeWaypoints = _fieldWaypoints
+            .where((w) => w != null && w.isNotEmpty)
+            .cast<String>()
+            .toList();
         payload = {
           'date': DateFormat('yyyy-MM-dd').format(_selectedDate),
           'da_type': _serverDaType,
@@ -3186,6 +3204,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           'ta_distance': kmFinal,
           'ta_amount': _serverTaAmount.toStringAsFixed(2),
           'ta_mode': _serverTaMode,
+          'waypoints': jsonEncode(activeWaypoints),
           'other_amount': _totalOtherAmount.toStringAsFixed(2),
           'remarks': _remarkController.text.trim(),
           ...travelFields,

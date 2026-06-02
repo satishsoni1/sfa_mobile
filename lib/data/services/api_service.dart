@@ -2035,6 +2035,32 @@ Future<void> submitFullMonth(int month, int year) async {
     return {'mobile': 0.0, 'internet': 0.0};
   }
 
+  // DELETE a monthly claim (only allowed before the month is submitted)
+  Future<void> deleteMonthlyClaim(int claimId) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/app/expense/monthly-claim/$claimId'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+          json.decode(response.body)['message'] ?? 'Failed to delete claim');
+    }
+  }
+
+  // DELETE a single daily expense (only allowed before the month is submitted)
+  Future<void> deleteExpense(int expenseId) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/app/expense/$expenseId'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode != 200) {
+      throw Exception(
+          json.decode(response.body)['message'] ?? 'Failed to delete expense');
+    }
+  }
+
   // POST add a monthly claim — amount auto-fetched server-side for Mobile/Internet
   // POST add a monthly claim (WEB SAFE)
   Future<void> addMonthlyClaim({

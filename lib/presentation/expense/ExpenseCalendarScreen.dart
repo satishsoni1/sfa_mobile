@@ -14,6 +14,7 @@ class ExpenseCalendarScreen extends StatefulWidget {
 class _ExpenseCalendarScreenState extends State<ExpenseCalendarScreen> {
   DateTime _selectedMonth = DateTime.now();
   bool _isLoading = false;
+  bool _isMonthSubmitted = false; // true → block adding new daily expenses
   Map<String, dynamic> _calendarData = {};
   // keyed by "yyyy-MM-dd" for O(1) lookup
   Map<String, Map<String, dynamic>> _expensesByDate = {};
@@ -42,8 +43,9 @@ class _ExpenseCalendarScreenState extends State<ExpenseCalendarScreen> {
         if (dateStr.isNotEmpty) byDate[dateStr] = e;
       }
       setState(() {
-        _calendarData = calData;
-        _expensesByDate = byDate;
+        _calendarData       = calData;
+        _expensesByDate     = byDate;
+        _isMonthSubmitted   = summaryData['is_already_submitted'] == true;
       });
     } catch (_) {
     } finally {
@@ -82,6 +84,16 @@ class _ExpenseCalendarScreenState extends State<ExpenseCalendarScreen> {
     // Future date (shouldn't be tappable but guard anyway)
     if (date.isAfter(DateTime.now())) {
       _showDayInfo('Future Date', 'Cannot file expense for a future date.', Colors.grey);
+      return;
+    }
+
+    // Month submitted — block adding new expenses; existing ones open read-only
+    if (_isMonthSubmitted && type != 'expense') {
+      _showDayInfo(
+        'Month Submitted',
+        'This month is submitted for approval. New expenses cannot be added.',
+        const Color(0xFF4A148C),
+      );
       return;
     }
 
@@ -128,6 +140,7 @@ class _ExpenseCalendarScreenState extends State<ExpenseCalendarScreen> {
       body: Column(
         children: [
           _buildMonthSelector(),
+          if (_isMonthSubmitted) _buildSubmittedBanner(),
           _buildLegend(),
           _buildHint(),
           _isLoading
@@ -199,6 +212,25 @@ class _ExpenseCalendarScreenState extends State<ExpenseCalendarScreen> {
             ],
           );
         }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildSubmittedBanner() {
+    return Container(
+      color: const Color(0xFF4A148C),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+      child: Row(
+        children: [
+          const Icon(Icons.lock_outline, size: 15, color: Colors.white),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Month submitted for approval — new expenses are locked.',
+              style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
       ),
     );
   }

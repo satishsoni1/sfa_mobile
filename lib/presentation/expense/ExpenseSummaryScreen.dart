@@ -417,7 +417,19 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              if (!isLocked) ...[
+                // Delete button — visible only before monthly submit
+                GestureDetector(
+                  onTap: () => _confirmDeleteExpense(item),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.delete_outline,
+                        color: Colors.red.shade300, size: 18),
+                  ),
+                ),
+                const SizedBox(width: 4),
+              ],
               Icon(
                 isLocked ? Icons.lock_outline : Icons.edit_outlined,
                 color: isLocked ? Colors.grey.shade400 : Colors.purple.shade300,
@@ -428,6 +440,59 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         ),
       ),
     );
+  }
+
+  Future<void> _confirmDeleteExpense(Map<String, dynamic> item) async {
+    final id = item['id'];
+    if (id == null) return;
+
+    final date = DateTime.tryParse(item['expense_date'] ?? '');
+    final dateLabel = date != null
+        ? DateFormat('dd MMM yyyy').format(date)
+        : 'this expense';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Delete Expense?',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('Remove the expense for $dateLabel? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ApiService().deleteExpense(id as int);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Expense deleted.'),
+          backgroundColor: Colors.green,
+        ));
+        _loadData(); // refresh the list
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 
   Widget _daBadge(String type) {
@@ -585,34 +650,36 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
   Widget _buildClaimCard(Map<String, dynamic> claim) {
     final icons = {
-      'Mobile': Icons.phone_android,
-      'Internet': Icons.wifi,
-      'Hotel': Icons.hotel_outlined,
-      'Postage': Icons.local_post_office_outlined,
-      'Toll': Icons.toll_outlined,
-      'Courier': Icons.local_shipping_outlined,
-      'Parking': Icons.local_parking,
-      'Food Bill': Icons.restaurant_outlined,
-      'Misc': Icons.more_horiz,
+      'Mobile'    : Icons.phone_android,
+      'Internet'  : Icons.wifi,
+      'Hotel'     : Icons.hotel_outlined,
+      'Postage'   : Icons.local_post_office_outlined,
+      'Toll'      : Icons.toll_outlined,
+      'Courier'   : Icons.local_shipping_outlined,
+      'Parking'   : Icons.local_parking,
+      'Food Bill' : Icons.restaurant_outlined,
+      'Stationary': Icons.edit_note_outlined,
+      'Award'     : Icons.emoji_events_outlined,
+      'Misc'      : Icons.more_horiz,
     };
     final claimColors = {
-      'Mobile': Colors.blue,
-      'Internet': Colors.teal,
-      'Hotel': Colors.indigo,
-      'Postage': Colors.brown,
-      'Toll': Colors.deepOrange,
-      'Courier': Colors.cyan,
-      'Parking': Colors.purple,
-      'Food Bill': Colors.green,
+      'Mobile'    : Colors.blue,
+      'Internet'  : Colors.teal,
+      'Hotel'     : Colors.indigo,
+      'Postage'   : Colors.brown,
+      'Toll'      : Colors.deepOrange,
+      'Courier'   : Colors.cyan,
+      'Parking'   : Colors.purple,
+      'Food Bill' : Colors.green,
       'Stationary': Colors.teal,
-      'Award': Colors.amber,
-      'Misc': Colors.grey,
+      'Award'     : Colors.amber,
+      'Misc'      : Colors.grey,
     };
-    final type = claim['claim_type'] ?? 'Misc';
-    final icon = icons[type] ?? Icons.receipt;
+    final type  = claim['claim_type'] ?? 'Misc';
+    final icon  = icons[type]  ?? Icons.receipt;
     final color = claimColors[type] ?? Colors.grey;
 
-    return Card(
+    final card = Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -631,13 +698,111 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
           claim['bill_attachment'] != null ? 'Bill attached' : 'No bill uploaded',
           style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
         ),
-        trailing: Text('₹${_fmt(_toDouble(claim['amount']))}',
-            style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF4A148C),
-                fontSize: 15)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('₹${_fmt(_toDouble(claim['amount']))}',
+                style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF4A148C),
+                    fontSize: 15)),
+            if (!_isSubmitted) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => _deleteClaim(claim),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.delete_outline,
+                      color: Colors.red.shade300, size: 18),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
+
+    // Swipe-to-delete only when month is not yet submitted
+    if (_isSubmitted) return card;
+
+    return Dismissible(
+      key: ValueKey('claim_${claim['id']}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: Colors.red.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.red.shade200),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.delete_outline, color: Colors.red.shade600),
+            const SizedBox(width: 6),
+            Text('Delete', style: TextStyle(color: Colors.red.shade600, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+      confirmDismiss: (_) => _deleteClaim(claim),
+      onDismissed: (_) => _loadData(),
+      child: card,
+    );
+  }
+
+  Future<bool> _deleteClaim(Map<String, dynamic> claim) async {
+    final id = claim['id'];
+    if (id == null) return false;
+
+    final type   = claim['claim_type'] ?? 'Claim';
+    final amount = _fmt(_toDouble(claim['amount']));
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Delete Claim?',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        content: Text('Remove the $type claim of ₹$amount? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return false;
+
+    try {
+      await ApiService().deleteMonthlyClaim(id is int ? id : int.parse(id.toString()));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Claim deleted.'),
+          backgroundColor: Colors.green,
+        ));
+        _loadData();
+      }
+      return true;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+      return false;
+    }
   }
 
   // ─── Submit Month Bar ─────────────────────────────────────────────────────────
