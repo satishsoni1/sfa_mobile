@@ -64,7 +64,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.24";
+  static const String CURRENT_APP_VERSION = "1.0.27";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -762,28 +762,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
             () => _navigateTo(const TeamTerritoryScreen()),
           ),
           _MenuAction(
-            Icons.approval,
-            "Approvals",
-            Colors.green,
-            () => _navigateTo(const ManagerJointWorkScreen()),
-          ),
-          _MenuAction(
             Icons.bar_chart,
-            "Team Reports",
+            "Reports",
             Colors.green,
             () => _navigateTo(const ReportsDashboardScreen()),
           ),
           _MenuAction(
+            Icons.approval,
+            "DCR Approvals (web)",
+            Colors.green,
+            () => _navigateTo(const ManagerJointWorkScreen()),
+          ),
+          _MenuAction(
+            Icons.handshake_outlined,
+            "DCR Approvals (Tab)",
+            Colors.blue,
+            _openTabJointWork,
+          ),
+            _MenuAction(
             Icons.receipt_long,
             "Team Expenses",
             Colors.teal,
             () => _navigateTo(const ExpenseManagerScreen()),
-          ),
-          _MenuAction(
-            Icons.handshake_outlined,
-            "Tab Joint Work",
-            Colors.blue,
-            _openTabJointWork,
           ),
           _MenuAction(
             Icons.link,
@@ -871,7 +871,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 4,
         // Slightly taller cards prevent bottom overflow for longer labels.
-        childAspectRatio: 0.72,
+        childAspectRatio: 0.68,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
       ),
@@ -895,7 +895,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 8),
             SizedBox(
-              height: 34,
+              height: 42,
               child: Text(
                 action.label,
                 textAlign: TextAlign.center,

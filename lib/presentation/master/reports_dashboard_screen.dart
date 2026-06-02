@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:zforce/core/constants/app_colors.dart';
-import 'package:zforce/data/services/api_service.dart';
 import 'package:zforce/providers/auth_provider.dart';
 import 'package:zforce/presentation/reporting/daily_call_report_screen.dart';
 import 'package:zforce/presentation/webview/internal_webview_screen.dart';
@@ -72,9 +71,19 @@ class ReportsDashboardScreen extends StatelessWidget {
         'type': ReportType.visitSummary,
       },
       {
-        'title': 'Visit Report',
+        'title': 'Web DCR',
         'icon': Icons.assignment_outlined,
-        'external_link': true,
+        'external_path': 'visit',
+      },
+      {
+        'title': 'Tab DCR',
+        'icon': Icons.description_outlined,
+        'external_path': 'dcrview',
+      },
+      {
+        'title': 'MCL Updation',
+        'icon': Icons.list_alt_outlined,
+        'external_path': 'mcl-updation',
       },
     ];
 
@@ -128,8 +137,12 @@ class ReportsDashboardScreen extends StatelessWidget {
   Widget _buildReportCard(BuildContext context, Map<String, dynamic> report) {
     return InkWell(
       onTap: () {
-        if (report['external_link'] == true) {
-          _openVisitReportLink(context);
+        if (report['external_path'] != null) {
+          _openReportWebLink(
+            context,
+            report['title']?.toString() ?? '',
+            report['external_path']?.toString() ?? '',
+          );
           return;
         }
         final Widget? directScreen = report['screen'] as Widget?;
@@ -192,7 +205,11 @@ class ReportsDashboardScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _openVisitReportLink(BuildContext context) async {
+  Future<void> _openReportWebLink(
+    BuildContext context,
+    String title,
+    String path,
+  ) async {
     final employeeCode =
         Provider.of<AuthProvider>(context, listen: false).user?.employeeCode.trim();
 
@@ -203,39 +220,17 @@ class ReportsDashboardScreen extends StatelessWidget {
       return;
     }
 
-    try {
-      final links = await ApiService().getExternalLinks(employeeCode: employeeCode);
-      final visitReport = links.whereType<Map<String, dynamic>>().firstWhere(
-            (link) =>
-                (link['is_web'] == 1 || link['is_web'] == true) &&
-                (link['title']?.toString().toLowerCase().contains('visit report') ?? false) &&
-                (link['url']?.toString().trim().isNotEmpty ?? false),
-            orElse: () => {},
-          );
+    // These report links are opened directly with the logged-in user's employee code.
+    final url =
+        'https://zorvia.globalspace.in/$path?employee_code=${Uri.encodeComponent(employeeCode)}';
 
-      final url = visitReport['url']?.toString().trim() ?? '';
-      if (url.isEmpty) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Visit Report link not available.")),
-        );
-        return;
-      }
-
-      if (!context.mounted) return;
-      Navigator.pushNamed(
-        context,
-        InternalWebViewScreen.routeName,
-        arguments: InternalWebViewArgs(
-          url: url,
-          title: 'Visit Report',
-        ),
-      );
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Unable to open Visit Report: $e")),
-      );
-    }
+    Navigator.pushNamed(
+      context,
+      InternalWebViewScreen.routeName,
+      arguments: InternalWebViewArgs(
+        url: url,
+        title: title,
+      ),
+    );
   }
 }
