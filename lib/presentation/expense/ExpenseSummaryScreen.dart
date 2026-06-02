@@ -604,6 +604,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Courier': Colors.cyan,
       'Parking': Colors.purple,
       'Food Bill': Colors.green,
+      'Stationary': Colors.teal,
+      'Award': Colors.amber,
       'Misc': Colors.grey,
     };
     final type = claim['claim_type'] ?? 'Misc';
@@ -901,18 +903,18 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         }
 
         rowTotal = fare + hqAllow + exHqAllow + osAllow + exOsAllow + osReturnAllow + pocket + hotel + meal;
-        
-        colTotalFare += fare;
-        colTotalHq += hqAllow;
-        colTotalExHq += exHqAllow;
-        colTotalOs += osAllow;
-        colTotalExOs += exOsAllow;
-        colTotalOsReturn += osReturnAllow;
-        colTotalPocket += pocket;
-        colTotalHotel += hotel;
-        colTotalMeal += meal;
-        colTotalRowTotal += rowTotal;
-        colTotalDocVisits += docVisits;
+
+        colTotalFare       += fare;
+        colTotalHq         += hqAllow;
+        colTotalExHq       += exHqAllow;
+        colTotalOs         += osAllow;
+        colTotalExOs       += exOsAllow;
+        colTotalOsReturn   += osReturnAllow;
+        colTotalPocket     += pocket;
+        colTotalHotel      += hotel;
+        colTotalMeal       += meal;
+        colTotalRowTotal   += rowTotal;
+        colTotalDocVisits  += docVisits;
         colTotalChemVisits += chemVisits;
 
         final otherAmt = _toDouble(exp['other_amount']);
@@ -947,6 +949,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     double claimsCourier = 0;
     double claimsMobileInternet = 0;
     double claimsSample = 0;
+    double claimsStationary = 0;
+    double claimsAward = 0;
     double claimsMisc = 0;
 
     for (final claim in _monthlyClaims) {
@@ -954,6 +958,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       final amt = _toDouble(claim['amount']);
       if (type == 'stationery' || type == 'postage') {
         claimsStationery += amt;
+      } else if (type == 'stationary') {
+        claimsStationary += amt;
+      } else if (type == 'award') {
+        claimsAward += amt;
       } else if (type == 'courier') {
         claimsCourier += amt;
       } else if (type == 'mobile' || type == 'internet') {
@@ -964,7 +972,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         claimsMisc += amt;
       }
     }
-    final double claimsTotal = claimsStationery + claimsCourier + claimsMobileInternet + claimsSample + claimsMisc;
+    final double claimsTotal = claimsStationery + claimsCourier + claimsMobileInternet + claimsSample + claimsStationary + claimsAward + claimsMisc;
     final double totalDailyWithOther = _toDouble(_summary['grand_total']);
     final double overallReimbursementTotal = totalDailyWithOther + claimsTotal;
 
@@ -1237,7 +1245,19 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                           ),
                           pw.TableRow(
                             children: [
-                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("E. Misc. Claims (Hotel/Meal/Toll/etc.)", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("E. Stationary", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsStationary > 0 ? _fmt(claimsStationary) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("F. Award", style: pw.TextStyle(fontSize: 7.0))),
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsAward > 0 ? _fmt(claimsAward) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
+                            ],
+                          ),
+                          pw.TableRow(
+                            children: [
+                              pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text("G. Misc. Claims (Hotel/Meal/Toll/etc.)", style: pw.TextStyle(fontSize: 7.0))),
                               pw.Padding(padding: const pw.EdgeInsets.all(1.5), child: pw.Text(claimsMisc > 0 ? _fmt(claimsMisc) : "0", style: pw.TextStyle(fontSize: 7.0), textAlign: pw.TextAlign.right)),
                             ],
                           ),
@@ -1334,13 +1354,13 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
   bool _isSubmitting = false;
   double? _mobileRate;
   double? _internetRate;
+  bool _mobileLimitFlag = false; // true → user enters amount, capped at _mobileRate
   bool _isLoadingRate = false;
 
   static const _claimTypes = [
     'Mobile', 'Internet', 'Hotel', 'Postage',
-    'Toll', 'Courier', 'Parking', 'Food Bill', 'Misc',
+    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Misc',
   ];
-  static const _autoRatedTypes = ['Mobile', 'Internet'];
 
   final _claimIcons = {
     'Mobile': Icons.phone_android,
@@ -1351,10 +1371,15 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
     'Courier': Icons.local_shipping_outlined,
     'Parking': Icons.local_parking,
     'Food Bill': Icons.restaurant_outlined,
+    'Stationary': Icons.edit_note_outlined,
+    'Award': Icons.emoji_events_outlined,
     'Misc': Icons.more_horiz,
   };
 
-  bool get _isAutoRated => _autoRatedTypes.contains(_selectedType);
+  // Mobile is auto-rated only when mobile_limit_flag=0 (server sets the amount)
+  bool get _isAutoRated =>
+      (_selectedType == 'Mobile' && !_mobileLimitFlag) ||
+      (_selectedType == 'Internet');
 
   double get _autoRate =>
       _selectedType == 'Mobile' ? (_mobileRate ?? 0) : (_internetRate ?? 0);
@@ -1374,8 +1399,13 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
       final data = await ApiService().getMonthlyClaimRates();
       if (mounted) {
         setState(() {
-          _mobileRate = (data['mobile'] as num?)?.toDouble() ?? 0;
-          _internetRate = (data['internet'] as num?)?.toDouble() ?? 0;
+          _mobileRate      = (data['mobile']   as num?)?.toDouble() ?? 0;
+          _internetRate    = (data['internet'] as num?)?.toDouble() ?? 0;
+          _mobileLimitFlag = (data['mobile_limit_flag'] == 1 || data['mobile_limit_flag'] == true);
+          // Pre-fill amount field with the limit for convenience
+          if (_mobileLimitFlag && _selectedType == 'Mobile' && _amtController.text.isEmpty) {
+            _amtController.text = (_mobileRate ?? 0).toStringAsFixed(0);
+          }
         });
       }
     } catch (_) {
@@ -1485,7 +1515,22 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
                       ],
                     ),
                   )
-          else
+          else ...[
+            // Mobile with limit flag: user enters amount, capped at designation rate
+            if (_selectedType == 'Mobile' && _mobileLimitFlag && (_mobileRate ?? 0) > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: Colors.orange.shade700),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Limit: ₹${_mobileRate!.toStringAsFixed(0)} / month — enter your actual bill',
+                      style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                    ),
+                  ],
+                ),
+              ),
             TextField(
               controller: _amtController,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1493,12 +1538,16 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
                 labelText: 'Amount',
                 prefixText: '₹ ',
                 hintText: '0.00',
+                helperText: (_selectedType == 'Mobile' && _mobileLimitFlag && (_mobileRate ?? 0) > 0)
+                    ? 'Max ₹${_mobileRate!.toStringAsFixed(0)}'
+                    : null,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: Color(0xFF4A148C))),
               ),
             ),
+          ],
           const SizedBox(height: 14),
 
           // Bill attachment
@@ -1622,6 +1671,16 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
         ScaffoldMessenger.of(context)
             .showSnackBar(const SnackBar(content: Text('Enter a valid amount')));
         return;
+      }
+      // Enforce mobile limit on the client side before the API call
+      if (_selectedType == 'Mobile' && _mobileLimitFlag && (_mobileRate ?? 0) > 0) {
+        if (amount > _mobileRate!) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Mobile bill cannot exceed ₹${_mobileRate!.toStringAsFixed(0)}'),
+            backgroundColor: Colors.red.shade600,
+          ));
+          return;
+        }
       }
     }
 

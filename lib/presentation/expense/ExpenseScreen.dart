@@ -109,6 +109,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _userPrefersOneWay = false;
   int _recalcToken = 0; // incremented on each recalc; stale async results are discarded
 
+  // Per-segment km breakdown for multi-stop routes [{from, to, km, mode}]
+  List<Map<String, dynamic>> _segmentDetails = [];
+
   // Itemized other expenses (Toll, Courier, Parking, Food Bill, Others)
   List<OtherExpenseItem> _otherExpenses = [];
 
@@ -202,6 +205,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _serverDaAmount = _toDouble(d['da_amount']);
       _serverTaKm     = _toDouble(d['ta_distance']);
       _serverTaAmount = _toDouble(d['ta_amount']);
+      _serverTaMode   = (d['ta_mode'] ?? 'road').toString();
       _manualKmController.text = _serverTaKm.toStringAsFixed(1);
       _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
     }
@@ -299,6 +303,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             _serverDaAmount = _toDouble(d['da_amount']);
             _serverTaKm     = _toDouble(d['ta_distance']);
             _serverTaAmount = _toDouble(d['ta_amount']);
+            _serverTaMode   = (d['ta_mode'] ?? 'road').toString();
             _taDirection    = d['ta_direction']?.toString() ?? 'one_way';
             _isTwoWay       = _taDirection == 'two_way';
             _isOsReturn     = d['is_os_return'] == 1 || d['is_os_return'] == '1';
@@ -1172,6 +1177,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _endLocation = town;
         _serverTaKm = 0;
         _serverTaAmount = 0;
+        _segmentDetails = [];
         _manualKmController.clear();
         _manualTaController.clear();
       });
@@ -1306,13 +1312,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
     final stops = resolved.where((w) => w != null && w.isNotEmpty).cast<String>().toList();
 
+    final segDetails = <Map<String, dynamic>>[];
     for (int i = 0; i < stops.length - 1; i++) {
       final route = _findRoute(stops[i], stops[i + 1]);
-      if (route == null) continue;
+      if (route == null) {
+        segDetails.add({'from': stops[i], 'to': stops[i + 1], 'km': 0.0, 'mode': ''});
+        continue;
+      }
       final km = double.tryParse(route['kms']?.toString() ?? '') ?? 0;
       final mode = (route['mode_of_travel']?.toString() ?? '').toUpperCase();
       final st = (route['station_type']?.toString() ?? '').toUpperCase().replaceAll('-', '_');
-      if (mode != 'FIXED') roadKm += km;
+      final segKm = mode == 'FIXED' ? 0.0 : km;
+      roadKm += segKm;
+      segDetails.add({'from': stops[i], 'to': stops[i + 1], 'km': segKm, 'mode': mode});
       final existingP = stPriority[topStation] ?? 0;
       final newP = stPriority[st] ?? 0;
       if (newP > existingP) topStation = st;
@@ -1332,15 +1344,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     // TA amount is intentionally NOT set here — it must come from the server
     // because train-slab / fixed-fare logic lives only in the controller.
     setState(() {
-      _serverTaKm   = totalRoadKm;
-      _taDirection  = taDir;
-      _isTwoWay     = dirMult == 2;
-      _serverDaType = topStation.isEmpty ? 'HQ' : topStation;
-      _selectedFrom = stops.isNotEmpty ? stops.first : _selectedFrom;
-      _endLocation  = stops.length > 1 ? stops.last : null;
+      _serverTaKm     = totalRoadKm;
+      _taDirection    = taDir;
+      _isTwoWay       = dirMult == 2;
+      _serverDaType   = topStation.isEmpty ? 'HQ' : topStation;
+      _selectedFrom   = stops.isNotEmpty ? stops.first : _selectedFrom;
+      _endLocation    = stops.length > 1 ? stops.last : null;
+      _segmentDetails = segDetails;
     });
     _recalculateTotal();
-    print(stops.join(' → '));
     // ── 2. Server call for DA amount + hotel flags ───────────────────────────
     // Only fire when both from and to are set
     if (stops.length < 2) return;
@@ -1352,8 +1364,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     setState(() => _isRecalculating = true);
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      final result  = await ApiService().recalculateOnLastLocation(
-          dateStr, stops.first, stops.last, taDirection: taDir);
+      // Send all waypoints so server processes each segment individually
+      final result = await ApiService().recalculateWithWaypoints(
+          dateStr, stops, taDirection: taDir);
 
       // Discard if a newer call has already started
       if (!mounted || myToken != _recalcToken) return;
@@ -1387,6 +1400,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _mealAmount  = 0;
           _hotelAmountController.clear();
           _mealAmountController.clear();
+        }
+        // If server returns per-segment breakdown, use it; otherwise keep client-side
+        if (result['segments'] is List) {
+          _segmentDetails = List<Map<String, dynamic>>.from(
+            (result['segments'] as List).map((s) => {
+              'from': s['from']?.toString() ?? '',
+              'to'  : s['to']?.toString() ?? '',
+              'km'  : (s['km'] as num?)?.toDouble() ?? 0.0,
+              'mode': s['mode']?.toString() ?? '',
+            }),
+          );
         }
       });
       _recalculateTotal();
@@ -1521,23 +1545,57 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     SizedBox(width: 8),
                     Text('Calculating…', style: TextStyle(fontSize: 12, color: Color(0xFF4A148C))),
                   ])
-                : Row(
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.straighten, size: 14, color: Color(0xFF4A148C)),
-                      const SizedBox(width: 6),
-                      Text('${_fmt(_serverTaKm)} km total',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A148C), fontSize: 13)),
-                      const SizedBox(width: 12),
-                      Text('TA: ₹${_fmt(_serverTaAmount)}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A148C), fontSize: 13)),
-                      if (_isTwoWay) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: const Color(0xFF4A148C), borderRadius: BorderRadius.circular(4)),
-                          child: const Text('2-way', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
-                        ),
+                      // Per-segment breakdown (shown when 3+ stops)
+                      if (_segmentDetails.length > 1) ...[
+                        ...(_segmentDetails.map((seg) {
+                          final km = (seg['km'] as double?) ?? 0.0;
+                          final isFixed = (seg['mode']?.toString() ?? '') == 'FIXED';
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 3),
+                            child: Row(
+                              children: [
+                                Text(
+                                  '${seg['from']} → ${seg['to']}',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  isFixed ? 'Fixed' : '${_fmt(km)} km',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: isFixed ? Colors.orange.shade700 : const Color(0xFF4A148C),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        })),
+                        const Divider(height: 8, thickness: 0.5),
                       ],
+                      // Total km + TA row
+                      Row(
+                        children: [
+                          const Icon(Icons.straighten, size: 14, color: Color(0xFF4A148C)),
+                          const SizedBox(width: 6),
+                          Text('${_fmt(_serverTaKm)} km total',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A148C), fontSize: 13)),
+                          const SizedBox(width: 12),
+                          Text('TA: ₹${_fmt(_serverTaAmount)}',
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4A148C), fontSize: 13)),
+                          if (_isTwoWay) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFF4A148C), borderRadius: BorderRadius.circular(4)),
+                              child: const Text('2-way', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
           ),
@@ -1661,6 +1719,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     _serverTaKm = 0;
                     _serverTaAmount = 0;
                     _serverDaAmount = 0;
+                    _segmentDetails = [];
                     _manualKmController.clear();
                     _manualTaController.clear();
                   });
@@ -3126,6 +3185,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           'da_amount': daAmt.toStringAsFixed(2),
           'ta_distance': kmFinal,
           'ta_amount': _serverTaAmount.toStringAsFixed(2),
+          'ta_mode': _serverTaMode,
           'other_amount': _totalOtherAmount.toStringAsFixed(2),
           'remarks': _remarkController.text.trim(),
           ...travelFields,

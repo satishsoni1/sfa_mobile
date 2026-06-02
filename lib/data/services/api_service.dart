@@ -1204,6 +1204,36 @@ Future<void> submitFullMonth(int month, int year) async {
         json.decode(response.body)['message'] ?? 'Recalculation failed');
   }
 
+  /// POST /app/expense/recalculate-location
+  /// Multi-stop variant: sends all waypoints so the server processes each
+  /// segment (A→B, B→C, …) separately and returns aggregated total_km + ta_amount.
+  Future<Map<String, dynamic>> recalculateWithWaypoints(
+      String date, List<String> waypoints,
+      {String? taDirection}) async {
+    final token = await getToken();
+    final body = <String, dynamic>{
+      'date'      : date,
+      'from_town' : waypoints.first,
+      'to_town'   : waypoints.last,
+      'waypoints' : waypoints,
+    };
+    if (taDirection != null && taDirection.isNotEmpty) {
+      body['ta_direction'] = taDirection;
+    }
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/expense/recalculate-location'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode(body),
+    );
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception(
+        json.decode(response.body)['message'] ?? 'Recalculation failed');
+  }
+
   // ─── Locations Master ────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getLocations() async {
