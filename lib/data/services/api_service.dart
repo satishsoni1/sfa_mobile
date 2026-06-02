@@ -1171,6 +1171,23 @@ Future<void> submitFullMonth(int month, int year) async {
         json.decode(response.body)['message'] ?? 'Failed to load NFW rate');
   }
 
+  /// GET /app/expense/admin-work-types
+  /// Returns active admin_work types with their allowance amounts.
+  Future<List<Map<String, dynamic>>> getAdminWorkTypes() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/admin-work-types'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(body['data'] ?? []);
+      }
+    } catch (_) {}
+    return [];
+  }
+
   /// POST /app/expense/recalculate-location
   /// Sends explicit from_town + to_town so the server can compute
   /// TA (FIXED / train-slab / km×3.5) and DA (by station_type) for that route.
@@ -1930,10 +1947,10 @@ Future<void> submitFullMonth(int month, int year) async {
         }
         return _safeExtractList(decoded);
       } else {
-        print("API Error: ${response.statusCode} - ${response.body}");
+        // API error — return empty
       }
     } catch (e) {
-      print("Error fetching doctor selection detail: $e");
+      // Network or parsing error — return empty
     }
     return [];
   }

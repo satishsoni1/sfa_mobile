@@ -68,10 +68,7 @@ class _ExpenseCalendarScreenState extends State<ExpenseCalendarScreen> {
     final date = DateTime(_selectedMonth.year, _selectedMonth.month, dayNum);
     final dateStr = DateFormat('yyyy-MM-dd').format(date);
 
-    if (type == 'sunday') {
-      _showDayInfo('Sunday', 'No expense filing on Sundays.', Colors.grey);
-      return;
-    }
+    // Sundays are now allowed — fall through to normal add/edit logic
     if (type == 'holiday') {
       _showDayInfo('Holiday', day['label']?.toString() ?? 'Public holiday — no expense required.', Colors.orange);
       return;

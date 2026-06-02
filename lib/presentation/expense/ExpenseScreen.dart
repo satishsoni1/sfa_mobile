@@ -112,6 +112,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // Per-segment km breakdown for multi-stop routes [{from, to, km, mode}]
   List<Map<String, dynamic>> _segmentDetails = [];
 
+  // Train TA — user can override amount; ticket attachment is required
+  PlatformFile? _trainTicketFile;
+  final _trainTaController = TextEditingController();
+
+  // NFW admin-work types (from DB)
+  List<Map<String, dynamic>> _adminWorkTypes = [];
+  bool _isLoadingAdminWork = false;
+  int? _selectedAdminWorkId;
+  double _adminWorkAllowance = 0;
+
+  // NFW travel arrangement: 'self' (km-based TA) | 'company' (no TA)
+  String _nfwTravelBy = 'self';
+
   // Itemized other expenses (Toll, Courier, Parking, Food Bill, Others)
   List<OtherExpenseItem> _otherExpenses = [];
 
@@ -245,6 +258,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _manualDaController.dispose();
     _manualKmController.dispose();
     _manualTaController.dispose();
+    _trainTaController.dispose();
     _hotelAmountController.dispose();
     _mealAmountController.dispose();
     super.dispose();
@@ -721,69 +735,156 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   fontSize: 13,
                   color: Colors.grey.shade700)),
           const SizedBox(height: 14),
-          // NFW Type selector
+          // NFW Type selector — fixed types + admin_work types from DB
           Text('Activity Type',
               style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
           const SizedBox(height: 8),
-          Row(
-            children: ['Meeting', 'Training', 'Transit'].map((type) {
-              final sel = _nfwType == type;
-              final icon = type == 'Training'
-                  ? Icons.school_outlined
-                  : type == 'Transit'
-                      ? Icons.directions_bus_outlined
-                      : Icons.groups_outlined;
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: GestureDetector(
-                  onTap: _isLocked
-                      ? null
-                      : () {
-                          if (_nfwType != type) {
-                            setState(() => _nfwType = type);
-                            // If destination already selected, refresh DA+TA together
-                            if (_endLocation != null) {
-                              _recalculateFromServer(_endLocation!);
-                            } else {
-                              // No destination yet — just refresh the flat DA rate
-                              _fetchNfwDaRate();
-                            }
-                          }
-                        },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: sel ? const Color(0xFF4A148C) : Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: sel
-                              ? const Color(0xFF4A148C)
-                              : Colors.grey.shade300),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon,
-                            size: 15,
-                            color: sel ? Colors.white : Colors.grey.shade600),
-                        const SizedBox(width: 6),
-                        Text(type,
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: sel
-                                    ? Colors.white
-                                    : Colors.grey.shade700)),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              // Fixed types
+              ...['Meeting', 'Training', 'Transit'].map((type) {
+                final sel = _selectedAdminWorkId == null && _nfwType == type;
+                final icon = type == 'Training'
+                    ? Icons.school_outlined
+                    : type == 'Transit'
+                        ? Icons.directions_bus_outlined
+                        : Icons.groups_outlined;
+                return _buildNfwTypeChip(
+                  label: type,
+                  icon: icon,
+                  selected: sel,
+                  onTap: _isLocked ? null : () {
+                    setState(() {
+                      _nfwType = type;
+                      _selectedAdminWorkId = null;
+                      _adminWorkAllowance  = 0;
+                    });
+                    if (_endLocation != null) {
+                      _recalculateFromServer(_endLocation!);
+                    } else {
+                      _fetchNfwDaRate();
+                    }
+                  },
+                );
+              }),
+              // Admin work types from DB
+              if (_isLoadingAdminWork)
+                const SizedBox(
+                  width: 20, height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                ..._adminWorkTypes.map((w) {
+                  final id  = w['id'] as int? ?? 0;
+                  final nm  = (w['name'] ?? '').toString();
+                  final sel = _selectedAdminWorkId == id;
+                  return _buildNfwTypeChip(
+                    label: nm,
+                    icon: Icons.work_outline,
+                    selected: sel,
+                    onTap: _isLocked ? null : () {
+                      setState(() {
+                        _selectedAdminWorkId = id;
+                        _adminWorkAllowance  = (w['allowance_amount'] as num?)?.toDouble() ?? 0;
+                        _nfwType = 'Meeting';
+                      });
+                      if (_endLocation != null) {
+                        _recalculateFromServer(_endLocation!);
+                      } else {
+                        _fetchNfwDaRate();
+                      }
+                    },
+                  );
+                }),
+            ],
           ),
           const SizedBox(height: 14),
+
+          // Travel Arrangement — only relevant when a destination is set
+          if (_endLocation != null || _serverTaKm > 0) ...[
+            Text('Travel Arranged By',
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            const SizedBox(height: 6),
+            Row(
+              children: ['self', 'company'].map((opt) {
+                final sel  = _nfwTravelBy == opt;
+                final icon = opt == 'company'
+                    ? Icons.business_outlined
+                    : Icons.person_outlined;
+                final lbl  = opt == 'company' ? 'Company' : 'Self';
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: GestureDetector(
+                    onTap: _isLocked ? null : () {
+                      if (_nfwTravelBy != opt) {
+                        setState(() => _nfwTravelBy = opt);
+                        if (opt == 'company') {
+                          setState(() {
+                            _serverTaKm     = 0;
+                            _serverTaAmount = 0;
+                            _manualKmController.clear();
+                            _manualTaController.text = '0.00';
+                          });
+                          _recalculateTotal();
+                        } else if (_endLocation != null) {
+                          _recalculateFromServer(_endLocation!);
+                        }
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: sel
+                            ? (opt == 'company' ? Colors.orange.shade600 : const Color(0xFF4A148C))
+                            : Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: sel
+                              ? (opt == 'company' ? Colors.orange.shade600 : const Color(0xFF4A148C))
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(icon, size: 14,
+                              color: sel ? Colors.white : Colors.grey.shade600),
+                          const SizedBox(width: 6),
+                          Text(lbl, style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w600,
+                              color: sel ? Colors.white : Colors.grey.shade700)),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            if (_nfwTravelBy == 'company') ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: Colors.orange.shade700),
+                    const SizedBox(width: 8),
+                    Text('Company-arranged travel — TA not applicable.',
+                        style: TextStyle(fontSize: 11, color: Colors.orange.shade800)),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+          ],
+          const SizedBox(height: 4),
 
           // From + To — drives TA and (for Meeting) DA rate
           _buildFromToSection(accent: Colors.blue.shade600),
@@ -1149,8 +1250,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Future<void> _fetchNfwDaRate() async {
     if (widget.editData != null) return;
+    // Load admin work types on first NFW open
+    if (_adminWorkTypes.isEmpty) _loadAdminWorkTypes();
     setState(() => _isLoadingNfwRate = true);
     try {
+      // Admin work type: DA comes from the selected type's allowance, not expense_rates
+      if (_selectedAdminWorkId != null && _adminWorkAllowance > 0) {
+        setState(() {
+          _nfwDaAmount = _adminWorkAllowance;
+          _manualDaController.text = _adminWorkAllowance.toStringAsFixed(2);
+        });
+        _recalculateTotal();
+        return;
+      }
       final data = await ApiService().getNfwDaRate(type: _nfwType);
       if (!mounted) return;
       final amount = (data['da_amount'] as num?)?.toDouble() ?? 0;
@@ -1161,6 +1273,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _recalculateTotal();
     } catch (_) {} finally {
       if (mounted) setState(() => _isLoadingNfwRate = false);
+    }
+  }
+
+  Future<void> _loadAdminWorkTypes() async {
+    setState(() => _isLoadingAdminWork = true);
+    try {
+      final types = await ApiService().getAdminWorkTypes();
+      if (mounted) setState(() => _adminWorkTypes = types);
+    } catch (_) {} finally {
+      if (mounted) setState(() => _isLoadingAdminWork = false);
     }
   }
 
@@ -1220,10 +1342,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
       // Pass NFW type so backend returns the correct fixed DA (training/transit)
       // or station-type-based DA (meeting).
-      final nfwTypeParam = _expenseMode == 'NFW' ? _nfwType.toLowerCase() : null;
+      final String? nfwTypeParam = _expenseMode == 'NFW'
+          ? (_selectedAdminWorkId != null ? 'admin_work' : _nfwType.toLowerCase())
+          : null;
       final result = await ApiService().recalculateOnLastLocation(
           dateStr, fromTown, toTown,
-          nfwType: nfwTypeParam, taDirection: capturedDir);
+          nfwType: nfwTypeParam,
+          taDirection: capturedDir);
       if (!mounted) return;
 
       final daType   = (result['da_type']?.toString() ?? 'HQ').toUpperCase();
@@ -1233,10 +1358,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final taMode   = result['ta_mode']?.toString() ?? 'road';
       final taDir    = result['ta_direction']?.toString() ?? 'one_way';
 
-      // For NFW: DA always updates from server (Meeting=station-based, Training/Transit=fixed)
+      // For NFW: DA always updates from server, unless admin_work type (fixed from table)
       if (_expenseMode == 'NFW') {
-        _nfwDaAmount = daAmount;
-        _manualDaController.text = daAmount.toStringAsFixed(2);
+        final effectiveDa = (_selectedAdminWorkId != null && _adminWorkAllowance > 0)
+            ? _adminWorkAllowance
+            : daAmount;
+        _nfwDaAmount = effectiveDa;
+        _manualDaController.text = effectiveDa.toStringAsFixed(2);
       }
 
       final flag = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
@@ -1275,6 +1403,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _manualKmController.text = taKm.toStringAsFixed(1);
         _manualTaController.text = taAmount.toStringAsFixed(2);
       });
+      // Company-arranged travel → zero out TA regardless of route result
+      if (_expenseMode == 'NFW' && _nfwTravelBy == 'company') {
+        setState(() {
+          _serverTaKm     = 0;
+          _serverTaAmount = 0;
+          _manualKmController.clear();
+          _manualTaController.text = '0.00';
+        });
+      }
       _recalculateTotal();
     } catch (_) {
       // Server unavailable — leave current values
@@ -1510,19 +1647,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   Icon(icon, color: iconColor, size: 16),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: DropdownButtonFormField<String>(
+                    child: _buildLocationPicker(
                       value: safe,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        hintText: hint,
-                        hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                      ),
-                      items: allLocs
-                          .map((l) => DropdownMenuItem(value: l, child: Text(l, overflow: TextOverflow.ellipsis)))
-                          .toList(),
-                      onChanged: _isLocked ? null : (v) => _onWaypointChanged(index, v),
+                      locations: allLocs,
+                      hint: hint,
+                      leadingIcon: icon,
+                      iconColor: iconColor,
+                      locked: _isLocked,
+                      onChanged: (v) => _onWaypointChanged(index, v),
                     ),
                   ),
                   if (!isFirst && !isLast && !_isLocked) ...[
@@ -1648,6 +1780,43 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
+  // ─── NFW Type Chip helper ────────────────────────────────────────────────────
+
+  Widget _buildNfwTypeChip({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF4A148C) : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? const Color(0xFF4A148C) : Colors.grey.shade300,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14,
+                color: selected ? Colors.white : Colors.grey.shade600),
+            const SizedBox(width: 6),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: selected ? Colors.white : Colors.grey.shade700)),
+          ],
+        ),
+      ),
+    );
+  }
+
   // ─── Shared: Station Type Badge ───────────────────────────────────────────────
 
   Widget _buildStationTypeBadge(String? type) {
@@ -1688,6 +1857,63 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return locs.toList()..sort();
   }
 
+  Future<String?> _showLocationSearch(List<String> locations, String? current) =>
+      showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => _LocationSearchSheet(
+            locations: locations, current: current),
+      );
+
+  Widget _buildLocationPicker({
+    required String? value,
+    required List<String> locations,
+    required String hint,
+    required IconData leadingIcon,
+    Color? iconColor,
+    required bool locked,
+    required ValueChanged<String?> onChanged,
+  }) {
+    final col = iconColor ?? const Color(0xFF4A148C);
+    return InkWell(
+      onTap: locked
+          ? null
+          : () async {
+              final picked = await _showLocationSearch(locations, value);
+              if (picked != null) onChanged(picked);
+            },
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(10),
+          color: locked ? Colors.grey.shade50 : Colors.white,
+        ),
+        child: Row(
+          children: [
+            Icon(leadingIcon, size: 18, color: col),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                value?.isNotEmpty == true ? value! : hint,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: value?.isNotEmpty == true
+                      ? Colors.black87
+                      : Colors.grey.shade400,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.search, size: 16, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFromToSection({required Color accent}) {
     final allLocs = _allLocations();
     if (allLocs.isEmpty) return const SizedBox.shrink();
@@ -1702,43 +1928,26 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         Text('From',
             style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
         const SizedBox(height: 6),
-        DropdownButtonFormField<String>(
+        _buildLocationPicker(
           value: safeFrom,
-          isExpanded: true,
-          decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.my_location, size: 18),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: accent),
-            ),
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          ),
-          hint: Text('Select origin',
-              style:
-                  TextStyle(color: Colors.grey.shade400, fontSize: 13)),
-          items: allLocs
-              .map((f) => DropdownMenuItem<String>(
-                    value: f,
-                    child: Text(f, overflow: TextOverflow.ellipsis),
-                  ))
-              .toList(),
-          onChanged: _isLocked
-              ? null
-              : (val) {
-                  setState(() {
-                    _selectedFrom = val;
-                    _endLocation = null;
-                    _serverTaKm = 0;
-                    _serverTaAmount = 0;
-                    _serverDaAmount = 0;
-                    _segmentDetails = [];
-                    _manualKmController.clear();
-                    _manualTaController.clear();
-                  });
-                  _recalculateTotal();
-                },
+          locations: allLocs,
+          hint: 'Select origin',
+          leadingIcon: Icons.my_location,
+          iconColor: accent,
+          locked: _isLocked,
+          onChanged: (val) {
+            setState(() {
+              _selectedFrom = val;
+              _endLocation = null;
+              _serverTaKm = 0;
+              _serverTaAmount = 0;
+              _serverDaAmount = 0;
+              _segmentDetails = [];
+              _manualKmController.clear();
+              _manualTaController.clear();
+            });
+            _recalculateTotal();
+          },
         ),
         const SizedBox(height: 12),
         Text('To',
@@ -1747,32 +1956,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         Row(
           children: [
             Expanded(
-              child: DropdownButtonFormField<String>(
+              child: _buildLocationPicker(
                 value: safeTo,
-                isExpanded: true,
-                decoration: InputDecoration(
-                  prefixIcon:
-                      const Icon(Icons.location_on_outlined, size: 18),
-                  border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10)),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: accent),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 12),
-                ),
-                hint: Text('Select destination',
-                    style: TextStyle(
-                        color: Colors.grey.shade400, fontSize: 13)),
-                items: allLocs
-                    .map((d) => DropdownMenuItem<String>(
-                          value: d,
-                          child:
-                              Text(d, overflow: TextOverflow.ellipsis),
-                        ))
-                    .toList(),
-                onChanged: _isLocked ? null : _onDestinationSelected,
+                locations: allLocs,
+                hint: 'Select destination',
+                leadingIcon: Icons.location_on_outlined,
+                iconColor: accent,
+                locked: _isLocked,
+                onChanged: (v) => _onDestinationSelected(v),
               ),
             ),
             if (_serverDaType.isNotEmpty && _endLocation != null) ...[
@@ -2506,7 +2697,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           border: Border.all(
               color: isTrain ? Colors.indigo.shade200
                   : hasRoute ? Colors.teal.shade200 : Colors.grey.shade200)),
-      child: _isRecalculating
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _isRecalculating
           ? const SizedBox(
               height: 72,
               child: Center(
@@ -2605,7 +2800,100 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ],
                 ),
               ],
+            ),  // end Row (else branch of ternary)
+
+          // Train: amount override + mandatory ticket attachment
+          if (isTrain && !_isLocked) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            // Editable TA amount
+            TextField(
+              controller: _trainTaController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Actual Train Fare (₹)',
+                prefixText: '₹ ',
+                hintText: _serverTaAmount.toStringAsFixed(2),
+                helperText: 'Override if actual fare differs from slab rate',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: Colors.indigo.shade600)),
+              ),
+              onChanged: (v) {
+                final val = double.tryParse(v);
+                if (val != null) {
+                  setState(() => _serverTaAmount = val);
+                  _recalculateTotal();
+                }
+              },
             ),
+            const SizedBox(height: 10),
+            // Ticket attachment
+            GestureDetector(
+              onTap: () async {
+                final result = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf'],
+                    withData: true);
+                if (result != null && result.files.isNotEmpty) {
+                  setState(() => _trainTicketFile = result.files.first);
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: _trainTicketFile != null
+                      ? Colors.indigo.shade50
+                      : Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                      color: _trainTicketFile != null
+                          ? Colors.indigo.shade300
+                          : Colors.red.shade300),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _trainTicketFile != null
+                          ? Icons.check_circle_outline
+                          : Icons.upload_file_outlined,
+                      color: _trainTicketFile != null
+                          ? Colors.indigo.shade700
+                          : Colors.red.shade600,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _trainTicketFile != null
+                            ? _trainTicketFile!.name
+                            : 'Attach Train Ticket (required) *',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _trainTicketFile != null
+                              ? Colors.indigo.shade700
+                              : Colors.red.shade700,
+                          fontWeight: _trainTicketFile == null
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (_trainTicketFile != null)
+                      GestureDetector(
+                        onTap: () => setState(() => _trainTicketFile = null),
+                        child: Icon(Icons.close, size: 16, color: Colors.red.shade400),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -3174,6 +3462,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // ─── Submit ───────────────────────────────────────────────────────────────────
 
   void _submit() async {
+    // Train mode requires a ticket attachment
+    if (_serverTaMode == 'train' && _serverTaAmount > 0 && _trainTicketFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please attach your train ticket before saving.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
     setState(() => _isSubmitting = true);
     try {
       final Map<String, String> payload;
@@ -3261,13 +3557,27 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         'ta_direction': _taDirection,
         'from_location': _selectedFrom ?? _transitFromTown ?? _userHq ?? '',
         'to_location': _endLocation ?? '',
+        'nfw_travel_by': _nfwTravelBy,
         'attachments_meta':
             jsonEncode(_attachmentsMeta.map((m) => m.toJson()).toList()),
       });
 
+      // Build final attachment list + meta (append train ticket when present)
+      final submitAttachments = List<PlatformFile>.from(_attachments);
+      final submitMeta        = List<_AttachmentMeta>.from(_attachmentsMeta);
+      if (_trainTicketFile != null) {
+        submitAttachments.add(_trainTicketFile!);
+        submitMeta.add(_AttachmentMeta()
+          ..billType   = 'travel'
+          ..billAmount = _serverTaAmount);
+        // Re-encode meta to include train ticket entry
+        payload['attachments_meta'] =
+            jsonEncode(submitMeta.map((m) => m.toJson()).toList());
+      }
+
       await ApiService().submitExpense(
         payload,
-        _attachments,
+        submitAttachments,
         otherItems: _otherExpenses
             .map((e) => {'type': e.type, 'amount': e.amount.toStringAsFixed(2), 'bill': e.bill})
             .toList(),
@@ -3297,6 +3607,122 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   String _fmt(double v) =>
       v == v.truncateToDouble() ? v.toInt().toString() : v.toStringAsFixed(2);
+}
+
+// ─── Searchable Location Picker Sheet ────────────────────────────────────────
+
+class _LocationSearchSheet extends StatefulWidget {
+  final List<String> locations;
+  final String? current;
+  const _LocationSearchSheet({required this.locations, this.current});
+
+  @override
+  State<_LocationSearchSheet> createState() => _LocationSearchSheetState();
+}
+
+class _LocationSearchSheetState extends State<_LocationSearchSheet> {
+  final _searchCtrl = TextEditingController();
+  List<String> _filtered = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.locations;
+    _searchCtrl.addListener(_filter);
+  }
+
+  void _filter() {
+    final q = _searchCtrl.text.toLowerCase();
+    setState(() {
+      _filtered = q.isEmpty
+          ? widget.locations
+          : widget.locations
+              .where((l) => l.toLowerCase().contains(q))
+              .toList();
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.removeListener(_filter);
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        left: 16, right: 16, top: 8,
+      ),
+      height: MediaQuery.of(context).size.height * 0.65,
+      child: Column(
+        children: [
+          Container(
+            width: 40, height: 4,
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2)),
+          ),
+          TextField(
+            controller: _searchCtrl,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Search location…',
+              prefixIcon: const Icon(Icons.search, size: 20),
+              suffixIcon: _searchCtrl.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear, size: 18),
+                      onPressed: () => _searchCtrl.clear())
+                  : null,
+              filled: true,
+              fillColor: Colors.grey.shade100,
+              border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _filtered.isEmpty
+                ? Center(
+                    child: Text('No locations found',
+                        style: TextStyle(color: Colors.grey.shade500)))
+                : ListView.builder(
+                    itemCount: _filtered.length,
+                    itemBuilder: (_, i) {
+                      final loc = _filtered[i];
+                      final isCurrent = loc == widget.current;
+                      return ListTile(
+                        dense: true,
+                        title: Text(loc,
+                            style: TextStyle(
+                                fontWeight: isCurrent
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                color: isCurrent
+                                    ? const Color(0xFF4A148C)
+                                    : Colors.black87)),
+                        trailing: isCurrent
+                            ? const Icon(Icons.check,
+                                color: Color(0xFF4A148C), size: 18)
+                            : null,
+                        onTap: () => Navigator.pop(context, loc),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─── Add Other Expense Bottom Sheet ──────────────────────────────────────────
