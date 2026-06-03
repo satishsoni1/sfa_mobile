@@ -91,7 +91,7 @@ class ReportsDashboardScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF4F8F9),
       appBar: AppBar(
         title: const Text(
-          "Team Reports",
+          "Reports",
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(color: Colors.white),

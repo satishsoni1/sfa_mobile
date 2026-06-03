@@ -71,6 +71,7 @@ class ReportProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print("Error fetching doctors: $e");
+      rethrow;
     }
   }
 
@@ -126,7 +127,7 @@ class ReportProvider with ChangeNotifier {
         await fetchTodayData();
       }
     } catch (e) {
-      throw Exception("Failed to save report.");
+      rethrow;
     }
   }
 
@@ -175,7 +176,7 @@ class ReportProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print("Submit Error: $e");
-      throw Exception("Failed to submit final day report.");
+      rethrow;
     }
   }
 
@@ -297,7 +298,10 @@ class ReportProvider with ChangeNotifier {
     }
   }
 
-  Future<void> fetchReportsByDate(DateTime date) async {
+  Future<void> fetchReportsByDate(
+    DateTime date, {
+    bool showBackendError = false,
+  }) async {
     _isLoading = true;
     notifyListeners();
 
@@ -328,6 +332,7 @@ class ReportProvider with ChangeNotifier {
       print("Error fetching reports for $date: $e");
       // On error (or 404), assume empty list and not submitted
       _dailyReports = [];
+      if (showBackendError) rethrow;
       _isDaySubmitted = false;
     } finally {
       _isLoading = false;

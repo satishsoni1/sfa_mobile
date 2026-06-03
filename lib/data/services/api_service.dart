@@ -13,6 +13,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   // Android Emulator uses 10.0.2.2. For Real Device use your PC IP (e.g., 192.168.1.5)
   static const String baseUrl = 'https://zorvia.globalspace.in/api';
+
+  String _errorMessageFromBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['message'] != null) {
+        return decoded['message'].toString();
+      }
+    } catch (_) {}
+    return body;
+  }
+
   Future<List<dynamic>> getVisitsByDate(String date) async {
     // API Endpoint: /api/visits?date=2026-02-04
     final url = Uri.parse('$baseUrl/app/visits?date=$date');
@@ -25,7 +36,7 @@ class ApiService {
       // Return the list inside 'data', or empty list if null
       return jsonResponse['data'] ?? [];
     } else {
-      throw Exception('Failed to load visits: ${response.body}');
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 
@@ -157,7 +168,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return jsonDecode(response.body); // Returns list of doctors
     }
-    return [];
+    throw Exception(_errorMessageFromBody(response.body));
   }
 
   // --- 4. VISITS (REPORTING) ---
@@ -237,7 +248,7 @@ class ApiService {
     final response = await http.post(url, headers: headers, body: body);
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to submit day: ${response.body}');
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 
@@ -393,7 +404,7 @@ class ApiService {
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Failed to save visit: ${response.body}');
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 

@@ -23,11 +23,22 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
     });
   }
 
-  void _fetchReportsForDate() {
-    Provider.of<ReportProvider>(
-      context,
-      listen: false,
-    ).fetchReportsByDate(_selectedDate);
+  Future<void> _fetchReportsForDate() async {
+    try {
+      await Provider.of<ReportProvider>(
+        context,
+        listen: false,
+      ).fetchReportsByDate(_selectedDate, showBackendError: true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _pickDate() async {
@@ -540,27 +551,45 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
 
                         // If the user confirmed the dialog (returned an int instead of null)
                         if (finalChemistCount != null) {
-                          await reportProvider.submitDayReports(
-                            date: _selectedDate,
-                            chemistCount:
-                                finalChemistCount ??
-                                0, // Falls back to 0 if not entered
-                          );
-
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Day Submitted Successfully!',
-                                  style: GoogleFonts.poppins(),
-                                ),
-                                backgroundColor: Colors.green,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
+                          try {
+                            await reportProvider.submitDayReports(
+                              date: _selectedDate,
+                              chemistCount:
+                                  finalChemistCount ??
+                                  0, // Falls back to 0 if not entered
                             );
+
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Day Submitted Successfully!',
+                                    style: GoogleFonts.poppins(),
+                                  ),
+                                  backgroundColor: Colors.green,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    e.toString().replaceFirst('Exception: ', ''),
+                                    style: GoogleFonts.poppins(),
+                                  ),
+                                  backgroundColor: Colors.red,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                ),
+                              );
+                            }
                           }
                         }
                       },
