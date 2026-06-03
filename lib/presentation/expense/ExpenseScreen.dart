@@ -2802,7 +2802,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ],
             ),  // end Row (else branch of ternary)
 
-          // Train: amount override + mandatory ticket attachment
+          // Train: amount override field always shown; ticket required only on override
           if (isTrain && !_isLocked) ...[
             const SizedBox(height: 12),
             const Divider(height: 1),
@@ -2829,8 +2829,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 }
               },
             ),
+            // Ticket attachment — only required when user overrides the slab fare
+            if (_trainTaController.text.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
-            // Ticket attachment
             GestureDetector(
               onTap: () async {
                 final result = await FilePicker.platform.pickFiles(
@@ -2891,7 +2892,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ),
             ),
-          ],
+            ],  // closes: if (_trainTaController.text.trim().isNotEmpty)
+          ],    // closes: if (isTrain && !_isLocked)
         ],
       ),
     );
@@ -3462,10 +3464,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // ─── Submit ───────────────────────────────────────────────────────────────────
 
   void _submit() async {
-    // Train mode requires a ticket attachment
-    if (_serverTaMode == 'train' && _serverTaAmount > 0 && _trainTicketFile == null) {
+    // Ticket required only when user has overridden the slab train fare
+    if (_serverTaMode == 'train' &&
+        _trainTaController.text.trim().isNotEmpty &&
+        _trainTicketFile == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please attach your train ticket before saving.'),
+        content: Text('Please attach your train ticket when overriding the fare.'),
         backgroundColor: Colors.red,
       ));
       return;
