@@ -92,9 +92,9 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
       _mslTargets.fold(0, (sum, t) => sum + t.quota);
 
   // Full MCL allowance stays data-driven from the backend target.
-  int _fullMclMinAllowed(int required) => (required * 0.9).ceil();
+  int _fullMclMinAllowed(int required) => (required * 0.85).ceil();
 
-  int _fullMclMaxAllowed(int required) => (required * 11) ~/ 10;
+  int _fullMclMaxAllowed(int required) => (required * 115) ~/ 100;
 
   Map<String, int> _categoryCounts(List<NewDoctor> docs) {
     final map = {'CORE_3': 0, 'FRD_2': 0, 'KBL': 0, 'REMAINING': 0, 'UNSET': 0};
@@ -357,6 +357,14 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   }
 
   Future<void> _submitForApproval() async {
+    if (!_canSubmit) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Submission is allowed only within the 15% MCL range.'),
+        backgroundColor: Colors.red,
+      ));
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -1270,7 +1278,7 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           elevation: 2,
         ),
-        onPressed: _isSubmitting ? null : _submitForApproval,
+        onPressed: (_isSubmitting || !_canSubmit) ? null : _submitForApproval,
         icon: _isSubmitting
             ? const SizedBox(width: 18, height: 18,
                 child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
