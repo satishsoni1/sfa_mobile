@@ -1153,7 +1153,8 @@ Future<void> submitFullMonth(int month, int year) async {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/app/expense/ta-routes'),
+        // include_subordinates=1 → backend returns routes of all reporting employees for managers
+        Uri.parse('$baseUrl/app/expense/ta-routes?include_subordinates=1'),
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );
       if (response.statusCode == 200) {
@@ -1163,10 +1164,48 @@ Future<void> submitFullMonth(int month, int year) async {
           'routes': List<Map<String, dynamic>>.from(
               list is List ? list : []),
           'hq_location': body['hq_location']?.toString(),
+          'allow_da_selection': body['allow_da_selection'],
+          'da_hq':    body['da_hq'],
+          'da_ex_hq': body['da_ex_hq'],
+          'da_ex':    body['da_ex'],
+          'da_os':    body['da_os'],
+          'da_ex_os': body['da_ex_os'],
         };
       }
     } catch (_) {}
     return {'routes': <Map<String, dynamic>>[], 'hq_location': null};
+  }
+
+  /// POST /app/expense/save-route
+  /// Saves a new employee-specific route into expense_rates_ta.
+  /// Backend deduplicates by (from_town_code, to_town_code, employee_code).
+  Future<void> saveExpenseRoute({
+    required String fromTown,
+    required String toTown,
+    required String modeOfTravel,
+    required double kms,
+    String? stationType,
+  }) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/expense/save-route'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({
+        'from_town_code': fromTown,
+        'to_town_code': toTown,
+        'mode_of_travel': modeOfTravel,
+        'kms': kms.toStringAsFixed(1),
+        'station_type': stationType,
+      }),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(
+          json.decode(response.body)['message'] ?? 'Failed to save route');
+    }
   }
 
   // ─── NFW DA Rate (expense_rates by designation) ──────────────────────────────
@@ -1197,6 +1236,20 @@ Future<void> submitFullMonth(int month, int year) async {
       }
     } catch (_) {}
     return [];
+  }
+
+  /// GET /app/expense/da-config
+  /// Returns {allow_da_selection: 0/1, da_hq: n, da_ex_hq: n, da_os: n, da_ex_os: n}
+  Future<Map<String, dynamic>> getExpenseDaConfig() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/da-config'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) return json.decode(response.body);
+    } catch (_) {}
+    return {'allow_da_selection': 0};
   }
 
   /// POST /app/expense/recalculate-location

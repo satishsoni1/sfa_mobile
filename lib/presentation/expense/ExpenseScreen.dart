@@ -112,6 +112,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // Per-segment km breakdown for multi-stop routes [{from, to, km, mode}]
   List<Map<String, dynamic>> _segmentDetails = [];
 
+  // Manual DA selection (when no DCR and allow_da_selection = 1 in expense_rates)
+  bool _allowDaSelection = false;
+  bool _isDaTypeManual = false;
+  Map<String, double> _manualDaRates = {};
+  // Route not found: no km found for selected from/to; allow manual entry
+  bool _routeNotFound = false;
+  bool _taOverrideByUser = false; // user typed manual km/ta when route not found
+
   // Train TA — user can override amount; ticket attachment is required
   PlatformFile? _trainTicketFile;
   final _trainTaController = TextEditingController();
@@ -363,11 +371,28 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       });
       _recalculateTotal();
     } catch (_) {
-      // No DCR — show expense type selector
+      // No DCR found for this date.
+      // For edit mode: if the saved da_type is a field type, restore manual FIELD mode
+      if (widget.editData != null) {
+        final daType = (widget.editData!['da_type'] ?? '').toString().toUpperCase();
+        final isFieldType = daType.isNotEmpty &&
+            !['NFW', 'MEETING', 'TRAINING', 'TRANSIT_DA', 'TRANSIT'].contains(daType);
+        if (isFieldType && mounted) {
+          setState(() {
+            _expenseMode = 'FIELD';
+            _calcData = {'route': []};
+            _isDaTypeManual = true;
+          });
+          _recalculateTotal();
+          return;
+        }
+      }
+      // _allowDaSelection is already set by _loadTaRoutes() which runs in initState
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -393,11 +418,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   _buildDatePicker(),
                   const SizedBox(height: 16),
                   if (_expenseMode == 'FIELD' && _calcData != null) ...[
-                    _buildRouteTimeline(),
+                    if (_isDaTypeManual) ...[
+                      _buildManualDaBanner(),
+                      const SizedBox(height: 14),
+                    ] else
+                      _buildRouteTimeline(),
                     const SizedBox(height: 14),
                     _buildFieldTravelSection(),
                     const SizedBox(height: 14),
-                    if (_bothWaypointsReady) ...[
+                    if (_isDaTypeManual || _bothWaypointsReady) ...[
                       _buildAllowanceCards(),
                       const SizedBox(height: 14),
                     ] else
@@ -575,7 +604,205 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             _loadTransitFromLocation();
           },
         ),
+        if (_allowDaSelection) ...[
+          const SizedBox(height: 12),
+          _buildTypeOptionCard(
+            title: 'Field Expense (Manual)',
+            subtitle: 'Select DA type: HQ, Ex-HQ, Outstation, or Ex-Outstation',
+            icon: Icons.work_history_outlined,
+            color: Colors.green,
+            onTap: () => _showDaTypePickerSheet(),
+          ),
+        ],
       ],
+    );
+  }
+
+  void _showDaTypePickerSheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Select DA Type',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(height: 6),
+            Text(
+              'Choose the DA category that applies to your field work today.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            _buildDaTypeOption(
+              type: 'HQ',
+              title: 'HQ',
+              subtitle: 'Headquarter territory',
+              color: const Color(0xFF4A148C),
+            ),
+            const SizedBox(height: 10),
+            _buildDaTypeOption(
+              type: 'EX',
+              title: 'Ex-HQ',
+              subtitle: 'Beyond headquarter territory',
+              color: Colors.orange.shade700,
+            ),
+            const SizedBox(height: 10),
+            _buildDaTypeOption(
+              type: 'OS',
+              title: 'Outstation (OS)',
+              subtitle: 'Outstation area',
+              color: Colors.red.shade700,
+            ),
+            const SizedBox(height: 10),
+            _buildDaTypeOption(
+              type: 'EX_OS',
+              title: 'Ex-Outstation (EX OS)',
+              subtitle: 'Ex-outstation area',
+              color: Colors.deepOrange.shade700,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDaTypeOption({
+    required String type,
+    required String title,
+    required String subtitle,
+    required Color color,
+  }) {
+    final rate = _manualDaRates[type] ?? 0;
+    return InkWell(
+      onTap: () => _selectManualDaType(type),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.location_on_outlined, color: color, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                  Text(subtitle,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                ],
+              ),
+            ),
+            if (rate > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('₹${_fmt(rate)}',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: color, fontSize: 13)),
+              )
+            else
+              Icon(Icons.chevron_right, color: color.withValues(alpha: 0.7), size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _selectManualDaType(String type) {
+    Navigator.pop(context);
+    setState(() {
+      _expenseMode = 'FIELD';
+      _calcData = {'route': []};
+      _serverDaType = type;
+      _serverDaAmount = _manualDaRates[type] ?? 0;
+      _isDaTypeManual = true;
+    });
+    _recalculateTotal();
+  }
+
+  // ─── Manual DA Banner (shown in FIELD mode when DA type was manually selected) ─
+
+  Widget _buildManualDaBanner() {
+    const labels = {
+      'HQ': 'HQ',
+      'EX': 'Ex-HQ',
+      'OS': 'Outstation',
+      'EX_OS': 'Ex-Outstation',
+    };
+    const colors = {
+      'HQ': Color(0xFF4A148C),
+      'EX': Colors.orange,
+      'OS': Colors.red,
+      'EX_OS': Colors.deepOrange,
+    };
+    final label = labels[_serverDaType] ?? _serverDaType;
+    final color = colors[_serverDaType] ?? const Color(0xFF4A148C);
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.work_history_outlined, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Field Expense — $label',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, color: color, fontSize: 13)),
+                Text('DA type manually selected',
+                    style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.7))),
+              ],
+            ),
+          ),
+          if (!_isLocked)
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  _expenseMode = null;
+                  _isDaTypeManual = false;
+                  _calcData = null;
+                  _serverDaType = 'HQ';
+                  _serverDaAmount = 0;
+                });
+              },
+              style: TextButton.styleFrom(
+                  foregroundColor: color,
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(48, 32)),
+              child: const Text('Change', style: TextStyle(fontSize: 12)),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1212,6 +1439,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final routes = List<Map<String, dynamic>>.from(
           result['routes'] as List? ?? []);
       final hqLocation = result['hq_location'] as String?;
+      final allowDaSel = result['allow_da_selection'] == 1 ||
+          result['allow_da_selection'] == true;
       setState(() {
         _taRoutes = routes;
         // hq_location from API (from expense_rates_ta or gst_employee_profile) is authoritative
@@ -1219,6 +1448,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         // Pre-fill the "From" waypoint with HQ when user hasn't picked one yet
         if (_userHq != null && _fieldWaypoints.isNotEmpty && _fieldWaypoints[0] == null) {
           _fieldWaypoints[0] = _userHq;
+        }
+        // DA selection flag + rates for manual field expense (no DCR)
+        _allowDaSelection = allowDaSel;
+        if (allowDaSel) {
+          _manualDaRates = {
+            'HQ':    _toDouble(result['da_hq']),
+            'EX':    _toDouble(result['da_ex_hq']) > 0
+                         ? _toDouble(result['da_ex_hq'])
+                         : _toDouble(result['da_ex']),
+            'OS':    _toDouble(result['da_os']),
+            'EX_OS': _toDouble(result['da_ex_os']),
+          };
         }
       });
       if (_expenseMode == 'TRANSIT' && _endLocation != null) {
@@ -1369,8 +1610,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
       final flag = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
       setState(() {
-        _serverDaType    = daType;
-        _serverDaAmount  = daAmount;
+        // In manual DA mode or user override, keep the selected DA type and amount
+        if (!_isDaTypeManual) {
+          _serverDaType   = daType;
+          _serverDaAmount = daAmount;
+        }
+        if (!_taOverrideByUser) {
+          _routeNotFound = taKm == 0 && toTown.isNotEmpty && !_isSameLocation();
+        }
         _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
         _serverTaKm      = taKm;
         _serverTaAmount  = taAmount;
@@ -1523,10 +1770,17 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (!mounted || myToken != _recalcToken) return;
 
       setState(() {
-        _serverDaType    = (result['da_type']?.toString() ?? _serverDaType).toUpperCase();
-        _serverDaAmount  = (result['da_amount'] as num?)?.toDouble() ?? _serverDaAmount;
-        _serverTaKm      = (result['total_km']  as num?)?.toDouble() ?? _serverTaKm;
+        if (!_isDaTypeManual) {
+          _serverDaType   = (result['da_type']?.toString() ?? _serverDaType).toUpperCase();
+          _serverDaAmount = (result['da_amount'] as num?)?.toDouble() ?? _serverDaAmount;
+        }
+        final newKm = (result['total_km'] as num?)?.toDouble() ?? _serverTaKm;
+        _serverTaKm      = newKm;
         _serverTaAmount  = (result['ta_amount']  as num?)?.toDouble() ?? _serverTaAmount;
+        // Detect route-not-found: server returned km=0 for valid non-identical stops
+        if (!_taOverrideByUser) {
+          _routeNotFound = newKm == 0 && stops.length >= 2 && !_isSameLocation();
+        }
         _serverTaMode    = result['ta_mode']?.toString() ?? _serverTaMode;
         final serverDir  = result['ta_direction']?.toString() ?? _taDirection;
         _taDirection     = serverDir;
@@ -1943,6 +2197,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               _serverTaAmount = 0;
               _serverDaAmount = 0;
               _segmentDetails = [];
+              _routeNotFound = false;
+              _taOverrideByUser = false;
               _manualKmController.clear();
               _manualTaController.clear();
             });
@@ -2457,15 +2713,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                    color: color, borderRadius: BorderRadius.circular(10)),
-                child: Text(daType,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                        color: color, borderRadius: BorderRadius.circular(10)),
+                    child: Text(daType,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14)),
+                  ),
+                ],
               ),
             ],
           ),
@@ -2801,6 +3062,54 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ],
             ),  // end Row (else branch of ternary)
+
+          // Route not found — manual entry + add route for future use
+          if (_routeNotFound && _allowDaSelection && !_isLocked) ...[
+            const SizedBox(height: 12),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            // Banner with Add Route button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade700),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Route not found. Add this route to calculate TA.',
+                      style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: _showAddRouteSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.shade700,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.add_road, size: 13, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text('Add Route',
+                              style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           // Train: amount override field always shown; ticket required only on override
           if (isTrain && !_isLocked) ...[
@@ -3605,6 +3914,44 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
+  // ─── Add Route Sheet ──────────────────────────────────────────────────────────
+
+  void _showAddRouteSheet() {
+    if (!mounted) return;
+    final from = _selectedFrom ?? _userHq ?? '';
+    final to   = _endLocation ?? '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AddRouteSheet(
+        fromTown: from,
+        toTown: to,
+        initialKm: _serverTaKm > 0 ? _serverTaKm : null,
+        initialMode: _modeOfTravel,
+        onSaved: () async {
+          await _loadTaRoutes();
+          if (!mounted) return;
+          setState(() {
+            _routeNotFound = false;
+            _taOverrideByUser = false;
+            _manualKmController.clear();
+            _manualTaController.text = '0.00';
+          });
+          if (_expenseMode == 'FIELD') {
+            _recalcFieldRoute();
+          } else {
+            _updateTaFromSelection();
+          }
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Route added. TA recalculated.'),
+            backgroundColor: Colors.green,
+          ));
+        },
+      ),
+    );
+  }
+
   // ─── Helpers ──────────────────────────────────────────────────────────────────
 
   double _toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0.0;
@@ -4100,6 +4447,245 @@ class _GstDetailsSheetState extends State<_GstDetailsSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Add New Route Sheet ──────────────────────────────────────────────────────
+
+class _AddRouteSheet extends StatefulWidget {
+  final String fromTown;
+  final String toTown;
+  final double? initialKm;
+  final String? initialMode;
+  final VoidCallback onSaved;
+
+  const _AddRouteSheet({
+    required this.fromTown,
+    required this.toTown,
+    this.initialKm,
+    this.initialMode,
+    required this.onSaved,
+  });
+
+  @override
+  State<_AddRouteSheet> createState() => _AddRouteSheetState();
+}
+
+class _AddRouteSheetState extends State<_AddRouteSheet> {
+  late final TextEditingController _kmController;
+  String _mode = 'Bike';
+  String _stationType = 'HQ';
+  bool _saving = false;
+  String _empCode = '';
+  String _positionCode = '';
+
+  static const _modes = ['Bike', 'Car', 'Bus', 'Train', 'Auto'];
+  static const _stationTypes = ['HQ', 'EX', 'OS', 'EX_OS'];
+  static const _stationLabels = {'HQ': 'HQ', 'EX': 'EX-HQ', 'OS': 'Outstation', 'EX_OS': 'Ex-Outstation'};
+
+  @override
+  void initState() {
+    super.initState();
+    _kmController = TextEditingController(
+      text: (widget.initialKm ?? 0) > 0 ? widget.initialKm!.toStringAsFixed(1) : '',
+    );
+    if (widget.initialMode != null && _modes.contains(widget.initialMode)) {
+      _mode = widget.initialMode!;
+    }
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await ApiService().getUser();
+    if (mounted && user != null) {
+      setState(() {
+        _empCode = user.employeeCode;
+        _positionCode = user.designation ?? '';
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _kmController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final km = double.tryParse(_kmController.text.trim()) ?? 0;
+    if (km <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid distance.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ApiService().saveExpenseRoute(
+        fromTown: widget.fromTown,
+        toTown: widget.toTown,
+        modeOfTravel: _mode,
+        kms: km,
+        stationType: _stationType,
+      );
+      if (mounted) Navigator.pop(context);
+      widget.onSaved();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Widget _infoTile(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          const Spacer(),
+          Text(value,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF4A148C))),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottom = MediaQuery.of(context).viewInsets.bottom;
+    return Container(
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottom),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Handle
+            Center(
+              child: Container(
+                  width: 36, height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2))),
+            ),
+            Text('Add New Route',
+                style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 4),
+            Text('This route will be saved to your profile for future filings.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+            const SizedBox(height: 16),
+
+            // From / To (read-only)
+            _infoTile('From', widget.fromTown.isNotEmpty ? widget.fromTown : '—'),
+            const SizedBox(height: 8),
+            _infoTile('To', widget.toTown.isNotEmpty ? widget.toTown : '—'),
+            const SizedBox(height: 8),
+            // Employee / Position (auto from login)
+            _infoTile('Employee Code', _empCode.isNotEmpty ? _empCode : '…'),
+            const SizedBox(height: 8),
+            _infoTile('Position Code', _positionCode.isNotEmpty ? _positionCode : '…'),
+            const SizedBox(height: 16),
+
+            // KM input
+            TextField(
+              controller: _kmController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                labelText: 'Distance (km)',
+                suffixText: 'km',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: Color(0xFF4A148C))),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Mode of Travel
+            Text('Mode of Travel',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _modes.map((m) {
+                final sel = m == _mode;
+                return ChoiceChip(
+                  label: Text(m),
+                  selected: sel,
+                  onSelected: (_) => setState(() => _mode = m),
+                  selectedColor: const Color(0xFF4A148C),
+                  labelStyle: TextStyle(
+                      fontSize: 12,
+                      color: sel ? Colors.white : Colors.grey.shade800,
+                      fontWeight: sel ? FontWeight.w600 : FontWeight.normal),
+                  backgroundColor: Colors.grey.shade100,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+
+            // Station Type
+            Text('Station Type',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: _stationTypes.map((s) {
+                final sel = s == _stationType;
+                return ChoiceChip(
+                  label: Text(_stationLabels[s]!),
+                  selected: sel,
+                  onSelected: (_) => setState(() => _stationType = s),
+                  selectedColor: const Color(0xFF4A148C),
+                  labelStyle: TextStyle(
+                      fontSize: 12,
+                      color: sel ? Colors.white : Colors.grey.shade800,
+                      fontWeight: sel ? FontWeight.w600 : FontWeight.normal),
+                  backgroundColor: Colors.grey.shade100,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 24),
+
+            // Save button
+            SizedBox(
+              height: 48,
+              child: ElevatedButton(
+                onPressed: _saving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4A148C),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  disabledBackgroundColor: Colors.grey.shade300,
+                ),
+                child: _saving
+                    ? const SizedBox(
+                        height: 20, width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : Text('Save Route',
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

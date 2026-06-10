@@ -650,30 +650,32 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
   Widget _buildClaimCard(Map<String, dynamic> claim) {
     final icons = {
-      'Mobile'    : Icons.phone_android,
-      'Internet'  : Icons.wifi,
-      'Hotel'     : Icons.hotel_outlined,
-      'Postage'   : Icons.local_post_office_outlined,
-      'Toll'      : Icons.toll_outlined,
-      'Courier'   : Icons.local_shipping_outlined,
-      'Parking'   : Icons.local_parking,
-      'Food Bill' : Icons.restaurant_outlined,
-      'Stationary': Icons.edit_note_outlined,
-      'Award'     : Icons.emoji_events_outlined,
-      'Misc'      : Icons.more_horiz,
+      'Mobile'         : Icons.phone_android,
+      'Internet'       : Icons.wifi,
+      'Hotel'          : Icons.hotel_outlined,
+      'Postage'        : Icons.local_post_office_outlined,
+      'Toll'           : Icons.toll_outlined,
+      'Courier'        : Icons.local_shipping_outlined,
+      'Parking'        : Icons.local_parking,
+      'Food Bill'      : Icons.restaurant_outlined,
+      'Stationary'     : Icons.edit_note_outlined,
+      'Award'          : Icons.emoji_events_outlined,
+      'Patrol Charges' : Icons.local_police_outlined,
+      'Misc'           : Icons.more_horiz,
     };
     final claimColors = {
-      'Mobile'    : Colors.blue,
-      'Internet'  : Colors.teal,
-      'Hotel'     : Colors.indigo,
-      'Postage'   : Colors.brown,
-      'Toll'      : Colors.deepOrange,
-      'Courier'   : Colors.cyan,
-      'Parking'   : Colors.purple,
-      'Food Bill' : Colors.green,
-      'Stationary': Colors.teal,
-      'Award'     : Colors.amber,
-      'Misc'      : Colors.grey,
+      'Mobile'         : Colors.blue,
+      'Internet'       : Colors.teal,
+      'Hotel'          : Colors.indigo,
+      'Postage'        : Colors.brown,
+      'Toll'           : Colors.deepOrange,
+      'Courier'        : Colors.cyan,
+      'Parking'        : Colors.purple,
+      'Food Bill'      : Colors.green,
+      'Stationary'     : Colors.teal,
+      'Award'          : Colors.amber,
+      'Patrol Charges' : Colors.deepPurple,
+      'Misc'           : Colors.grey,
     };
     final type  = claim['claim_type'] ?? 'Misc';
     final icon  = icons[type]  ?? Icons.receipt;
@@ -1524,7 +1526,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
 
   static const _claimTypes = [
     'Mobile', 'Internet', 'Hotel', 'Postage',
-    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Misc',
+    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Patrol Charges', 'Misc',
   ];
 
   final _claimIcons = {
@@ -1538,6 +1540,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
     'Food Bill': Icons.restaurant_outlined,
     'Stationary': Icons.edit_note_outlined,
     'Award': Icons.emoji_events_outlined,
+    'Patrol Charges': Icons.local_police_outlined,
     'Misc': Icons.more_horiz,
   };
 
