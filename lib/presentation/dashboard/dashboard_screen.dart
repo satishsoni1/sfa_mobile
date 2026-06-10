@@ -64,7 +64,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.31";
+  static const String CURRENT_APP_VERSION = "1.0.32";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -296,8 +296,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _openTabJointWork() {
     final employeeCode =
-        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
-            .trim();
+        Provider.of<AuthProvider>(context, listen: false,
+    ).user?.employeeCode.trim();
 
     if (employeeCode == null || employeeCode.isEmpty) {
       _showSnack("Employee code not available.");
@@ -311,15 +311,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
       InternalWebViewScreen.routeName,
       arguments: InternalWebViewArgs(
         url: url,
-        title: 'Tab Joint Work',
-      ),
+         title: 'Tab Joint Work'),
+    );
+  }
+
+  void _openActionCenter() {
+    final employeeCode = Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    ).user?.employeeCode.trim();
+
+    if (employeeCode == null || employeeCode.isEmpty) {
+      _showSnack("Employee code not available.");
+      return;
+    }
+
+    final url =
+        'https://zorvia.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
+
+    Navigator.pushNamed(
+      context,
+      InternalWebViewScreen.routeName,
+      arguments: InternalWebViewArgs(url: url, title: 'Action Center'),
     );
   }
 
   void _openWebLinks() {
-    final employeeCode =
-        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
-            .trim();
+    final employeeCode = Provider.of<AuthProvider>(
+      context,
+      listen: false,
+    ).user?.employeeCode.trim();
 
     if (employeeCode == null || employeeCode.isEmpty) {
       _showSnack("Employee code not available.");
@@ -779,18 +800,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.blue,
             _openTabJointWork,
           ),
-            _MenuAction(
+          _MenuAction(
+            Icons.checklist,
+            "Action Center",
+            Colors.orange,
+            _openActionCenter,
+          ),
+          _MenuAction(
             Icons.receipt_long,
             "Team Expenses",
             Colors.teal,
             () => _navigateTo(const ExpenseManagerScreen()),
           ),
-          _MenuAction(
-            Icons.link,
-            "Other Links",
-            Colors.indigo,
-            _openWebLinks,
-          ),
+          _MenuAction(Icons.link, "Other Links", Colors.indigo, _openWebLinks),
         ]),
         const SizedBox(height: 24),
 

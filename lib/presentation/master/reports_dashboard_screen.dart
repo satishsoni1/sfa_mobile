@@ -71,7 +71,7 @@ class ReportsDashboardScreen extends StatelessWidget {
         'type': ReportType.visitSummary,
       },
       {
-        'title': 'Web DCR',
+        'title': 'Visit Report',
         'icon': Icons.assignment_outlined,
         'external_path': 'visit',
       },
