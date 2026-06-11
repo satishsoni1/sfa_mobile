@@ -67,6 +67,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   String? _fromLocation; // NFW / TRANSIT from dropdown
   double? _endLocationKm;
   List<Map<String, dynamic>> _taRoutes = [];
+  bool _hasOwnPolicy = true;           // true → employee has own expense_rates_ta entries
+  List<String> _subordinateLocations = []; // town codes from subordinates (managers only)
   String? _userHq;
   double _nfwDaAmount = 0;
   bool _isLoadingNfwRate = false;
@@ -118,6 +120,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Map<String, double> _manualDaRates = {};
   // Route not found: no km found for selected from/to; allow manual entry
   bool _routeNotFound = false;
+  // Route found but came from another employee's data (not own profile) — show "Add Route"
+  bool _routeFromOtherEmployee = false;
   bool _taOverrideByUser = false; // user typed manual km/ta when route not found
 
   // Train TA — user can override amount; ticket attachment is required
@@ -1436,20 +1440,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     try {
       final result = await ApiService().getTaRoutes();
       if (!mounted) return;
-      final routes = List<Map<String, dynamic>>.from(
-          result['routes'] as List? ?? []);
+      final routes     = List<Map<String, dynamic>>.from(result['routes'] as List? ?? []);
       final hqLocation = result['hq_location'] as String?;
-      final allowDaSel = result['allow_da_selection'] == 1 ||
-          result['allow_da_selection'] == true;
+      final hasOwn     = result['has_own_policy'] as bool? ?? true;
+      final subLocs    = List<String>.from(result['subordinate_locations'] as List? ?? []);
+      final allowDaSel = result['allow_da_selection'] == 1 || result['allow_da_selection'] == true;
       setState(() {
-        _taRoutes = routes;
-        // hq_location from API (from expense_rates_ta or gst_employee_profile) is authoritative
+        _taRoutes              = routes;
+        _hasOwnPolicy          = hasOwn;
+        _subordinateLocations  = subLocs;
+        // hq_location from API is authoritative
         _userHq = hqLocation ?? (routes.isNotEmpty ? routes.first['from_town_code']?.toString() : null);
-        // Pre-fill the "From" waypoint with HQ when user hasn't picked one yet
+        // Pre-fill "From" waypoint with HQ when not yet chosen
         if (_userHq != null && _fieldWaypoints.isNotEmpty && _fieldWaypoints[0] == null) {
           _fieldWaypoints[0] = _userHq;
         }
-        // DA selection flag + rates for manual field expense (no DCR)
         _allowDaSelection = allowDaSel;
         if (allowDaSel) {
           _manualDaRates = {
@@ -1616,7 +1621,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _serverDaAmount = daAmount;
         }
         if (!_taOverrideByUser) {
-          _routeNotFound = taKm == 0 && toTown.isNotEmpty && !_isSameLocation();
+          final src = result['route_source']?.toString() ?? '';
+          _routeNotFound           = src == 'none' || (taKm == 0 && toTown.isNotEmpty && !_isSameLocation());
+          _routeFromOtherEmployee  = src == 'other';
         }
         _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
         _serverTaKm      = taKm;
@@ -1779,7 +1786,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _serverTaAmount  = (result['ta_amount']  as num?)?.toDouble() ?? _serverTaAmount;
         // Detect route-not-found: server returned km=0 for valid non-identical stops
         if (!_taOverrideByUser) {
-          _routeNotFound = newKm == 0 && stops.length >= 2 && !_isSameLocation();
+          final src = result['route_source']?.toString() ?? '';
+          _routeNotFound           = src == 'none' || (newKm == 0 && stops.length >= 2 && !_isSameLocation());
+          _routeFromOtherEmployee  = src == 'other';
         }
         _serverTaMode    = result['ta_mode']?.toString() ?? _serverTaMode;
         final serverDir  = result['ta_direction']?.toString() ?? _taDirection;
@@ -2097,8 +2106,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   // ─── Shared: From + To Route Section ─────────────────────────────────────────
 
-  // All unique locations — union of from_town_code, to_town_code, and HQ.
-  // HQ is always included so it can be selected even if not part of any route.
+  // All unique locations — union of own routes, subordinate locations, and HQ.
+  // When the employee has no own policy routes, subordinate town codes fill the
+  // dropdown so they can still pick from/to for the "Add Route" flow.
   List<String> _allLocations() {
     final locs = <String>{};
     if (_userHq != null && _userHq!.isNotEmpty) locs.add(_userHq!);
@@ -2107,6 +2117,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       final t = r['to_town_code']?.toString() ?? '';
       if (f.isNotEmpty) locs.add(f);
       if (t.isNotEmpty) locs.add(t);
+    }
+    // When no own policy routes, supplement with subordinate locations so managers
+    // and employees without personal routes can still select from/to in dropdowns.
+    if (!_hasOwnPolicy || _taRoutes.isEmpty) {
+      for (final loc in _subordinateLocations) {
+        if (loc.isNotEmpty) locs.add(loc);
+      }
     }
     return locs.toList()..sort();
   }
@@ -2191,14 +2208,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           locked: _isLocked,
           onChanged: (val) {
             setState(() {
-              _selectedFrom = val;
-              _endLocation = null;
-              _serverTaKm = 0;
-              _serverTaAmount = 0;
-              _serverDaAmount = 0;
-              _segmentDetails = [];
-              _routeNotFound = false;
-              _taOverrideByUser = false;
+              _selectedFrom           = val;
+              _endLocation            = null;
+              _serverTaKm             = 0;
+              _serverTaAmount         = 0;
+              _serverDaAmount         = 0;
+              _segmentDetails         = [];
+              _routeNotFound          = false;
+              _routeFromOtherEmployee = false;
+              _taOverrideByUser       = false;
               _manualKmController.clear();
               _manualTaController.clear();
             });
@@ -3063,27 +3081,45 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ],
             ),  // end Row (else branch of ternary)
 
-          // Route not found — manual entry + add route for future use
-          if (_routeNotFound && _allowDaSelection && !_isLocked) ...[
+          // Show "Add Route" when: (a) no route found at all, or (b) km came from another employee
+          if ((_routeNotFound || _routeFromOtherEmployee) && !_isLocked) ...[
             const SizedBox(height: 12),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            // Banner with Add Route button
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+                color: _routeFromOtherEmployee
+                    ? Colors.blue.shade50
+                    : Colors.orange.shade50,
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.shade200),
+                border: Border.all(
+                    color: _routeFromOtherEmployee
+                        ? Colors.blue.shade200
+                        : Colors.orange.shade200),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.warning_amber_rounded, size: 16, color: Colors.orange.shade700),
+                  Icon(
+                    _routeFromOtherEmployee
+                        ? Icons.person_search_outlined
+                        : Icons.warning_amber_rounded,
+                    size: 16,
+                    color: _routeFromOtherEmployee
+                        ? Colors.blue.shade700
+                        : Colors.orange.shade700,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Route not found. Add this route to calculate TA.',
-                      style: TextStyle(fontSize: 11, color: Colors.orange.shade800),
+                      _routeFromOtherEmployee
+                          ? 'Km from another employee\'s route. Save to your profile for accurate TA.'
+                          : 'Route not found. Add this route to calculate TA.',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: _routeFromOtherEmployee
+                              ? Colors.blue.shade800
+                              : Colors.orange.shade800),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -3092,7 +3128,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade700,
+                        color: _routeFromOtherEmployee
+                            ? Colors.blue.shade600
+                            : Colors.orange.shade700,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: const Row(
@@ -3101,7 +3139,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                           Icon(Icons.add_road, size: 13, color: Colors.white),
                           SizedBox(width: 4),
                           Text('Add Route',
-                              style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w600)),
+                              style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -3916,10 +3957,27 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   // ─── Add Route Sheet ──────────────────────────────────────────────────────────
 
-  void _showAddRouteSheet() {
+  Future<void> _showAddRouteSheet() async {
     if (!mounted) return;
     final from = _selectedFrom ?? _userHq ?? '';
     final to   = _endLocation ?? '';
+
+    // When the km already came from another employee's route, use it directly.
+    // Only call the suggestion API when there is no km at all (route truly not found).
+    double? suggestedKm;
+    if (_serverTaKm > 0) {
+      // km is already known from another employee's route — use it as the suggestion
+      suggestedKm = _serverTaKm;
+    } else if (from.isNotEmpty && to.isNotEmpty) {
+      try {
+        final hint = await ApiService().getRouteKmSuggestion(fromTown: from, toTown: to);
+        if (hint['found'] == true && hint['suggested_km'] != null) {
+          suggestedKm = (hint['suggested_km'] as num).toDouble();
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -3927,14 +3985,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       builder: (_) => _AddRouteSheet(
         fromTown: from,
         toTown: to,
-        initialKm: _serverTaKm > 0 ? _serverTaKm : null,
+        initialKm: null,   // always use suggestedKm so the hint banner is shown
+        suggestedKm: suggestedKm,
         initialMode: _modeOfTravel,
         onSaved: () async {
           await _loadTaRoutes();
           if (!mounted) return;
           setState(() {
-            _routeNotFound = false;
-            _taOverrideByUser = false;
+            _routeNotFound          = false;
+            _routeFromOtherEmployee = false;
+            _taOverrideByUser       = false;
             _manualKmController.clear();
             _manualTaController.text = '0.00';
           });
@@ -4458,6 +4518,8 @@ class _AddRouteSheet extends StatefulWidget {
   final String fromTown;
   final String toTown;
   final double? initialKm;
+  // Min km found for this pair in other employees' routes — shown as a hint/pre-fill
+  final double? suggestedKm;
   final String? initialMode;
   final VoidCallback onSaved;
 
@@ -4465,6 +4527,7 @@ class _AddRouteSheet extends StatefulWidget {
     required this.fromTown,
     required this.toTown,
     this.initialKm,
+    this.suggestedKm,
     this.initialMode,
     required this.onSaved,
   });
@@ -4488,8 +4551,10 @@ class _AddRouteSheetState extends State<_AddRouteSheet> {
   @override
   void initState() {
     super.initState();
+    // initialKm wins (edit/recalc result); suggestedKm is the fallback hint from other employees
+    final km = widget.initialKm ?? widget.suggestedKm;
     _kmController = TextEditingController(
-      text: (widget.initialKm ?? 0) > 0 ? widget.initialKm!.toStringAsFixed(1) : '',
+      text: (km ?? 0) > 0 ? km!.toStringAsFixed(1) : '',
     );
     if (widget.initialMode != null && _modes.contains(widget.initialMode)) {
       _mode = widget.initialMode!;
@@ -4602,19 +4667,41 @@ class _AddRouteSheetState extends State<_AddRouteSheet> {
             _infoTile('Position Code', _positionCode.isNotEmpty ? _positionCode : '…'),
             const SizedBox(height: 16),
 
-            // KM input
+            // KM input — locked when km is known from another employee's route
             TextField(
               controller: _kmController,
+              readOnly: widget.suggestedKm != null && widget.suggestedKm! > 0,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: 'Distance (km)',
                 suffixText: 'km',
+                suffixIcon: (widget.suggestedKm != null && widget.suggestedKm! > 0)
+                    ? Icon(Icons.lock_outline, size: 16, color: Colors.grey.shade500)
+                    : null,
+                filled: widget.suggestedKm != null && widget.suggestedKm! > 0,
+                fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Color(0xFF4A148C))),
+                    borderSide: BorderSide(
+                        color: (widget.suggestedKm != null && widget.suggestedKm! > 0)
+                            ? Colors.grey.shade400
+                            : const Color(0xFF4A148C))),
               ),
             ),
+            if (widget.suggestedKm != null && widget.suggestedKm! > 0) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(Icons.lock_outline, size: 13, color: Colors.grey.shade500),
+                  const SizedBox(width: 5),
+                  Text(
+                    'Km set from existing route data — cannot be changed.',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Mode of Travel

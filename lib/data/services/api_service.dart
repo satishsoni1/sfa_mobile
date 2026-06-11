@@ -1146,14 +1146,13 @@ Future<void> submitFullMonth(int month, int year) async {
     return {'from_town': '', 'is_hq': true};
   }
 
-  /// Returns {routes: List<Map>, hq_location: String?}
-  /// hq_location is from expense_rates_ta.from_town_code or
-  /// gst_employee_profile.head_qtr when no TA routes exist.
+  /// Returns {routes, hq_location, has_own_policy, subordinate_locations, ...}
+  /// has_own_policy: true when the employee has their own entries in expense_rates_ta.
+  /// subordinate_locations: flat list of unique town codes from all subordinates (for manager dropdowns).
   Future<Map<String, dynamic>> getTaRoutes() async {
     try {
       final token = await getToken();
       final response = await http.get(
-        // include_subordinates=1 → backend returns routes of all reporting employees for managers
         Uri.parse('$baseUrl/app/expense/ta-routes?include_subordinates=1'),
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );
@@ -1161,10 +1160,11 @@ Future<void> submitFullMonth(int month, int year) async {
         final body = json.decode(response.body);
         final list = body['data'] ?? body;
         return {
-          'routes': List<Map<String, dynamic>>.from(
-              list is List ? list : []),
-          'hq_location': body['hq_location']?.toString(),
-          'allow_da_selection': body['allow_da_selection'],
+          'routes': List<Map<String, dynamic>>.from(list is List ? list : []),
+          'hq_location':           body['hq_location']?.toString(),
+          'has_own_policy':        body['has_own_policy'] == true || body['has_own_policy'] == 1,
+          'subordinate_locations': List<String>.from(body['subordinate_locations'] ?? []),
+          'allow_da_selection':    body['allow_da_selection'],
           'da_hq':    body['da_hq'],
           'da_ex_hq': body['da_ex_hq'],
           'da_ex':    body['da_ex'],
@@ -1173,7 +1173,33 @@ Future<void> submitFullMonth(int month, int year) async {
         };
       }
     } catch (_) {}
-    return {'routes': <Map<String, dynamic>>[], 'hq_location': null};
+    return {
+      'routes': <Map<String, dynamic>>[],
+      'hq_location': null,
+      'has_own_policy': true,
+      'subordinate_locations': <String>[],
+    };
+  }
+
+  /// GET /app/expense/route-km-suggestion?from_town=X&to_town=Y
+  /// Returns the minimum km found in expense_rates_ta for this pair across all
+  /// other employees. Used to pre-fill the "Add Route" form with a suggestion.
+  Future<Map<String, dynamic>> getRouteKmSuggestion({
+    required String fromTown,
+    required String toTown,
+  }) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse(
+            '$baseUrl/app/expense/route-km-suggestion'
+            '?from_town=${Uri.encodeComponent(fromTown)}'
+            '&to_town=${Uri.encodeComponent(toTown)}'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) return json.decode(response.body);
+    } catch (_) {}
+    return {'found': false, 'suggested_km': null};
   }
 
   /// POST /app/expense/save-route
