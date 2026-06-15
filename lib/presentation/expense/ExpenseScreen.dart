@@ -610,13 +610,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         ),
         if (_allowDaSelection) ...[
           const SizedBox(height: 12),
-          _buildTypeOptionCard(
-            title: 'Field Expense (Manual)',
-            subtitle: 'Select DA type: HQ, Ex-HQ, Outstation, or Ex-Outstation',
-            icon: Icons.work_history_outlined,
-            color: Colors.green,
-            onTap: () => _showDaTypePickerSheet(),
-          ),
+          // _buildTypeOptionCard(
+          //   title: 'Field Expense (Manual)',
+          //   subtitle: 'Select DA type: HQ, Ex-HQ, Outstation, or Ex-Outstation',
+          //   icon: Icons.work_history_outlined,
+          //   color: Colors.green,
+          //   onTap: () => _showDaTypePickerSheet(),
+          // ),
         ],
       ],
     );
