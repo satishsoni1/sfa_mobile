@@ -1622,7 +1622,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         }
         if (!_taOverrideByUser) {
           final src = result['route_source']?.toString() ?? '';
-          _routeNotFound           = src == 'none' || (taKm == 0 && toTown.isNotEmpty && !_isSameLocation());
+          _routeNotFound           = src == 'none';
           _routeFromOtherEmployee  = src == 'other';
         }
         _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
@@ -1787,7 +1787,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         // Detect route-not-found: server returned km=0 for valid non-identical stops
         if (!_taOverrideByUser) {
           final src = result['route_source']?.toString() ?? '';
-          _routeNotFound           = src == 'none' || (newKm == 0 && stops.length >= 2 && !_isSameLocation());
+          _routeNotFound           = src == 'none';
           _routeFromOtherEmployee  = src == 'other';
         }
         _serverTaMode    = result['ta_mode']?.toString() ?? _serverTaMode;
