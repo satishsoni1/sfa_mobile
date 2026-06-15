@@ -27,6 +27,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   List<dynamic> _monthlyClaims = [];
   Map<String, dynamic> _summary = {};
   bool _isSubmitted = false;
+  bool _hasPendingAdminChanges = false;
 
   @override
   void initState() {
@@ -54,8 +55,9 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
       setState(() {
         _expenses = summaryData['expenses'] ?? [];
-        _summary = summaryData['summary'] ?? {};
-        _isSubmitted = _summary['is_already_submitted'] == true;
+        _summary  = summaryData['summary'] ?? {};
+        _isSubmitted              = _summary['is_already_submitted'] == true;
+        _hasPendingAdminChanges   = _summary['has_pending_admin_changes'] == true;
         _monthlyClaims = claimsData;
       });
     } catch (_) {
@@ -195,6 +197,29 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               _statusBadge(),
             ],
           ),
+          if (_hasPendingAdminChanges) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 14, color: Colors.amber),
+                  const SizedBox(width: 7),
+                  const Expanded(
+                    child: Text(
+                      'Admin has reviewed your expense. Updated amounts will be visible after the 3rd of next month.',
+                      style: TextStyle(color: Colors.amber, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             '₹${_fmt(grandTotal + claimsTotal)}',

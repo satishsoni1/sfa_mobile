@@ -27,6 +27,8 @@ class _ExpenseManagerScreenState extends State<ExpenseManagerScreen>
   List<dynamic> _dailyExpenses = [];
   String? _approvalStatus; // null | 'submitted' | 'approved' | 'rejected'
   String? _rejectionReason;
+  String? _approverName;
+  String? _approverDesignation;
 
   @override
   void initState() {
@@ -63,8 +65,10 @@ class _ExpenseManagerScreenState extends State<ExpenseManagerScreen>
         setState(() {
           _summary = data['summary'] ?? {};
           _dailyExpenses = data['expenses'] ?? daily;
-          _approvalStatus = _summary['approval_status']?.toString();
-          _rejectionReason = _summary['rejection_reason']?.toString();
+          _approvalStatus       = _summary['approval_status']?.toString();
+          _rejectionReason      = _summary['rejection_reason']?.toString();
+          _approverName         = _summary['approver_name']?.toString();
+          _approverDesignation  = _summary['approver_designation']?.toString();
         });
       }
     } catch (_) {
@@ -269,8 +273,16 @@ class _ExpenseManagerScreenState extends State<ExpenseManagerScreen>
               children: [
                 // Status banner
                 if (isApproved)
-                  _statusBanner(Icons.check_circle, Colors.green, 'Approved',
-                      'This month\'s expense has been approved.')
+                  _statusBanner(
+                    Icons.check_circle,
+                    Colors.green,
+                    'Approved',
+                    (_approverName != null && _approverDesignation != null)
+                        ? 'Approved by $_approverName · $_approverDesignation'
+                        : _approverName != null
+                            ? 'Approved by $_approverName'
+                            : 'This month\'s expense has been approved.',
+                  )
                 else if (isRejected)
                   _statusBanner(Icons.cancel, Colors.red, 'Rejected',
                       _rejectionReason ?? 'Rejected by manager.')
