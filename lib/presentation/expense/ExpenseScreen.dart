@@ -4554,7 +4554,7 @@ class _AddRouteSheetState extends State<_AddRouteSheet> {
     // initialKm wins (edit/recalc result); suggestedKm is the fallback hint from other employees
     final km = widget.initialKm ?? widget.suggestedKm;
     _kmController = TextEditingController(
-      text: (km ?? 0) > 0 ? km!.toStringAsFixed(1) : '',
+      text: (km ?? 0) > 0 ? km!.toStringAsFixed(1) : "0.0",
     );
     if (widget.initialMode != null && _modes.contains(widget.initialMode)) {
       _mode = widget.initialMode!;
@@ -4580,7 +4580,7 @@ class _AddRouteSheetState extends State<_AddRouteSheet> {
 
   Future<void> _save() async {
     final km = double.tryParse(_kmController.text.trim()) ?? 0;
-    if (km <= 0) {
+    if (km < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Enter a valid distance.'), backgroundColor: Colors.red),
       );
@@ -4670,25 +4670,23 @@ class _AddRouteSheetState extends State<_AddRouteSheet> {
             // KM input — locked when km is known from another employee's route
             TextField(
               controller: _kmController,
-              readOnly: widget.suggestedKm != null && widget.suggestedKm! > 0,
+              readOnly: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
                 labelText: 'Distance (km)',
                 suffixText: 'km',
-                suffixIcon: (widget.suggestedKm != null && widget.suggestedKm! > 0)
-                    ? Icon(Icons.lock_outline, size: 16, color: Colors.grey.shade500)
-                    : null,
+                suffixIcon: Icon(Icons.lock_outline, size: 16, color: Colors.grey.shade500),
                 filled: widget.suggestedKm != null && widget.suggestedKm! > 0,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide(
-                        color: (widget.suggestedKm != null && widget.suggestedKm! > 0)
-                            ? Colors.grey.shade400
-                            : const Color(0xFF4A148C))),
+                        color:Colors.grey.shade400
+                        ),
               ),
-            ),
+              ),
+              ),
             if (widget.suggestedKm != null && widget.suggestedKm! > 0) ...[
               const SizedBox(height: 6),
               Row(
