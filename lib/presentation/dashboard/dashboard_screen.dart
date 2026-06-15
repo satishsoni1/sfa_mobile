@@ -64,7 +64,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.35";
+  static const String CURRENT_APP_VERSION = "1.0.36";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -691,20 +691,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.teal,
             () => _navigateTo(const RouteTourPlanScreen()),
           ),
-          _MenuAction(
-            Icons.slideshow_outlined,
-            "VODOCLM",
-            const Color(0xFF4A148C),
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ChangeNotifierProvider(
-                  create: (_) => ClmProvider(),
-                  child: const ClmHomeScreen(),
-                ),
-              ),
-            ),
-          ),
+          // _MenuAction(
+          //   Icons.slideshow_outlined,
+          //   "VODOCLM",
+          //   const Color(0xFF4A148C),
+          //   () => Navigator.push(
+          //     context,
+          //     MaterialPageRoute(
+          //       builder: (_) => ChangeNotifierProvider(
+          //         create: (_) => ClmProvider(),
+          //         child: const ClmHomeScreen(),
+          //       ),
+          //     ),
+          //   ),
+          // ),
           if (canUseWebDcr)
             _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
               if (_isCheckedIn) {
@@ -745,34 +745,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         const SizedBox(height: 24),
 
-        _buildSectionTitle("AI Intelligence"),
-        _buildMenuGrid([
-          _MenuAction(
-            Icons.auto_awesome,
-            "AI Insights Hub",
-            const Color(0xFF4A148C),
-            () => _navigateTo(const AiHubScreen()),
-          ),
-          _MenuAction(
-            Icons.support_agent,
-            "Sales Assistant",
-            const Color(0xFF1565C0),
-            () => _navigateTo(const AiSalesAssistantScreen()),
-          ),
-          _MenuAction(
-            Icons.trending_up,
-            "Product Perf.",
-            const Color(0xFF2E7D32),
-            () => _navigateTo(const AiProductPerformanceScreen()),
-          ),
-          _MenuAction(
-            Icons.person_search,
-            "Doctor Review",
-            const Color(0xFF6A1B9A),
-            () => _navigateTo(const AiDoctorReviewScreen()),
-          ),
-        ]),
-        const SizedBox(height: 24),
+        // _buildSectionTitle("AI Intelligence"),
+        // _buildMenuGrid([
+        //   _MenuAction(
+        //     Icons.auto_awesome,
+        //     "AI Insights Hub",
+        //     const Color(0xFF4A148C),
+        //     () => _navigateTo(const AiHubScreen()),
+        //   ),
+        //   _MenuAction(
+        //     Icons.support_agent,
+        //     "Sales Assistant",
+        //     const Color(0xFF1565C0),
+        //     () => _navigateTo(const AiSalesAssistantScreen()),
+        //   ),
+        //   _MenuAction(
+        //     Icons.trending_up,
+        //     "Product Perf.",
+        //     const Color(0xFF2E7D32),
+        //     () => _navigateTo(const AiProductPerformanceScreen()),
+        //   ),
+        //   _MenuAction(
+        //     Icons.person_search,
+        //     "Doctor Review",
+        //     const Color(0xFF6A1B9A),
+        //     () => _navigateTo(const AiDoctorReviewScreen()),
+        //   ),
+        // ]),
+        // const SizedBox(height: 24),
 
         _buildSectionTitle("Manager Reporting"),
         _buildMenuGrid([
