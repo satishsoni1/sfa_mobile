@@ -1113,6 +1113,14 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         if (otherAmt > 0) {
           remarks = remarks.isEmpty ? "Other: Rs. ${_fmt(otherAmt)}" : "Other: Rs. ${_fmt(otherAmt)}. $remarks";
         }
+
+        // Remarks can accumulate unbounded across multiple admin overrides;
+        // an overlong string here makes a single PDF table row taller than
+        // one page, which MultiPage can never satisfy (TooManyPagesException).
+        const maxRemarksLen = 100;
+        if (remarks.length > maxRemarksLen) {
+          remarks = '${remarks.substring(0, maxRemarksLen)}…';
+        }
       }
 
       tableData.add([
@@ -1192,6 +1200,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   bool bold = false,
   bool isNumber = false,
   double fontSize = 7.5,
+  int? maxLines,
 }) {
       return pw.Padding(
         padding: const pw.EdgeInsets.symmetric(
@@ -1205,6 +1214,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
           ),
           textAlign: isNumber ? pw.TextAlign.right : pw.TextAlign.left,
+          maxLines: maxLines,
+          overflow: maxLines != null ? pw.TextOverflow.clip : null,
         ),
       );
     }
@@ -1214,9 +1225,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         build: (ctx) => [
-  pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
             // Header Title
             pw.Center(
               child: pw.Column(
@@ -1324,7 +1332,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       _cell(row[13], isNumber: true, fontSize: 7.0),
                       _cell(row[14], isNumber: true, fontSize: 7.0),
                       _cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
-                      _cell(row[16], fontSize: 4.5),
+                      _cell(row[16], fontSize: 4.5, maxLines: 4),
                     ],
                   );
                 }),
@@ -1504,8 +1512,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 ),
               ],
             ),
-                   ],
-        ),
       ],
     ),
   );
