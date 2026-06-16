@@ -9,7 +9,7 @@ class SupportScreen extends StatelessWidget {
   // --- CONFIGURATION ---
   final String _supportPhone = "+919321962944";
   final String _supportEmail = "gstsupport@globalspace.in";
-  final String _supportUrl = "https://crm.globalspace.in/forms/ticket?styled=1";
+  final String _supportUrl = "https://crm.globalspace.in/forms/ticket/zorvia-healthcare";
 
   Future<void> _launchAction(BuildContext context, Uri uri) async {
     try {
