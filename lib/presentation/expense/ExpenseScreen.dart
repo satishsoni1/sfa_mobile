@@ -71,8 +71,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   List<String> _subordinateLocations = []; // town codes from subordinates (managers only)
   String? _userHq;
   double _nfwDaAmount = 0;
+  double _nfwDaPolicy = 0;        // server policy (ceiling) for current location
+  bool _nfwDaTypeOverride = false; // true = user picked a lower DA type
+  String _nfwOverrideDaType = ''; // user's selected lower type (HQ/EX/OS)
   bool _isLoadingNfwRate = false;
   String _nfwType = 'Meeting'; // 'Meeting' | 'Training'
+  String _nfwTaDirection = 'one_way'; // user-selected direction for NFW TA
   String? _transitFromTown; // last DCR area or HQ for TRANSIT
   bool _isLoadingTransitFrom = false;
   String? _selectedFrom; // user-selected from location (overrides auto-detected)
@@ -622,7 +626,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
+  // Hierarchy level: higher = more senior DA type (cannot upgrade to higher)
+  static const _daHierarchy = {'HQ': 1, 'EX': 2, 'OS': 3, 'EX_OS': 4};
+
   void _showDaTypePickerSheet() {
+    final serverLevel = _daHierarchy[_serverDaType] ?? 1;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -641,7 +649,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
             const SizedBox(height: 6),
             Text(
-              'Choose the DA category that applies to your field work today.',
+              'You may select the policy-assigned type or a lower category. Upgrades are not allowed.',
               style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
             ),
             const SizedBox(height: 20),
@@ -650,6 +658,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               title: 'HQ',
               subtitle: 'Headquarter territory',
               color: const Color(0xFF4A148C),
+              disabled: (_daHierarchy['HQ']! > serverLevel),
             ),
             const SizedBox(height: 10),
             _buildDaTypeOption(
@@ -657,6 +666,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               title: 'Ex-HQ',
               subtitle: 'Beyond headquarter territory',
               color: Colors.orange.shade700,
+              disabled: (_daHierarchy['EX']! > serverLevel),
             ),
             const SizedBox(height: 10),
             _buildDaTypeOption(
@@ -664,6 +674,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               title: 'Outstation (OS)',
               subtitle: 'Outstation area',
               color: Colors.red.shade700,
+              disabled: (_daHierarchy['OS']! > serverLevel),
             ),
             const SizedBox(height: 10),
             _buildDaTypeOption(
@@ -671,6 +682,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               title: 'Ex-Outstation (EX OS)',
               subtitle: 'Ex-outstation area',
               color: Colors.deepOrange.shade700,
+              disabled: (_daHierarchy['EX_OS']! > serverLevel),
             ),
           ],
         ),
@@ -683,54 +695,64 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     required String title,
     required String subtitle,
     required Color color,
+    bool disabled = false,
+    void Function(String)? onSelect,
   }) {
     final rate = _manualDaRates[type] ?? 0;
+    final effectiveColor = disabled ? Colors.grey.shade400 : color;
     return InkWell(
-      onTap: () => _selectManualDaType(type),
+      onTap: disabled ? null : () => (onSelect ?? _selectManualDaType)(type),
       borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(Icons.location_on_outlined, color: color, size: 22),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-                  Text(subtitle,
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                ],
-              ),
-            ),
-            if (rate > 0)
+      child: Opacity(
+        opacity: disabled ? 0.45 : 1.0,
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: effectiveColor.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: effectiveColor.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
+                  color: effectiveColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text('₹${_fmt(rate)}',
-                    style: TextStyle(
-                        fontWeight: FontWeight.bold, color: color, fontSize: 13)),
-              )
-            else
-              Icon(Icons.chevron_right, color: color.withValues(alpha: 0.7), size: 22),
-          ],
+                child: Icon(Icons.location_on_outlined, color: effectiveColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+                    Text(
+                      disabled ? '$subtitle — not allowed (upgrade restricted)' : subtitle,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+              ),
+              if (disabled)
+                Icon(Icons.block, color: Colors.grey.shade400, size: 20)
+              else if (rate > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('₹${_fmt(rate)}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, color: color, fontSize: 13)),
+                )
+              else
+                Icon(Icons.chevron_right, color: color.withValues(alpha: 0.7), size: 22),
+            ],
+          ),
         ),
       ),
     );
@@ -744,6 +766,76 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _serverDaType = type;
       _serverDaAmount = _manualDaRates[type] ?? 0;
       _isDaTypeManual = true;
+    });
+    _recalculateTotal();
+  }
+
+  // ─── NFW Meeting DA lower-type picker ─────────────────────────────────────────
+
+  void _showNfwDaTypePickerSheet() {
+    final serverLevel = _daHierarchy[_serverDaType] ?? 1;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Select Lower Allowance Type',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16)),
+            const SizedBox(height: 6),
+            Text(
+              'Policy type: $_serverDaType. You may claim at a lower category; upgrades are not allowed.',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            _buildDaTypeOption(
+              type: 'HQ',
+              title: 'HQ',
+              subtitle: 'Headquarter territory',
+              color: const Color(0xFF4A148C),
+              disabled: (_daHierarchy['HQ']! > serverLevel),
+              onSelect: _selectNfwDaType,
+            ),
+            const SizedBox(height: 10),
+            _buildDaTypeOption(
+              type: 'EX',
+              title: 'Ex-HQ',
+              subtitle: 'Beyond headquarter territory',
+              color: Colors.orange.shade700,
+              disabled: (_daHierarchy['EX']! > serverLevel),
+              onSelect: _selectNfwDaType,
+            ),
+            const SizedBox(height: 10),
+            _buildDaTypeOption(
+              type: 'OS',
+              title: 'Outstation (OS)',
+              subtitle: 'Outstation area',
+              color: Colors.red.shade700,
+              disabled: (_daHierarchy['OS']! > serverLevel),
+              onSelect: _selectNfwDaType,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _selectNfwDaType(String type) {
+    Navigator.pop(context);
+    final amount = _manualDaRates[type] ?? 0;
+    setState(() {
+      _nfwDaTypeOverride = true;
+      _nfwOverrideDaType = type;
+      _nfwDaAmount       = amount;
+      _manualDaController.text = amount.toStringAsFixed(2);
     });
     _recalculateTotal();
   }
@@ -1113,6 +1205,42 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ),
             ],
+            // Journey Direction toggle — only for self-arranged travel
+            if (_nfwTravelBy == 'self') ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text('Journey Type',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                  const SizedBox(width: 12),
+                  _buildWayChip(
+                    label: 'One Way',
+                    selected: _nfwTaDirection == 'one_way',
+                    onTap: () {
+                      if (_nfwTaDirection != 'one_way') {
+                        setState(() => _nfwTaDirection = 'one_way');
+                        if (_endLocation != null) {
+                          _recalculateFromServer(_endLocation!, taDirection: 'one_way');
+                        }
+                      }
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  _buildWayChip(
+                    label: 'Two Way',
+                    selected: _nfwTaDirection == 'two_way',
+                    onTap: () {
+                      if (_nfwTaDirection != 'two_way') {
+                        setState(() => _nfwTaDirection = 'two_way');
+                        if (_endLocation != null) {
+                          _recalculateFromServer(_endLocation!, taDirection: 'two_way');
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
             const SizedBox(height: 10),
           ],
           const SizedBox(height: 4),
@@ -1165,74 +1293,133 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ],
           const SizedBox(height: 14),
 
-          // DA Amount — auto-filled from expense_rates by designation
+          // DA Amount — policy rate display + user-editable claim field
           _isLoadingNfwRate
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 14),
                   child: Center(
                       child: CircularProgressIndicator(strokeWidth: 2)))
-              : Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.account_balance_wallet_outlined,
-                          color: Colors.blue.shade700, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _nfwType == 'Training'
-                                  ? 'Training Allowance'
-                                  : _nfwType == 'Transit'
-                                      ? 'Transit Day Allowance'
-                                      : _endLocation != null
-                                          ? 'Meeting DA ($_serverDaType)'
-                                          : 'Meeting Allowance (HQ)',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.blue.shade600),
-                            ),
-                            _isRecalculating
-                                ? const SizedBox(
-                                    height: 28,
-                                    child: Center(
-                                        child: SizedBox(
-                                            width: 18,
-                                            height: 18,
-                                            child: CircularProgressIndicator(
-                                                strokeWidth: 2))))
-                                : Text('₹${_fmt(daAmt)}',
-                                    style: GoogleFonts.poppins(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.blue.shade800)),
-                            Text(
-                              _endLocation != null
-                                  ? 'Updated for ${_endLocation!} ($_nfwType)'
-                                  : _nfwType == 'Training'
-                                      ? 'Fixed: expense_rates → training'
-                                      : _nfwType == 'Transit'
-                                          ? 'Fixed: expense_rates → transit'
-                                          : 'Fixed: expense_rates → da_hq_non_metro',
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.blue.shade400),
-                            ),
-                          ],
-                        ),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blue.shade200),
                       ),
-                      Icon(Icons.lock_outline,
-                          size: 16, color: Colors.blue.shade300),
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_balance_wallet_outlined,
+                              color: Colors.blue.shade700, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _nfwType == 'Training'
+                                      ? 'Training Allowance (Policy)'
+                                      : _nfwType == 'Transit'
+                                          ? 'Transit Day Allowance (Policy)'
+                                          : _endLocation != null
+                                              ? 'Meeting DA — Policy ($_serverDaType)'
+                                              : 'Meeting Allowance — Policy (HQ)',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue.shade600),
+                                ),
+                                _isRecalculating
+                                    ? const SizedBox(
+                                        height: 28,
+                                        child: Center(
+                                            child: SizedBox(
+                                                width: 18,
+                                                height: 18,
+                                                child: CircularProgressIndicator(
+                                                    strokeWidth: 2))))
+                                    : Text('₹${_fmt(_nfwDaPolicy > 0 ? _nfwDaPolicy : daAmt)}',
+                                        style: GoogleFonts.poppins(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.blue.shade800)),
+                                Text(
+                                  _endLocation != null
+                                      ? 'Policy for ${_endLocation!} ($_nfwType)'
+                                      : _nfwType == 'Training'
+                                          ? 'Fixed: expense_rates → training'
+                                          : _nfwType == 'Transit'
+                                              ? 'Fixed: expense_rates → transit'
+                                              : 'Fixed: expense_rates → da_hq_non_metro',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.blue.shade400),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_downward,
+                              size: 16, color: Colors.blue.shade400),
+                        ],
+                      ),
+                    ),
+                    // DA type lower-selector — Meeting type only, when a lower type has rates
+                    if (!_isLocked && _nfwType == 'Meeting' && _endLocation != null &&
+                        _manualDaRates.isNotEmpty && (_daHierarchy[_serverDaType] ?? 0) > 1) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Text(
+                            _nfwDaTypeOverride
+                                ? 'Claiming at: ${_nfwOverrideDaType == 'EX' ? 'Ex-HQ' : _nfwOverrideDaType}'
+                                : 'Allowance type: $_serverDaType (policy)',
+                            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                          ),
+                          const Spacer(),
+                          GestureDetector(
+                            onTap: _showNfwDaTypePickerSheet,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.blue.shade300),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.arrow_downward, size: 13, color: Colors.blue.shade700),
+                                  const SizedBox(width: 4),
+                                  Text('Lower Type',
+                                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                                          color: Colors.blue.shade700)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (_nfwDaTypeOverride) ...[
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _nfwDaTypeOverride = false;
+                              _nfwOverrideDaType = '';
+                              _nfwDaAmount = _nfwDaPolicy;
+                              _manualDaController.text = _nfwDaPolicy.toStringAsFixed(2);
+                            });
+                            _recalculateTotal();
+                          },
+                          child: Text('Reset to policy rate (₹${_nfwDaPolicy.toStringAsFixed(0)})',
+                              style: TextStyle(fontSize: 10, color: Colors.blue.shade400,
+                                  decoration: TextDecoration.underline)),
+                        ),
+                      ],
                     ],
-                  ),
+                  ],
                 ),
           const SizedBox(height: 12),
           Text('Mode of Travel',
@@ -1456,16 +1643,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _fieldWaypoints[0] = _userHq;
         }
         _allowDaSelection = allowDaSel;
-        if (allowDaSel) {
-          _manualDaRates = {
-            'HQ':    _toDouble(result['da_hq']),
-            'EX':    _toDouble(result['da_ex_hq']) > 0
-                         ? _toDouble(result['da_ex_hq'])
-                         : _toDouble(result['da_ex']),
-            'OS':    _toDouble(result['da_os']),
-            'EX_OS': _toDouble(result['da_ex_os']),
-          };
-        }
+        // Always populate rates — needed for NFW meeting lower-type selector
+        _manualDaRates = {
+          'HQ':    _toDouble(result['da_hq']),
+          'EX':    _toDouble(result['da_ex_hq']) > 0
+                       ? _toDouble(result['da_ex_hq'])
+                       : _toDouble(result['da_ex']),
+          'OS':    _toDouble(result['da_os']),
+          'EX_OS': _toDouble(result['da_ex_os']),
+        };
       });
       if (_expenseMode == 'TRANSIT' && _endLocation != null) {
         _updateTaFromSelection();
@@ -1509,11 +1695,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _recalculateTotal();
         return;
       }
-      final data = await ApiService().getNfwDaRate(type: _nfwType);
+      final data = await ApiService().getNfwDaRate(
+          type: _nfwType, location: _endLocation);
       if (!mounted) return;
       final amount = (data['da_amount'] as num?)?.toDouble() ?? 0;
       setState(() {
-        _nfwDaAmount = amount;
+        _nfwDaPolicy             = amount;
+        _nfwDaTypeOverride       = false;
+        _nfwOverrideDaType       = '';
+        _nfwDaAmount             = amount;
         _manualDaController.text = amount.toStringAsFixed(2);
       });
       _recalculateTotal();
@@ -1579,7 +1769,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final fromTown = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
     // Capture direction immediately — caller may pass explicit value to avoid
     // reading stale state if a concurrent call updates _taDirection mid-flight.
-    final capturedDir = taDirection ?? _taDirection;
+    // For NFW, use the user-chosen direction unless caller overrides explicitly
+    final capturedDir = taDirection ?? (_expenseMode == 'NFW' ? _nfwTaDirection : _taDirection);
     print('Recalculating from: $fromTown to: $toTown dir: $capturedDir');
     if (fromTown.isEmpty) return;
 
@@ -1609,7 +1800,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         final effectiveDa = (_selectedAdminWorkId != null && _adminWorkAllowance > 0)
             ? _adminWorkAllowance
             : daAmount;
-        _nfwDaAmount = effectiveDa;
+        _nfwDaPolicy             = effectiveDa;
+        _nfwDaTypeOverride       = false; // reset override when route/location changes
+        _nfwOverrideDaType       = '';
+        _nfwDaAmount             = effectiveDa;
         _manualDaController.text = effectiveDa.toStringAsFixed(2);
       }
 
@@ -2247,7 +2441,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        // Journey Type toggle — interactive only for EX / EX_OS; blocked for HQ / OS
+        // Journey Type toggle — hidden for NFW (has its own toggle); for FIELD only EX/EX_OS are interactive
+        if (_expenseMode != 'NFW')
         Builder(builder: (ctx) {
           final isExType = _serverDaType == 'EX' || _serverDaType == 'EX_OS';
           return Row(

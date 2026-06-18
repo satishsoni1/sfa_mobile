@@ -1236,10 +1236,14 @@ Future<void> submitFullMonth(int month, int year) async {
 
   // ─── NFW DA Rate (expense_rates by designation) ──────────────────────────────
 
-  Future<Map<String, dynamic>> getNfwDaRate({String type = 'Meeting'}) async {
+  Future<Map<String, dynamic>> getNfwDaRate({String type = 'Meeting', String? location}) async {
     final token = await getToken();
+    var query = 'type=${Uri.encodeComponent(type)}';
+    if (location != null && location.isNotEmpty) {
+      query += '&location=${Uri.encodeComponent(location)}';
+    }
     final response = await http.get(
-      Uri.parse('$baseUrl/app/expense/nfw-rate?type=${Uri.encodeComponent(type)}'),
+      Uri.parse('$baseUrl/app/expense/nfw-rate?$query'),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
     );
     if (response.statusCode == 200) return json.decode(response.body);
