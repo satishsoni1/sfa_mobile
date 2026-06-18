@@ -17,6 +17,7 @@ import 'package:zforce/presentation/expense/ExpenseManagerScreen.dart';
 import 'package:zforce/presentation/doctor_brand/doctor_brand_screen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
 import 'package:zforce/presentation/master/data_upload_screen.dart';
+import 'package:zforce/presentation/master/attendance_report_screen.dart';
 import 'package:zforce/presentation/master/reports_dashboard_screen.dart';
 import 'package:zforce/presentation/route_wise_plan/tour_plan_screen.dart';
 import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
@@ -64,7 +65,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.38";
+  static const String CURRENT_APP_VERSION = "1.0.40";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -811,6 +812,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Team Expenses",
             Colors.teal,
             () => _navigateTo(const ExpenseManagerScreen()),
+          ),
+          _MenuAction(
+            Icons.event_available_outlined,
+            "Attendance",
+            Colors.deepOrange,
+            () => _navigateTo(const AttendanceReportScreen()),
           ),
           _MenuAction(Icons.link, "Other Links", Colors.indigo, _openWebLinks),
         ]),

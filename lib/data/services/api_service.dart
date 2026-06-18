@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:zforce/data/models/attendance_models.dart';
 import 'package:zforce/data/models/visit_report.dart';
 import '../models/doctor.dart' show Doctor;
 import '../models/tour_plan.dart' show TourPlan;
@@ -1881,15 +1882,19 @@ Future<void> submitFullMonth(int month, int year) async {
                 // Prefer employee_code for report filters; fallback to id.
                 'id': (e['employee_code'] ?? e['emp_code'] ?? e['id'])
                     .toString(),
-                'name': e['name'].toString(),
+                'name': (e['name'] ?? e['employee_name'] ?? e['emp_name'] ?? '')
+                    .toString(),
                 'employee_code':
                     (e['employee_code'] ?? e['emp_code'] ?? e['id']).toString(),
+                'employee_id': (e['employee_id'] ?? e['id'] ?? '').toString(),
                 'designation': (e['designation'] ?? '').toString(),
-                'head_qtr': (e['head_qtr'] ?? e['hq'] ?? '').toString(),
-                'hq': (e['hq'] ?? e['head_qtr'] ?? '').toString(),
+                'head_qtr':
+                    (e['head_qtr'] ?? e['hq'] ?? e['head_quarter'] ?? '').toString(),
+                'hq':
+                    (e['hq'] ?? e['head_qtr'] ?? e['head_quarter'] ?? '').toString(),
                 'division': (e['division'] ?? '').toString(),
-                'zone': (e['zone'] ?? '').toString(),
-                'state': (e['state'] ?? '').toString(),
+                'zone': (e['zone'] ?? e['zone_name'] ?? '').toString(),
+                'state': (e['state'] ?? e['state_name'] ?? '').toString(),
               },
             )
             .toList();
@@ -1898,6 +1903,67 @@ Future<void> submitFullMonth(int month, int year) async {
       debugPrint("Error fetching team: $e");
     }
     return [];
+  }
+
+  // Added for manager attendance reporting. Summary keys stay backend-driven.
+  Future<AttendanceApiResponse> fetchAttendance({
+    required String fromDate,
+    required String toDate,
+    String? employeeCode,
+    int? employeeId,
+  }) async {
+    final token = await getToken();
+    if (token == null) {
+      return const AttendanceApiResponse(
+        success: false,
+        fromDate: '',
+        toDate: '',
+        records: [],
+      );
+    }
+
+    final uri = Uri.parse('$baseUrl/app/attendance').replace(
+      queryParameters: {
+        'from_date': fromDate,
+        'to_date': toDate,
+        if (employeeCode != null && employeeCode.trim().isNotEmpty)
+          'employee_code': employeeCode.trim(),
+        if (employeeId != null && employeeId > 0) 'employee_id': employeeId.toString(),
+      },
+    );
+
+    final response = await http.get(uri, headers: await _getHeaders());
+    if (response.statusCode == 200) {
+      return AttendanceApiResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  // Added for date tap details in the attendance calendar.
+  Future<AttendanceDetailResponse> fetchAttendanceDetail({
+    required String employeeCode,
+    required String date,
+    int? employeeId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/app/attendance/detail').replace(
+      queryParameters: {
+        'employee_code': employeeCode,
+        if (employeeId != null && employeeId > 0) 'employee_id': employeeId.toString(),
+        'date': date,
+      },
+    );
+
+    final response = await http.get(uri, headers: await _getHeaders());
+    if (response.statusCode == 200) {
+      return AttendanceDetailResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+
+    throw Exception(_errorMessageFromBody(response.body));
   }
 /*
   // 2. Fetch Specific Report Data (Call Avg, TP Deviation, Summary, etc.)
