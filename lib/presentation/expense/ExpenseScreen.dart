@@ -39,7 +39,8 @@ class OtherExpenseItem {
 class ExpenseScreen extends StatefulWidget {
   final Map<String, dynamic>? editData;
   final DateTime? initialDate;
-  const ExpenseScreen({super.key, this.editData, this.initialDate});
+  final bool isRejected;
+  const ExpenseScreen({super.key, this.editData, this.initialDate, this.isRejected = false});
 
   @override
   State<ExpenseScreen> createState() => _ExpenseScreenState();
@@ -165,7 +166,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   /// config values (hotel_bill_limit etc.) are kept but saved amounts win.
   void _restoreEditData(Map<String, dynamic> d) {
     // _selectedDate already set in initState from expense_date
-    _isLocked = d['is_submitted_for_month'] == 1;
+    _isLocked = d['is_submitted_for_month'] == 1 && !widget.isRejected;
     _modeOfTravel = (d['mode_of_travel'] ?? 'Bike').toString();
     _remarkController.text = d['remarks'] ?? '';
 
@@ -484,7 +485,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'This expense is locked — month has been submitted for approval.',
+              widget.isRejected
+                  ? 'Month was rejected — edit and resubmit.'
+                  : 'This expense is locked — month has been submitted for approval.',
               style: TextStyle(color: Colors.amber.shade900, fontSize: 13),
             ),
           ),

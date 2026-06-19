@@ -365,7 +365,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   Widget _buildDailyCard(Map<String, dynamic> item) {
-    final isLocked = item['is_submitted_for_month'] == 1;
+    // Rejected months are always editable — user must be able to fix and resubmit
+    final isLocked = item['is_submitted_for_month'] == 1 && _approvalStatus != 'rejected';
     final date = DateTime.tryParse(item['expense_date'] ?? '') ?? DateTime.now();
     final daType = (item['da_type'] ?? 'HQ').toString().toUpperCase();
     final total = _toDouble(item['da_amount']) +
@@ -942,7 +943,12 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   void _openDailyExpense(Map<String, dynamic>? editData) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ExpenseScreen(editData: editData)),
+      MaterialPageRoute(
+        builder: (_) => ExpenseScreen(
+          editData: editData,
+          isRejected: _approvalStatus == 'rejected',
+        ),
+      ),
     );
     _loadData();
   }
@@ -1249,7 +1255,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'REMARKS',
     ];
 
-    pw.Widget _cell(String text, {
+    pw.Widget cell(String text, {
   bool bold = false,
   bool isNumber = false,
   double fontSize = 7.5,
@@ -1369,46 +1375,46 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       color: isEven ? PdfColors.grey50 : PdfColors.white,
                     ),
                     children: [
-                      _cell(row[0], bold: true, fontSize: 7.0),
-                      _cell(row[1], fontSize: 7.0),
-                      _cell(row[2], isNumber: true, fontSize: 7.0),
-                      _cell(row[3], isNumber: true, fontSize: 7.0),
-                      _cell(row[4], fontSize: 7.0),
-                      _cell(row[5], fontSize: 7.0),
-                      _cell(row[6], isNumber: true, fontSize: 7.0),
-                      _cell(row[7], isNumber: true, fontSize: 7.0),
-                      _cell(row[8], isNumber: true, fontSize: 7.0),
-                      _cell(row[9], isNumber: true, fontSize: 7.0),
-                      _cell(row[10], isNumber: true, fontSize: 7.0),
-                      _cell(row[11], isNumber: true, fontSize: 7.0),
-                      _cell(row[12], isNumber: true, fontSize: 7.0),
-                      _cell(row[13], isNumber: true, fontSize: 7.0),
-                      _cell(row[14], isNumber: true, fontSize: 7.0),
-                      _cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
-                      _cell(row[16], fontSize: 4.5, maxLines: 4),
+                      cell(row[0], bold: true, fontSize: 7.0),
+                      cell(row[1], fontSize: 7.0),
+                      cell(row[2], isNumber: true, fontSize: 7.0),
+                      cell(row[3], isNumber: true, fontSize: 7.0),
+                      cell(row[4], fontSize: 7.0),
+                      cell(row[5], fontSize: 7.0),
+                      cell(row[6], isNumber: true, fontSize: 7.0),
+                      cell(row[7], isNumber: true, fontSize: 7.0),
+                      cell(row[8], isNumber: true, fontSize: 7.0),
+                      cell(row[9], isNumber: true, fontSize: 7.0),
+                      cell(row[10], isNumber: true, fontSize: 7.0),
+                      cell(row[11], isNumber: true, fontSize: 7.0),
+                      cell(row[12], isNumber: true, fontSize: 7.0),
+                      cell(row[13], isNumber: true, fontSize: 7.0),
+                      cell(row[14], isNumber: true, fontSize: 7.0),
+                      cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
+                      cell(row[16], fontSize: 4.5, maxLines: 4),
                     ],
                   );
                 }),
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.purple50),
                   children: [
-                    _cell("TOTAL", bold: true, fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
-                    _cell(colTotalDocVisits > 0 ? colTotalDocVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalChemVisits > 0 ? colTotalChemVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
-                    _cell(colTotalFare > 0 ? _fmt(colTotalFare) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalHq > 0 ? _fmt(colTotalHq) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalExHq > 0 ? _fmt(colTotalExHq) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
+                    cell("TOTAL", bold: true, fontSize: 7.0),
+                    cell("", fontSize: 7.0),
+                    cell(colTotalDocVisits > 0 ? colTotalDocVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalChemVisits > 0 ? colTotalChemVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell("", fontSize: 7.0),
+                    cell("", fontSize: 7.0),
+                    cell(colTotalFare > 0 ? _fmt(colTotalFare) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalHq > 0 ? _fmt(colTotalHq) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalExHq > 0 ? _fmt(colTotalExHq) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell("", fontSize: 7.0),
                   ],
                 ),
               ],
