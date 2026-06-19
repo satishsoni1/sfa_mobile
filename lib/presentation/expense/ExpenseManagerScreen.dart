@@ -422,91 +422,279 @@ class _ExpenseManagerScreenState extends State<ExpenseManagerScreen>
           child: Text('No expenses recorded',
               style: TextStyle(color: Colors.grey.shade400)));
     }
-    return ListView.separated(
-      padding: const EdgeInsets.all(12),
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       itemCount: _dailyExpenses.length,
-      separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (_, i) {
         final e = _dailyExpenses[i] as Map<String, dynamic>;
         final date = e['expense_date']?.toString() ?? '';
         final daType = (e['da_type'] ?? '').toString().toUpperCase();
-        final total = _toDouble(e['total_amount'] ?? (
-          _toDouble(e['da_amount']) + _toDouble(e['ta_amount']) + _toDouble(e['other_amount'])
-        ));
-        final color = daType == 'OS'
-            ? Colors.red
-            : daType == 'EX' ? Colors.orange : const Color(0xFF4A148C);
+        final daAmt  = _toDouble(e['da_amount']);
+        final taAmt  = _toDouble(e['ta_amount']);
+        final otherAmt = _toDouble(e['other_amount']);
+        final total  = _toDouble(e['total_amount'] ?? (daAmt + taAmt + otherAmt));
+        final mode   = e['mode_of_travel']?.toString() ?? '';
+        final km     = _toDouble(e['ta_distance']);
+        final from   = e['from_location']?.toString() ?? '';
+        final to     = e['to_location']?.toString() ?? '';
+        final remarks = e['remarks']?.toString() ?? '';
+        final pocket  = _toDouble(e['pocket_allowance']);
+        final hotel   = _toDouble(e['hotel_amount']);
+        final meal    = _toDouble(e['meal_amount']);
 
-        return ListTile(
-          dense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          leading: Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-            child: Center(
-              child: Text(
-                DateFormat('d').format(DateTime.tryParse(date) ?? DateTime.now()),
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, color: color, fontSize: 15),
+        final color = daType.contains('OS')
+            ? Colors.red
+            : daType.contains('EX') ? Colors.orange : const Color(0xFF4A148C);
+
+        DateTime? parsedDate = DateTime.tryParse(date);
+        final dayNum  = parsedDate != null ? DateFormat('d').format(parsedDate) : '?';
+        final dayLabel = parsedDate != null ? DateFormat('EEE, dd MMM').format(parsedDate) : date;
+
+        return Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+            side: BorderSide(color: Colors.grey.shade200),
+          ),
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              leading: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8)),
+                child: Center(
+                  child: Text(dayNum,
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold, color: color, fontSize: 15)),
+                ),
               ),
+              title: Text(dayLabel,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+              subtitle: Row(children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(daType,
+                      style: TextStyle(
+                          fontSize: 10, color: color, fontWeight: FontWeight.w600)),
+                ),
+              ]),
+              trailing: Text('₹${_fmt(total)}',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: const Color(0xFF4A148C))),
+              children: [
+                const Divider(height: 1),
+                const SizedBox(height: 8),
+
+                // From → To route
+                if (from.isNotEmpty || to.isNotEmpty)
+                  _detailRow(
+                    Icons.route_outlined,
+                    [from, to].where((s) => s.isNotEmpty).join(' → '),
+                    null,
+                    iconColor: Colors.blueGrey,
+                    isSubtle: true,
+                  ),
+
+                // DA row
+                _detailRow(
+                  Icons.person_outline,
+                  'DA${daType.isNotEmpty ? ' ($daType)' : ''}',
+                  daAmt,
+                  iconColor: color,
+                ),
+
+                // TA row
+                _detailRow(
+                  Icons.directions_car_outlined,
+                  'TA${mode.isNotEmpty ? ' · ${_modeLabel(mode)}' : ''}${km > 0 ? ' · ${km.toStringAsFixed(1)} km' : ''}',
+                  taAmt,
+                  iconColor: Colors.teal,
+                ),
+
+                // Other breakdown
+                if (pocket > 0)
+                  _detailRow(Icons.wallet_outlined, 'Pocket Allowance', pocket,
+                      iconColor: Colors.indigo),
+                if (hotel > 0)
+                  _detailRow(Icons.hotel_outlined, 'Hotel/Stay', hotel,
+                      iconColor: Colors.brown),
+                if (meal > 0)
+                  _detailRow(Icons.restaurant_outlined, 'Meals', meal,
+                      iconColor: Colors.deepOrange),
+                if (otherAmt > 0)
+                  _detailRow(Icons.receipt_outlined, 'Other', otherAmt,
+                      iconColor: Colors.grey),
+
+                // Total
+                const Divider(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.account_balance_wallet_outlined,
+                        size: 15, color: Color(0xFF4A148C)),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                        child: Text('Total',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13))),
+                    Text('₹${_fmt(total)}',
+                        style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: const Color(0xFF4A148C))),
+                  ],
+                ),
+
+                // Remarks
+                if (remarks.isNotEmpty && !remarks.startsWith('[ADMIN')) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.notes_outlined, size: 13, color: Colors.grey.shade400),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(remarks,
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey.shade500),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
           ),
-          title: Text(
-            date.isNotEmpty
-                ? DateFormat('EEE, dd MMM').format(DateTime.tryParse(date) ?? DateTime.now())
-                : 'Unknown date',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-          ),
-          subtitle: Text(daType,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-          trailing: Text('₹${_fmt(total)}',
-              style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: const Color(0xFF4A148C))),
         );
       },
     );
   }
 
+  Widget _detailRow(IconData icon, String label, double? amount,
+      {Color iconColor = Colors.grey, bool isSubtle = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: iconColor),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                    fontSize: isSubtle ? 11 : 12,
+                    color: isSubtle ? Colors.grey.shade500 : Colors.grey.shade700)),
+          ),
+          if (amount != null)
+            Text('₹${_fmt(amount)}',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: amount == 0 ? Colors.grey.shade400 : Colors.black87)),
+        ],
+      ),
+    );
+  }
+
+  String _modeLabel(String mode) {
+    switch (mode.toLowerCase()) {
+      case 'own_vehicle': return 'Own Vehicle';
+      case 'public_transport': return 'Public Transport';
+      case 'company_vehicle': return 'Company Vehicle';
+      case 'train': return 'Train';
+      case 'auto': return 'Auto';
+      default: return mode;
+    }
+  }
+
   Widget _buildSummaryTab() {
+    final da     = _toDouble(_summary['total_da']);
+    final ta     = _toDouble(_summary['total_ta']);
+    final other  = _toDouble(_summary['total_other']);
+    final claims = _toDouble(_summary['total_claims']);
+    final total  = _toDouble(_summary['total_amount']);
+
     final rows = [
-      ('Daily Allowance', _toDouble(_summary['total_da'])),
-      ('Travel Allowance', _toDouble(_summary['total_ta'])),
-      ('Other Expenses', _toDouble(_summary['total_other'])),
-      ('Monthly Claims', _toDouble(_summary['total_claims'])),
+      (Icons.person_outline,        'Daily Allowance (DA)',  da,     Colors.purple),
+      (Icons.directions_car_outlined,'Travel Allowance (TA)', ta,     Colors.teal),
+      (Icons.receipt_outlined,       'Other Expenses',        other,  Colors.orange),
+      (Icons.add_card_outlined,      'Monthly Claims',        claims, Colors.indigo),
     ];
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       children: [
-        ...rows.map((r) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+        ...rows.map((r) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
               child: Row(
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: r.$4.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(r.$1, size: 16, color: r.$4),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                      child: Text(r.$1,
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13))),
-                  Text('₹${_fmt(r.$2)}',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14)),
+                    child: Text(r.$2,
+                        style: TextStyle(color: Colors.grey.shade700, fontSize: 13)),
+                  ),
+                  Text('₹${_fmt(r.$3)}',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: r.$3 == 0 ? Colors.grey.shade400 : Colors.black87)),
                 ],
               ),
             )),
-        const Divider(),
-        Row(
-          children: [
-            const Expanded(
-                child: Text('TOTAL',
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF4A148C), Color(0xFF7B1FA2)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.account_balance_wallet_outlined,
+                  size: 20, color: Colors.white70),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text('Grand Total',
                     style: TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14))),
-            Text('₹${_fmt(_toDouble(_summary['total_amount']))}',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: const Color(0xFF4A148C))),
-          ],
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14)),
+              ),
+              Text('₹${_fmt(total)}',
+                  style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Colors.white)),
+            ],
+          ),
         ),
       ],
     );

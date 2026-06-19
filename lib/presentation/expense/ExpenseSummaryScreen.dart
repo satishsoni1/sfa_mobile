@@ -28,6 +28,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   Map<String, dynamic> _summary = {};
   bool _isSubmitted = false;
   bool _hasPendingAdminChanges = false;
+  String? _approvalStatus;
+  String? _rejectionReason;
 
   @override
   void initState() {
@@ -58,6 +60,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         _summary  = summaryData['summary'] ?? {};
         _isSubmitted              = _summary['is_already_submitted'] == true;
         _hasPendingAdminChanges   = _summary['has_pending_admin_changes'] == true;
+        _approvalStatus           = _summary['approval_status']?.toString();
+        _rejectionReason          = _summary['rejection_reason']?.toString();
         _monthlyClaims = claimsData;
       });
     } catch (_) {
@@ -125,7 +129,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               },
               child: const Icon(Icons.add, color: Colors.white),
             ),
-      bottomNavigationBar: (!_isLoading && !_isSubmitted && _expenses.isNotEmpty)
+      bottomNavigationBar: (!_isLoading && !_isSubmitted && _expenses.isNotEmpty) ||
+              (!_isLoading && _approvalStatus == 'rejected' && _expenses.isNotEmpty)
           ? _buildSubmitBar()
           : null,
     );
@@ -197,6 +202,42 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               _statusBadge(),
             ],
           ),
+          if (_approvalStatus == 'rejected') ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.cancel_outlined, size: 14, color: Colors.red),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Expense rejected — you can edit and resubmit.',
+                          style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        if (_rejectionReason != null && _rejectionReason!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Reason: $_rejectionReason',
+                            style: TextStyle(color: Colors.red.shade200, fontSize: 11, height: 1.3),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (_hasPendingAdminChanges) ...[
             const SizedBox(height: 8),
             Container(
@@ -244,8 +285,14 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   Widget _statusBadge() {
+    if (_approvalStatus == 'rejected') {
+      return _badge('Rejected', Colors.red.shade400, Icons.cancel_outlined);
+    }
+    if (_approvalStatus == 'approved') {
+      return _badge('Approved', Colors.green.shade600, Icons.verified_outlined);
+    }
     if (_isSubmitted) {
-      return _badge('Submitted', Colors.green.shade400, Icons.lock_outline);
+      return _badge('Submitted', Colors.blue.shade400, Icons.hourglass_top_outlined);
     }
     return _badge('Pending', Colors.orange.shade600, Icons.pending_outlined);
   }
@@ -856,9 +903,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          icon: const Icon(Icons.send_rounded, size: 18),
+          icon: Icon(_approvalStatus == 'rejected' ? Icons.replay_rounded : Icons.send_rounded, size: 18),
           label: Text(
-              'Submit ${DateFormat('MMMM').format(_selectedMonth)} for Approval',
+              _approvalStatus == 'rejected'
+                  ? 'Resubmit ${DateFormat('MMMM').format(_selectedMonth)} for Approval'
+                  : 'Submit ${DateFormat('MMMM').format(_selectedMonth)} for Approval',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
           onPressed: _confirmSubmitMonth,
         ),
@@ -916,6 +965,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   void _confirmSubmitMonth() {
+    final claimsTotal = _monthlyClaims.fold<double>(0, (s, c) => s + _toDouble(c['amount']));
+    final grandTotal = _toDouble(_summary['grand_total']) + claimsTotal;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -933,9 +984,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             ),
             const SizedBox(height: 12),
             _summaryRow('Daily Expenses', _expenses.length.toString(), Icons.receipt),
+            if (claimsTotal > 0)
+              _summaryRow('Claims', '₹${_fmt(claimsTotal)}', Icons.add_card_outlined),
             _summaryRow(
                 'Total Amount',
-                '₹${_fmt(_toDouble(_summary['grand_total']))}',
+                '₹${_fmt(grandTotal)}',
                 Icons.currency_rupee),
           ],
         ),
