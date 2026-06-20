@@ -35,6 +35,9 @@ class _ReportingScreenState extends State<ReportingScreen> {
     DateTime.now().month,
     DateTime.now().day,
   );
+  String _searchQuery = "";
+  final TextEditingController _businessValueController = TextEditingController();
+  TimeOfDay _selectedTime = TimeOfDay.now();
 
   String? _selectedRemark;
   final TextEditingController _otherRemarkController = TextEditingController();
@@ -57,6 +60,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
   @override
   void dispose() {
     _otherRemarkController.dispose();
+    _businessValueController.dispose();
     super.dispose();
   }
 
@@ -104,7 +108,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
             }
           }
 
-          return {
+          return <String, dynamic>{
             'id': p.id,
             'name': p.name,
             'isSelected': initialSelect,
@@ -127,7 +131,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
               //  widget.existingReport!.workedWith.contains(empId);widget.existingReport!.workedWith.contains(empName);
           }
 
-          return {
+          return <String, dynamic>{
             'id': empId,
             'name': c['name'],
             'role': c['role'],
@@ -143,6 +147,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
             incomingDate.month,
             incomingDate.day,
           );
+          _selectedTime = TimeOfDay(hour: incomingDate.hour, minute: incomingDate.minute);
 
           String savedRemark = widget.existingReport!.remarks;
           if (remarks.contains(savedRemark)) {
@@ -151,6 +156,10 @@ class _ReportingScreenState extends State<ReportingScreen> {
             _selectedRemark = 'Other';
             _otherRemarkController.text = savedRemark;
           }
+          
+          _businessValueController.text = widget.existingReport!.businessValuePts > 0 
+              ? widget.existingReport!.businessValuePts.toString() 
+              : '';
         }
         _isLoading = false;
       });
@@ -190,9 +199,38 @@ class _ReportingScreenState extends State<ReportingScreen> {
     }
   }
 
+  Future<void> _pickTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF4A148C),
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      if (picked != _selectedTime) {
+        setState(() => _selectedTime = picked);
+      }
+    }
+  }
+
   void _updateQty(int index, String key, String value) {
     int newVal = int.tryParse(value) ?? 0;
-    _uiProducts[index][key] = newVal;
+    if (key == 'pob' || key == 'rx') {
+      setState(() {
+        _uiProducts[index][key] = newVal;
+      });
+    } else {
+      _uiProducts[index][key] = newVal;
+    }
   }
 
   void _showJointWorkPicker() {
@@ -236,7 +274,21 @@ class _ReportingScreenState extends State<ReportingScreen> {
       return;
     }
 
+    int ptsValue = int.tryParse(_businessValueController.text.trim()) ?? 0;
+    if (_businessValueController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter Doctor Business Value as per PTS")),
+      );
+      return;
+    }
+
     String finalRemark = _selectedRemark ?? "Met";
+    if (_selectedRemark == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a Visit Outcome / Remark")),
+      );
+      return;
+    }
     if (_selectedRemark == 'Other') {
       if (_otherRemarkController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -260,6 +312,14 @@ class _ReportingScreenState extends State<ReportingScreen> {
           ),
         )
         .toList();
+        
+    if (finalProductList.isEmpty) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one product")),
+      );
+      return;
+    }
 
     //List<String> selectedColleagueNames = _uiColleagues
     List<String> selectedColleagueIds = _uiColleagues
@@ -268,15 +328,23 @@ class _ReportingScreenState extends State<ReportingScreen> {
         //.map((c) => c['name'].toString())
         .toList();
 
+    DateTime finalDateTime = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
+
     final report = VisitReport(
       id: widget.existingReport?.id ?? "",
       doctorId: widget.existingReport?.doctorId ?? widget.doctorId,
       doctorName: widget.doctorName,
-      visitTime: _selectedDate,
+      visitTime: finalDateTime,
       remarks: finalRemark,
       products: finalProductList,
       workedWith: selectedColleagueIds,
-      //workedWith: selectedColleagueNames,
+      businessValuePts: ptsValue,
       isSubmitted: false,
     );
 
@@ -380,6 +448,9 @@ class _ReportingScreenState extends State<ReportingScreen> {
                                 ],
                               ),
                             ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
                             InkWell(
                               onTap: _pickDate,
                               borderRadius: BorderRadius.circular(8),
@@ -412,12 +483,65 @@ class _ReportingScreenState extends State<ReportingScreen> {
                                   ],
                                 ),
                               ),
+                                ),
+                                const SizedBox(height: 8),
+                                InkWell(
+                                  onTap: _pickTime,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.access_time,
+                                          color: Colors.white,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _selectedTime.format(context),
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                         const SizedBox(height: 16),
                         _buildJointWorkSelectorButton(), // NEW SELECTION BUTTON
                       ],
+                    ),
+                  ),
+
+                  // === SEARCH BOX ===
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: "Search Product...",
+                        prefixIcon: const Icon(Icons.search, color: Color(0xFF4A148C)),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
                     ),
                   ),
 
@@ -429,7 +553,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
                         Expanded(
                           flex: 4,
                           child: Text(
-                            "PRODUCT",
+                            "PRODUCT *",
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
                               color: Colors.grey[700],
@@ -441,11 +565,12 @@ class _ReportingScreenState extends State<ReportingScreen> {
                           flex: 2,
                           child: Center(
                             child: Text(
-                              "POB",
+                              "Brands Added\nAfter Last Visit",
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
-                                fontSize: 11,
+                                fontSize: 9,
                               ),
                             ),
                           ),
@@ -467,11 +592,12 @@ class _ReportingScreenState extends State<ReportingScreen> {
                           flex: 2,
                           child: Center(
                             child: Text(
-                              "RX",
+                              "Brands\nRxbed",
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
-                                fontSize: 11,
+                                fontSize: 9,
                               ),
                             ),
                           ),
@@ -482,12 +608,15 @@ class _ReportingScreenState extends State<ReportingScreen> {
 
                   // === PRODUCTS LIST ===
                   Expanded(
-                    child: ListView.separated(
+                    child: Builder(builder: (context) {
+                      final filteredProducts = _uiProducts.where((p) => p['name'].toString().toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+                      return ListView.separated(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: _uiProducts.length,
+                      itemCount: filteredProducts.length,
                       separatorBuilder: (c, i) => const SizedBox(height: 8),
                       itemBuilder: (context, index) {
-                        final p = _uiProducts[index];
+                        final p = filteredProducts[index];
+                          final origIndex = _uiProducts.indexOf(p);
                         return ProductRowItem(
                           key: ValueKey(p['id']),
                           product: p,
@@ -501,14 +630,15 @@ class _ReportingScreenState extends State<ReportingScreen> {
                               }
                             });
                           },
-                          onPobChanged: (val) => _updateQty(index, 'pob', val),
+                          onPobChanged: (val) => _updateQty(origIndex, 'pob', val),
                           onSampleChanged: (val) =>
-                              _updateQty(index, 'sample', val),
+                              _updateQty(origIndex, 'sample', val),
                           onRxChanged: (val) =>
-                              _updateQty(index, 'rx', val), // Rx Handler
+                              _updateQty(origIndex, 'rx', val), // Rx Handler
                         );
                       },
-                    ),
+                      );
+                    }),
                   ),
 
                   // === BOTTOM SHEET (REMARKS & SUBMIT) ===
@@ -531,6 +661,20 @@ class _ReportingScreenState extends State<ReportingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        TextField(
+                          controller: _businessValueController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: "Doctor Business Value as per PTS *",
+                            labelStyle: const TextStyle(fontSize: 12),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           value: _selectedRemark,
                           isExpanded: true,
@@ -554,7 +698,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
                             if (v != 'Other') _otherRemarkController.clear();
                           }),
                           decoration: InputDecoration(
-                            labelText: "Visit Outcome / Remark",
+                            labelText: "Visit Outcome / Remark *",
                             labelStyle: const TextStyle(fontSize: 12),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -681,41 +825,29 @@ class ProductRowItem extends StatefulWidget {
 }
 
 class _ProductRowItemState extends State<ProductRowItem> {
-  late TextEditingController _pobController;
   late TextEditingController _sampleController;
-  late TextEditingController _rxController; // NEW
 
   @override
   void initState() {
     super.initState();
-    _pobController = TextEditingController(
-      text: widget.product['pob'] == 0 ? '' : widget.product['pob'].toString(),
-    );
     _sampleController = TextEditingController(
       text: widget.product['sample'] == 0
           ? ''
           : widget.product['sample'].toString(),
     );
-    _rxController = TextEditingController(
-      text: widget.product['rx'] == 0 ? '' : widget.product['rx'].toString(),
-    ); // NEW
   }
 
   @override
   void didUpdateWidget(ProductRowItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.product['isSelected']) {
-      if (_pobController.text.isNotEmpty) _pobController.clear();
       if (_sampleController.text.isNotEmpty) _sampleController.clear();
-      if (_rxController.text.isNotEmpty) _rxController.clear(); // NEW
     }
   }
 
   @override
   void dispose() {
-    _pobController.dispose();
     _sampleController.dispose();
-    _rxController.dispose(); // NEW
     super.dispose();
   }
 
@@ -775,10 +907,15 @@ class _ProductRowItemState extends State<ProductRowItem> {
           // Three Inputs (Flex 2 each)
           Expanded(
             flex: 2,
-            child: _buildMiniInput(
-              _pobController,
-              isSelected,
-              widget.onPobChanged,
+            child: Transform.scale(
+              scale: 0.7,
+              child: Switch(
+                value: widget.product['pob'] == 1,
+                onChanged: isSelected ? (val) {
+                  widget.onPobChanged(val ? "1" : "0");
+                } : null,
+                activeColor: const Color(0xFF4A148C),
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -793,10 +930,15 @@ class _ProductRowItemState extends State<ProductRowItem> {
           const SizedBox(width: 4),
           Expanded(
             flex: 2,
-            child: _buildMiniInput(
-              _rxController,
-              isSelected,
-              widget.onRxChanged,
+            child: Transform.scale(
+              scale: 0.7,
+              child: Switch(
+                value: widget.product['rx'] == 1,
+                onChanged: isSelected ? (val) {
+                  widget.onRxChanged(val ? "1" : "0");
+                } : null,
+                activeColor: const Color(0xFF4A148C),
+              ),
             ),
           ),
         ],

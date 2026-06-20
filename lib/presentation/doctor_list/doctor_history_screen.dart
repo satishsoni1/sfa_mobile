@@ -163,6 +163,30 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+
+            // Doctor Business Value (Static for now)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  "Doctor Business value as per PTS: ",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.grey,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    "-",
+                    style: GoogleFonts.poppins(
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
 
             // Products Section
@@ -199,19 +223,19 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Row(
+                                  Wrap(
+                                    spacing: 4,
+                                    runSpacing: 4,
                                 children: [
                                   if (p.pobQty > 0)
-                                    _tag("POB: ${p.pobQty}", Colors.green),
-                                  if (p.pobQty > 0) const SizedBox(width: 4),
-
+                                    _tag("Brands added after last visit: ${p.pobQty == 1 ? 'Yes' : 'No'}", Colors.green),
+                           
                                   if (p.sampleQty > 0)
                                     _tag("Spl: ${p.sampleQty}", Colors.orange),
-                                  if (p.sampleQty > 0) const SizedBox(width: 4),
-
+                  
                                   // --- NEW: Added Rx Tag ---
                                   if (p.rxQty > 0)
-                                    _tag("Rx: ${p.rxQty}", Colors.blue),
+                                    _tag("Brands Rxbed: ${p.rxQty == 1 ? 'Yes' : 'No'}", Colors.blue),
                                 ],
                               ),
                             ],

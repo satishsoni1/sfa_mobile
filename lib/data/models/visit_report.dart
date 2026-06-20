@@ -6,6 +6,7 @@ class VisitReport {
   final String remarks;
   final List<String> workedWith; // Colleagues: ["Amit (ASM)", "Rahul"]
   final List<ProductEntry> products; // Detailed product list
+  final int businessValuePts;
   final bool isSubmitted;
 
   VisitReport({
@@ -16,6 +17,7 @@ class VisitReport {
     required this.remarks,
     this.workedWith = const [],
     this.products = const [],
+    this.businessValuePts = 0,
     this.isSubmitted = false,
   });
 
@@ -43,6 +45,7 @@ class VisitReport {
       remarks: json['remarks'] ?? '',
       workedWith: colleagues,
       products: productList,
+      businessValuePts: int.tryParse(json['business_value_pts']?.toString() ?? '0') ?? 0,
       // Handle boolean sent as 1/0 or true/false
       isSubmitted: json['is_submitted'] == 1 || json['is_submitted'] == true,
     );
@@ -57,6 +60,7 @@ class VisitReport {
       'visit_time': visitTime.toIso8601String(),
       'remarks': remarks,
       'worked_with': workedWith,
+      'business_value_pts': businessValuePts,
       // Map product objects to JSON
       'products': products.map((e) => e.toJson()).toList(),
     };
