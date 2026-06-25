@@ -601,7 +601,7 @@ class ApiService {
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception("Failed to submit NFW Report");
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 
