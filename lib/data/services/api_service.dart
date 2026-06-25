@@ -27,7 +27,7 @@ class ApiService {
 
   Future<List<dynamic>> getVisitsByDate(String date) async {
     // API Endpoint: /api/visits?date=2026-02-04
-    final url = Uri.parse('$baseUrl/app/visits?date=$date');
+    final url = Uri.parse('$baseUrl/app/new/visits?date=$date');
     final headers = await _getHeaders();
 
     final response = await http.get(url, headers: headers);
@@ -177,7 +177,7 @@ class ApiService {
   // Submit Single Visit
   Future<void> submitVisit(Map<String, dynamic> visitData) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/app/visits'),
+      Uri.parse('$baseUrl/app/new/visits'),  //new endpoint
       headers: await _getHeaders(),
       body: jsonEncode(visitData),
     );
@@ -190,7 +190,7 @@ class ApiService {
   Future<List<dynamic>> getTodayVisits() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/app/visits/today'),
+        Uri.parse('$baseUrl/app/new/visits/today'), // new endpoint
         headers: await _getHeaders(),
       );
 
@@ -236,7 +236,7 @@ class ApiService {
   Future<void> submitDayFinal({String? date, required int chemistCount}) async {
     // Use your existing baseUrl variable mechanism
     // Ensure the endpoint path matches your Laravel route (e.g., /visits/submit-day)
-    final url = Uri.parse('$baseUrl/app/visits/submit-day');
+    final url = Uri.parse('$baseUrl/app/new/visits/submit-day');  // new endpoint
     final headers = await _getHeaders();
     final Map<String, dynamic> requestData = {'chemist_count': chemistCount};
     if (date != null) {
@@ -399,7 +399,7 @@ class ApiService {
     // }
 
     final response = await http.post(
-      Uri.parse('$baseUrl/app/visits'),
+      Uri.parse('$baseUrl/app/new/visits'), // updated endpoint changed from /app/visits
       headers: await _getHeaders(),
       body: jsonEncode(visitData),
     );
@@ -411,7 +411,7 @@ class ApiService {
 
   Future<void> updateVisit(String id, Map<String, dynamic> data) async {
     final response = await http.put(
-      Uri.parse('$baseUrl/app/visits/$id'), // Endpoint: /api/app/visits/{id}
+      Uri.parse('$baseUrl/app/new/visits/$id'), // old Endpoint: /api/app/visits/{id}
       headers: await _getHeaders(),
       body: jsonEncode(data),
     );
@@ -460,7 +460,7 @@ class ApiService {
   Future<List<VisitReport>> getDoctorHistory(String doctorId) async {
     // Encode the doctor name to handle spaces properly
     final url = Uri.parse(
-      '$baseUrl/app/visits/history?doctorId=${Uri.encodeComponent(doctorId)}',
+      '$baseUrl/app/new/visits/history?doctorId=${Uri.encodeComponent(doctorId)}',
     );
 
     try {

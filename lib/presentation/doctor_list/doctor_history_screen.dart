@@ -109,16 +109,14 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      elevation: 2,
+      elevation: 6, 
+      shadowColor: Colors.black.withOpacity(0.4),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header: Date & Time
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
                 Row(
                   children: [
                     const Icon(
@@ -127,152 +125,174 @@ class _DoctorHistoryScreenState extends State<DoctorHistoryScreen> {
                       color: Color(0xFF4A148C),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      DateFormat('dd MMM yyyy').format(visit.visitTime),
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
+                Expanded(
+                  child: Text(
+                    DateFormat('dd MMM yyyy - hh:mm a').format(visit.visitTime),
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
                     ),
-                  ],
+                  ),
                 ),
-                // Optional: Show "Edited" flag if updated_at != created_at
               ],
             ),
             const Divider(height: 24),
 
-            // Remarks
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Remark: ",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
+            // Remarks Subcard
+            if (visit.remarks.isNotEmpty)
+              _buildSubCard(
+                "Remarks",
+                Text(
+                  visit.remarks,
+                  style: GoogleFonts.poppins(
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-                Expanded(
-                  child: Text(
-                    visit.remarks,
-                    style: GoogleFonts.poppins(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Doctor Business Value (Static for now)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Doctor Business value as per PTS: ",
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey,
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    "-",
-                    style: GoogleFonts.poppins(
-                      color: Colors.black87,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Products Section
-            if (visit.products.isNotEmpty) ...[
-              Text(
-                "Products Discussed:",
-                style: GoogleFonts.poppins(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
-                ),
+                Colors.blue.shade50,
+                Colors.blue.shade200,
               ),
-              const SizedBox(height: 8),
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
+
+            // Dr Business Value Subcard
+            _buildSubCard(
+              "Dr Business Value as per PTS",
+              Text(
+                visit.businessValuePts > 0 ? visit.businessValuePts.toString() : "-",
+                    style: GoogleFonts.poppins(
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+              Colors.purple.shade50,
+              Colors.purple.shade200,
+            ),
+
+            // Joint Work
+            if (visit.rawJointWork.isNotEmpty)
+              _buildSubCard(
+                "Joint Work",
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: visit.rawJointWork.map((item) {
+                    final name = item['name'] ?? item['employee_name'] ?? 'Unknown';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text("• $name", style: GoogleFonts.poppins(fontSize: 13)),
+                    );
+                  }).toList(),
                 ),
-                padding: const EdgeInsets.all(8),
-                child: Column(
-                  children: visit.products
-                      .map(
-                        (p) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
+                Colors.orange.shade50,
+                Colors.orange.shade200,
+              ),
+
+            // Brands Detailed (brand_details)
+            if (visit.rawBrandDetails.isNotEmpty)
+              _buildSubCard(
+                "Brands Detailed",
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: visit.rawBrandDetails.map((item) {
+                    final name = item['name'] ?? item['brand_name'] ?? item['product_name'] ?? 'Unknown';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text("• $name", style: GoogleFonts.poppins(fontSize: 13)),
+                    );
+                  }).toList(),
+                ),
+                Colors.teal.shade50,
+                Colors.teal.shade200,
+              ),
+
+            // Samples
+            if (visit.rawSamples.isNotEmpty)
+              _buildSubCard(
+                "Samples",
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: visit.rawSamples.map((item) {
+                    final name = item['name'] ?? item['brand_name'] ?? item['product_name'] ?? 'Unknown';
+                    final qty = item['sample_qty']?.toString() ?? '0';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // Added Expanded to prevent overflow with long product names
-                              Expanded(
-                                child: Text(
-                                  p.productName,
-                                  style: GoogleFonts.poppins(fontSize: 13),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                                  Wrap(
-                                    spacing: 4,
-                                    runSpacing: 4,
-                                children: [
-                                  if (p.pobQty > 0)
-                                    _tag("Brands added after last visit: ${p.pobQty == 1 ? 'Yes' : 'No'}", Colors.green),
-                           
-                                  if (p.sampleQty > 0)
-                                    _tag("Spl: ${p.sampleQty}", Colors.orange),
-                  
-                                  // --- NEW: Added Rx Tag ---
-                                  if (p.rxQty > 0)
-                                    _tag("Brands Rxbed: ${p.rxQty == 1 ? 'Yes' : 'No'}", Colors.blue),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ],
-
-            // Joint Work Section
-            if (visit.workedWith.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.people_outline,
-                    size: 16,
-                    color: Colors.grey,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      "Worked with: ${visit.workedWith.join(', ')}",
-                      style: GoogleFonts.poppins(
-                        fontSize: 12,
-                        color: Colors.grey[700],
+                          Expanded(child: Text("• $name", style: GoogleFonts.poppins(fontSize: 13))),
+                          Text("Qty: $qty", style: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange.shade800)),
+                        ],
                       ),
-                    ),
-                  ),
-                ],
+                    );
+                  }).toList(),
+                ),
+                Colors.green.shade50,
+                Colors.green.shade200,
               ),
-            ],
+
+            // Brands Rxbed (prescribed_rx)
+            if (visit.rawPrescribedRx.isNotEmpty)
+              _buildSubCard(
+                "Brands Rxbed",
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: visit.rawPrescribedRx.map((item) {
+                    final name = item['name'] ?? item['brand_name'] ?? item['product_name'] ?? 'Unknown';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text("• $name", style: GoogleFonts.poppins(fontSize: 13)),
+                    );
+                  }).toList(),
+                ),
+                Colors.indigo.shade50,
+                Colors.indigo.shade200,
+              ),
+
+            // Brands added after last visit (new_brand_rxbed)
+            if (visit.rawNewBrandRxbed.isNotEmpty)
+              _buildSubCard(
+                "Brands added after last visit",
+                Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                  children: visit.rawNewBrandRxbed.map((item) {
+                    final name = item['name'] ?? item['brand_name'] ?? item['product_name'] ?? 'Unknown';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text("• $name", style: GoogleFonts.poppins(fontSize: 13)),
+                    );
+                  }).toList(),
+                    ),
+                Colors.pink.shade50,
+                Colors.pink.shade200,
+              ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSubCard(String title, Widget content, Color bgColor, Color borderColor) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: bgColor,
+        border: Border.all(color: borderColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 6),
+          content,
+        ],
       ),
     );
   }

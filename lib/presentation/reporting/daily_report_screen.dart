@@ -241,6 +241,7 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                                     builder: (_) => ReportingScreen(
                                       doctorId: r.doctorId,
                                       doctorName: r.doctorName,
+                                      doctorSpeciality: r.doctorSpeciality,
                                       existingReport: r,
                                     ),
                                   ),

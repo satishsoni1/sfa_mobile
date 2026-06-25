@@ -361,6 +361,7 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                         builder: (_) => ReportingScreen(
                           doctorId: doc.id.toString(),
                           doctorName: doc.name,
+                          doctorSpeciality: doc.specialization,
                           isPlanned: isPlanned,
                         ),
                       ),
