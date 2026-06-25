@@ -76,7 +76,7 @@ class ReportsDashboardScreen extends StatelessWidget {
         'external_path': 'visit',
       },
       {
-        'title': 'Tab DCR',
+        'title': 'DCR',
         'icon': Icons.description_outlined,
         'external_path': 'dcrview',
       },

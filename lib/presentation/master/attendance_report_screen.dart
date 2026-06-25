@@ -734,8 +734,9 @@ class _AttendanceDetailSheet extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    _dynamicBox('Summary', detail.summary),
-                    const SizedBox(height: 12),
+                    // Summary box is commented 
+                    // _dynamicBox('Summary', detail.summary),
+                    // const SizedBox(height: 12),
                     ...detail.details.entries.where((entry) {
                       return _shouldShowSection(entry.key, detail.summary);
                     }).map((entry) {
