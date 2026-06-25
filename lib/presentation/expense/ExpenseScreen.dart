@@ -1760,15 +1760,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       //return;
     }
 
+    final prevEndLocation = _endLocation;
     setState(() => _endLocation = town);
 
     // All modes: backend calculates DA/TA with correct policy and direction
-    _recalculateFromServer(town);
+    _recalculateFromServer(town, previousEndLocation: prevEndLocation);
   }
 
   /// Called whenever from/to changes. Backend applies all policies:
   ///   FIXED fare, road km >150 → train slab, else km×3.5, direction multiplier.
-  Future<void> _recalculateFromServer(String toTown, {String? taDirection}) async {
+  Future<void> _recalculateFromServer(String toTown, {String? taDirection, String? previousEndLocation}) async {
     final fromTown = _selectedFrom ?? _transitFromTown ?? _userHq ?? '';
     // Capture direction immediately — caller may pass explicit value to avoid
     // reading stale state if a concurrent call updates _taDirection mid-flight.
@@ -1777,6 +1778,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     print('Recalculating from: $fromTown to: $toTown dir: $capturedDir');
     if (fromTown.isEmpty) return;
 
+    final prevKm     = _serverTaKm;
+    final prevTaAmt  = _serverTaAmount;
     setState(() => _isRecalculating = true);
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
@@ -1865,7 +1868,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       }
       _recalculateTotal();
     } catch (_) {
-      // Server unavailable — leave current values
+      if (mounted) {
+        setState(() {
+          if (previousEndLocation != null) _endLocation = previousEndLocation;
+          _serverTaKm     = prevKm;
+          _serverTaAmount = prevTaAmt;
+          _manualKmController.text = prevKm.toStringAsFixed(1);
+          _manualTaController.text = prevTaAmt.toStringAsFixed(2);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Check your internet connection'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 4),
+        ));
+      }
     } finally {
       if (mounted) setState(() => _isRecalculating = false);
     }
@@ -1876,101 +1892,50 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   // ─── Multi-stop Route (FIELD mode) ────────────────────────────────────────────
 
-  /// Finds a route entry for two towns in either direction.
-  Map<String, dynamic>? _findRoute(String a, String b) {
-    final au = a.toUpperCase(), bu = b.toUpperCase();
-    for (final r in _taRoutes) {
-      final f = (r['from_town_code']?.toString() ?? '').toUpperCase();
-      final t = (r['to_town_code']?.toString() ?? '').toUpperCase();
-      if ((f == au && t == bu) || (f == bu && t == au)) return r;
-    }
-    return null;
-  }
-
   void _onWaypointChanged(int index, String? value) {
     print('Waypoint $index changed to: $value');
     setState(() => _fieldWaypoints[index] = value);
     _recalcFieldRoute();
   }
 
-  /// Client-side KM sum across all waypoint segments.
-  /// Calls server for DA type+amount using first→last stop.
+  /// All KM, TA, and DA values come from the server for FIELD mode.
   /// Uses a cancel token so only the most-recent call applies its result.
   Future<void> _recalcFieldRoute() async {
-    print(_expenseMode);
     if (_expenseMode != 'FIELD') return;
 
     final myToken = ++_recalcToken;
 
-    // ── 1. Client-side KM calculation (instant) ─────────────────────────────
-    const stPriority = {'EX_OS': 4, 'OS': 3, 'EX': 2, 'EX_HQ': 2, 'HQ': 1};
-    double roadKm = 0;
-    String topStation = '';
-
-    // Resolve effective waypoints: use _userHq for null first slot
+    // Resolve waypoints: substitute HQ for empty first slot
     final resolved = List<String?>.from(_fieldWaypoints);
     if (resolved.isNotEmpty && resolved[0] == null && _userHq != null) {
       resolved[0] = _userHq;
     }
     final stops = resolved.where((w) => w != null && w.isNotEmpty).cast<String>().toList();
 
-    final segDetails = <Map<String, dynamic>>[];
-    for (int i = 0; i < stops.length - 1; i++) {
-      final route = _findRoute(stops[i], stops[i + 1]);
-      if (route == null) {
-        segDetails.add({'from': stops[i], 'to': stops[i + 1], 'km': 0.0, 'mode': ''});
-        continue;
-      }
-      final km = double.tryParse(route['kms']?.toString() ?? '') ?? 0;
-      final mode = (route['mode_of_travel']?.toString() ?? '').toUpperCase();
-      final st = (route['station_type']?.toString() ?? '').toUpperCase().replaceAll('-', '_');
-      final segKm = mode == 'FIXED' ? 0.0 : km;
-      roadKm += segKm;
-      segDetails.add({'from': stops[i], 'to': stops[i + 1], 'km': segKm, 'mode': mode});
-      final existingP = stPriority[topStation] ?? 0;
-      final newP = stPriority[st] ?? 0;
-      if (newP > existingP) topStation = st;
-    }
-
-    final isEx = topStation == 'EX' || topStation == 'EX_OS' || topStation == 'EX_HQ';
-    final dirMult = isEx
-        ? (_userDirectionOverride ? (_userPrefersOneWay ? 1 : 2) : 2)
-        : 1;
-
-    final totalRoadKm = roadKm * dirMult;
-    final taDir = dirMult == 2 ? 'two_way' : 'one_way';
-
-    if (!mounted || myToken != _recalcToken) return;
-
-    // Apply client-side KM + direction immediately so UI is responsive.
-    // TA amount is intentionally NOT set here — it must come from the server
-    // because train-slab / fixed-fare logic lives only in the controller.
+    // Update from/to and clear stale segment data immediately
     setState(() {
-      _serverTaKm     = totalRoadKm;
-      _taDirection    = taDir;
-      _isTwoWay       = dirMult == 2;
-      _serverDaType   = topStation.isEmpty ? 'HQ' : topStation;
       _selectedFrom   = stops.isNotEmpty ? stops.first : _selectedFrom;
       _endLocation    = stops.length > 1 ? stops.last : null;
-      _segmentDetails = segDetails;
+      _segmentDetails = [];
     });
-    _recalculateTotal();
-    // ── 2. Server call for DA amount + hotel flags ───────────────────────────
-    // Only fire when both from and to are set
+
     if (stops.length < 2) return;
 
-    // Debounce: wait briefly so rapid selections don't spam the server
+    // Pass user direction override so server honours the explicit choice
+    final String? dirOverride = _userDirectionOverride
+        ? (_userPrefersOneWay ? 'one_way' : 'two_way')
+        : null;
+
+    // Debounce: avoid spamming the server on rapid waypoint changes
     await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted || myToken != _recalcToken) return;
 
     setState(() => _isRecalculating = true);
     try {
       final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-      // Send all waypoints so server processes each segment individually
-      final result = await ApiService().recalculateWithWaypoints(
-          dateStr, stops, taDirection: taDir);
+      final result  = await ApiService().recalculateWithWaypoints(
+          dateStr, stops, taDirection: dirOverride);
 
-      // Discard if a newer call has already started
       if (!mounted || myToken != _recalcToken) return;
 
       setState(() {
@@ -1978,24 +1943,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _serverDaType   = (result['da_type']?.toString() ?? _serverDaType).toUpperCase();
           _serverDaAmount = (result['da_amount'] as num?)?.toDouble() ?? _serverDaAmount;
         }
-        final newKm = (result['total_km'] as num?)?.toDouble() ?? _serverTaKm;
-        _serverTaKm      = newKm;
-        _serverTaAmount  = (result['ta_amount']  as num?)?.toDouble() ?? _serverTaAmount;
-        // Detect route-not-found: server returned km=0 for valid non-identical stops
+        _serverTaKm     = (result['total_km']  as num?)?.toDouble() ?? 0;
+        _serverTaAmount = (result['ta_amount']  as num?)?.toDouble() ?? 0;
         if (!_taOverrideByUser) {
           final src = result['route_source']?.toString() ?? '';
-          _routeNotFound           = src == 'none';
-          _routeFromOtherEmployee  = src == 'other';
+          _routeNotFound          = src == 'none';
+          _routeFromOtherEmployee = src == 'other';
         }
-        _serverTaMode    = result['ta_mode']?.toString() ?? _serverTaMode;
-        final serverDir  = result['ta_direction']?.toString() ?? _taDirection;
-        _taDirection     = serverDir;
-        _isTwoWay        = serverDir == 'two_way';
-        _osReturnAmount  = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
-        _hotelBillFlag   = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
+        _serverTaMode   = result['ta_mode']?.toString() ?? _serverTaMode;
+        final serverDir = result['ta_direction']?.toString() ?? _taDirection;
+        _taDirection    = serverDir;
+        _isTwoWay       = serverDir == 'two_way';
+        _osReturnAmount = (result['os_return_amount'] as num?)?.toDouble() ?? _osReturnAmount;
+        _hotelBillFlag  = result['hotel_bill_flag'] == 1 || result['hotel_bill_flag'] == true;
         _pocketAllowance = (result['pocket_allowance'] as num?)?.toDouble() ?? 0;
-        _hotelBillALimit = (result['hotel_a_limit'] as num?)?.toDouble() ?? 0;
-        _hotelBillBLimit = (result['hotel_b_limit'] as num?)?.toDouble() ?? 0;
+        _hotelBillALimit = (result['hotel_a_limit']   as num?)?.toDouble() ?? 0;
+        _hotelBillBLimit = (result['hotel_b_limit']   as num?)?.toDouble() ?? 0;
         _hotelCityClass  = result['hotel_city_class']?.toString() ?? '';
         if (_hotelBillALimit > 0 && _hotelCityClass == 'A') {
           _hotelBillLimit = _hotelBillALimit;
@@ -2012,7 +1975,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _hotelAmountController.clear();
           _mealAmountController.clear();
         }
-        // If server returns per-segment breakdown, use it; otherwise keep client-side
         if (result['segments'] is List) {
           _segmentDetails = List<Map<String, dynamic>>.from(
             (result['segments'] as List).map((s) => {
@@ -2023,10 +1985,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             }),
           );
         }
+        _manualKmController.text = _serverTaKm.toStringAsFixed(1);
+        _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
       });
       _recalculateTotal();
     } catch (_) {
-      // Server unreachable — KM shown but TA amount stays 0 until server responds
+      // Server unreachable — values stay at zero until next successful call
     } finally {
       if (mounted && myToken == _recalcToken) {
         setState(() => _isRecalculating = false);
@@ -4011,6 +3975,50 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
 
+  /// Resets KM and TA controllers to server-calculated policy values if they
+  /// have drifted (manual edit or stale data). Returns true if any value changed.
+  bool _resetTaToPolicy() {
+    bool changed = false;
+    if (_serverTaKm > 0) {
+      final manual = double.tryParse(_manualKmController.text.trim()) ?? -1;
+      if ((manual - _serverTaKm).abs() > 0.01) {
+        _manualKmController.text = _serverTaKm.toStringAsFixed(1);
+        changed = true;
+      }
+    }
+    if (_serverTaAmount > 0) {
+      final manual = double.tryParse(_manualTaController.text.trim()) ?? -1;
+      if ((manual - _serverTaAmount).abs() > 0.01) {
+        _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  List<String> _getPolicyViolations() {
+    final v = <String>[];
+    if (_hotelBillClaimed && _hotelBillLimit > 0 && _hotelAmount > _hotelBillLimit) {
+      v.add('Hotel bill ₹${_hotelAmount.toStringAsFixed(2)} exceeds policy limit ₹${_hotelBillLimit.toStringAsFixed(2)}');
+    }
+    if (_hotelBillClaimed && _mealBillLimit > 0 && _mealAmount > _mealBillLimit) {
+      v.add('Meal bill ₹${_mealAmount.toStringAsFixed(2)} exceeds policy limit ₹${_mealBillLimit.toStringAsFixed(2)}');
+    }
+    if (_expenseMode == 'NFW' && _nfwDaPolicy > 0) {
+      final entered = double.tryParse(_manualDaController.text.trim()) ?? _nfwDaAmount;
+      if (entered > _nfwDaPolicy) {
+        v.add('DA ₹${entered.toStringAsFixed(2)} exceeds policy limit ₹${_nfwDaPolicy.toStringAsFixed(2)}');
+      }
+    }
+    if (_serverTaMode == 'train' && _serverTaAmount > 0 && _trainTaController.text.trim().isNotEmpty) {
+      final trainOverride = double.tryParse(_trainTaController.text.trim()) ?? 0;
+      if (trainOverride > _serverTaAmount) {
+        v.add('Train fare ₹${trainOverride.toStringAsFixed(2)} exceeds policy slab ₹${_serverTaAmount.toStringAsFixed(2)}');
+      }
+    }
+    return v;
+  }
+
   void _submit() async {
     // Ticket required only when user has overridden the slab train fare
     if (_serverTaMode == 'train' &&
@@ -4021,6 +4029,58 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         backgroundColor: Colors.red,
       ));
       return;
+    }
+    _updateTaFromSelection();
+    _recalculateTotal();
+    // Policy violation check — warn and ask for confirmation before saving
+    final violations = _getPolicyViolations();
+    if (violations.isNotEmpty) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Out of Policy'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('The following items exceed policy limits:'),
+              const SizedBox(height: 8),
+              ...violations.map((msg) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('• ', style: TextStyle(color: Colors.red)),
+                    Expanded(child: Text(msg)),
+                  ],
+                ),
+              )),
+              const SizedBox(height: 12),
+              const Text('Submit anyway? This will be flagged for manager review.'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Submit Anyway'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+    }
+    // Silently reset KM/TA to server policy values if the user has edited them
+    if ( _resetTaToPolicy() && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('KM and TA amount reset to policy values.'),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 3),
+      ));
     }
     setState(() => _isSubmitting = true);
     try {
