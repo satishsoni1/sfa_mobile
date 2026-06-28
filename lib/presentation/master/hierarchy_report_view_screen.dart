@@ -42,7 +42,7 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
   bool _isError = false;
 
   DateTimeRange _selectedDateRange = DateTimeRange(
-    start: DateTime.now(),
+    start: DateTime(DateTime.now().year, DateTime.now().month, 1),
     end: DateTime.now(),
   );
 
@@ -1011,14 +1011,9 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
                         color: Colors.orange,
                       ),
                       _dataPoint(
-                        "Meetings",
-                        row['meetings']?.toString() ?? '0',
+                        "NFW",
+                        row['nfw']?.toString() ?? '0',
                         color: Colors.purple,
-                      ),
-                      _dataPoint(
-                        "Conferences",
-                        row['conferences']?.toString() ?? '0',
-                        color: Colors.blue,
                       ),
                       _dataPoint(
                         "Deviations",

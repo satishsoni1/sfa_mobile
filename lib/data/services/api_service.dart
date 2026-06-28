@@ -1879,8 +1879,8 @@ Future<void> submitFullMonth(int month, int year) async {
         return data
             .map(
               (e) => {
-                // Prefer employee_code for report filters; fallback to id.
-                'id': (e['employee_code'] ?? e['emp_code'] ?? e['id'])
+                // Always use the user_id for report filters, as the backend expects the user_id value under the 'employee_code' key.
+                'id': (e['id'] ?? e['user_id'] ?? e['employee_id'] ?? '')
                     .toString(),
                 'name': (e['name'] ?? e['employee_name'] ?? e['emp_name'] ?? '')
                     .toString(),
