@@ -9,7 +9,7 @@ class ApiConstants {
   static const String clmBaseUrl = 'http://192.168.1.13:8000/api';
 
   // Android Emulator → maps to host machine's localhost
-  // static const String clmBaseUrl = 'http://10.0.2.2:8000/api';
+  // static const String clmBaseUrl = 'http://10.0.2.2:8000/api'; 
 
   // Real device on same Wi-Fi → use your PC's LAN IP
   // static const String clmBaseUrl = 'http://192.168.1.X:8000/api';
