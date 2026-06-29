@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -9,12 +11,14 @@ import '../../data/models/visit_report.dart';
 class ReportingScreen extends StatefulWidget {
   final String doctorId; // REQUIRED: Unique ID
   final String doctorName; // For Display
+  final String doctorSpeciality; // Doctor's specialization
   final VisitReport? existingReport;
   final bool isPlanned;
 
   const ReportingScreen({
     required this.doctorId,
     required this.doctorName,
+    this.doctorSpeciality = '',
     this.existingReport,
     this.isPlanned = false,
     super.key,
@@ -29,12 +33,18 @@ class _ReportingScreenState extends State<ReportingScreen> {
   List<Map<String, dynamic>> _uiProducts = [];
   List<Map<String, dynamic>> _uiColleagues = []; // {id, name, isSelected}
   bool _isLoading = true;
+  bool _timeSelected = false; // Track if user explicitly selected a time
+  bool _businessValueFocused = false; // Track if business value field has focus
+  final FocusNode _businessValueFocusNode = FocusNode();
 
   DateTime _selectedDate = DateTime(
     DateTime.now().year,
     DateTime.now().month,
     DateTime.now().day,
   );
+  String _searchQuery = "";
+  final TextEditingController _businessValueController = TextEditingController();
+  TimeOfDay _selectedTime = TimeOfDay.now();
 
   String? _selectedRemark;
   final TextEditingController _otherRemarkController = TextEditingController();
@@ -51,17 +61,31 @@ class _ReportingScreenState extends State<ReportingScreen> {
   @override
   void initState() {
     super.initState();
+    _businessValueFocusNode.addListener(() {
+      setState(() => _businessValueFocused = _businessValueFocusNode.hasFocus);
+    });
     _loadData();
   }
 
   @override
   void dispose() {
+    _businessValueFocusNode.dispose();
     _otherRemarkController.dispose();
+    _businessValueController.dispose();
     super.dispose();
   }
 
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  /// Strips any existing Dr/Doctor prefix and adds a clean "Dr. " prefix
+  String _formatDrName(String name) {
+    final cleaned = name.replaceAll(
+      RegExp(r'^(dr\.?\s*|doctor\s*)', caseSensitive: false),
+      '',
+    ).trim();
+    return 'Dr. $cleaned';
   }
 
   // --- DATA LOADING ---
@@ -85,9 +109,11 @@ class _ReportingScreenState extends State<ReportingScreen> {
           bool initialSelect = false;
 
           if (widget.existingReport != null) {
-            final existing = widget.existingReport!.products.firstWhere(
-              (ep) => ep.productName == p.name,
-              // Note: Ensure ProductEntry has rxQty in your model
+            final report = widget.existingReport!;
+            
+            // 1. Try old way (Local DB or old API structure)
+            final existing = report.products.firstWhere(
+              (ep) => ep.productName == p.name || ep.brandId == p.id,
               orElse: () => ProductEntry(
                 productName: '',
                 pobQty: 0,
@@ -96,15 +122,41 @@ class _ReportingScreenState extends State<ReportingScreen> {
               ),
             );
 
-            if (existing.productName.isNotEmpty) {
+            if (existing.productName.isNotEmpty || existing.brandId != 0) {
               initialPob = existing.pobQty;
               initialSample = existing.sampleQty;
               initialRx = existing.rxQty;
               initialSelect = true;
+            } else {
+              // 2. Try new API structure mapping
+              // Is product selected? (exists in brand_details or samples)
+              bool inBrandDetails = report.rawBrandDetails.any((b) => b['brand_id'] == p.id || b['name'] == p.name);
+              
+              final sampleItem = report.rawSamples.firstWhere(
+                (s) => s['brand_id'] == p.id || s['id'] == p.id || s['name'] == p.name,
+                orElse: () => null,
+              );
+              
+              if (inBrandDetails || sampleItem != null) {
+              initialSelect = true;
+              }
+              
+              // Samples
+              if (sampleItem != null) {
+                initialSample = int.tryParse(sampleItem['sample_qty']?.toString() ?? '0') ?? 0;
+              }
+              
+              // Brands Added (pob)
+              bool inBrandsAdded = report.rawNewBrandRxbed.any((b) => b['brand_id'] == p.id || b['name'] == p.name);
+              if (inBrandsAdded) initialPob = 1;
+              
+              // Brands Rxbed (rx)
+              bool inBrandsRxbed = report.rawPrescribedRx.any((b) => b['brand_id'] == p.id || b['id'] == p.id || b['name'] == p.name);
+              if (inBrandsRxbed) initialRx = 1;
             }
           }
 
-          return {
+          return <String, dynamic>{
             'id': p.id,
             'name': p.name,
             'isSelected': initialSelect,
@@ -121,13 +173,15 @@ class _ReportingScreenState extends State<ReportingScreen> {
          // final String empName = c['name']?.toString() ?? '';
 
           if (widget.existingReport != null) {
-            isSelected =
-              widget.existingReport!.workedWith.contains(empId);
-              //  widget.existingReport!.workedWith.contains(empId) ||
-              //  widget.existingReport!.workedWith.contains(empId);widget.existingReport!.workedWith.contains(empName);
+            isSelected = widget.existingReport!.workedWith.contains(empId);
+            
+            // Check new API response format if not found in old format
+            if (!isSelected) {
+              isSelected = widget.existingReport!.rawJointWork.any((j) => j['id']?.toString() == empId);
+            }
           }
 
-          return {
+          return <String, dynamic>{
             'id': empId,
             'name': c['name'],
             'role': c['role'],
@@ -143,6 +197,8 @@ class _ReportingScreenState extends State<ReportingScreen> {
             incomingDate.month,
             incomingDate.day,
           );
+          _selectedTime = TimeOfDay(hour: incomingDate.hour, minute: incomingDate.minute);
+          _timeSelected = true; // Mark time as selected when loading an existing report
 
           String savedRemark = widget.existingReport!.remarks;
           if (remarks.contains(savedRemark)) {
@@ -151,6 +207,10 @@ class _ReportingScreenState extends State<ReportingScreen> {
             _selectedRemark = 'Other';
             _otherRemarkController.text = savedRemark;
           }
+          
+          _businessValueController.text = widget.existingReport!.businessValuePts > 0 
+              ? widget.existingReport!.businessValuePts.toString() 
+              : '';
         }
         _isLoading = false;
       });
@@ -190,9 +250,39 @@ class _ReportingScreenState extends State<ReportingScreen> {
     }
   }
 
+  Future<void> _pickTime() async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: _selectedTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF4A148C),
+              onPrimary: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedTime = picked;
+        _timeSelected = true; // mark time as explicitly selected
+      });
+    }
+  }
+
   void _updateQty(int index, String key, String value) {
     int newVal = int.tryParse(value) ?? 0;
-    _uiProducts[index][key] = newVal;
+    if (key == 'pob' || key == 'rx') {
+      setState(() {
+        _uiProducts[index][key] = newVal;
+      });
+    } else {
+      _uiProducts[index][key] = newVal;
+    }
   }
 
   void _showJointWorkPicker() {
@@ -236,7 +326,32 @@ class _ReportingScreenState extends State<ReportingScreen> {
       return;
     }
 
+    // --- VALIDATION: Visit Time must be explicitly selected ---
+    if (!_timeSelected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please select the Visit Time"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    int ptsValue = int.tryParse(_businessValueController.text.trim()) ?? 0;
+    if (_businessValueController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please enter Doctor Business Value as per PTS")),
+      );
+      return;
+    }
+
     String finalRemark = _selectedRemark ?? "Met";
+    if (_selectedRemark == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a Visit Outcome / Remark")),
+      );
+      return;
+    }
     if (_selectedRemark == 'Other') {
       if (_otherRemarkController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -254,29 +369,58 @@ class _ReportingScreenState extends State<ReportingScreen> {
         .map(
           (p) => ProductEntry(
             productName: p['name'],
-            pobQty: p['pob'],
-            sampleQty: p['sample'],
-            rxQty: p['rx'], // Uncomment when added to model
+            // p['id'] holds the brand_id from the master product list (set during _loadData)
+            // Without this, brandId defaults to 0 and is sent as 0 in every product payload
+            brandId:   p['id'] is int ? p['id'] : int.tryParse(p['id'].toString()) ?? 0,
+            pobQty:    p['pob'],    // 1 = Yes, 0 = No  (Brands Added After Last Visit which is sent in payload as new_brands_rxbed)
+            sampleQty: p['sample'], // SPL quantity entered by user
+            rxQty:     p['rx'],     // 1 = Yes, 0 = No  (Brands Rxbed which also sent in the payload as prescribed_rx  )
           ),
         )
         .toList();
+        
+    if (finalProductList.isEmpty) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select at least one product")),
+      );
+      return;
+    }
 
-    //List<String> selectedColleagueNames = _uiColleagues
+    // Keep ID-only list — used internally to restore selection on edit
     List<String> selectedColleagueIds = _uiColleagues
         .where((c) => c['isSelected'] == true)
         .map((c) => c['id'].toString())
-        //.map((c) => c['name'].toString())
         .toList();
+
+    // [ADDED] id+name maps — this is what gets sent in the payload under worked_with
+    List<Map<String, dynamic>> selectedColleagueDetails = _uiColleagues
+        .where((c) => c['isSelected'] == true)
+        .map((c) => <String, dynamic>{
+              'id':   c['id'].toString(),
+              'name': c['name']?.toString() ?? '',
+            })
+        .toList();
+
+    DateTime finalDateTime = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+      _selectedTime.hour,
+      _selectedTime.minute,
+    );
 
     final report = VisitReport(
       id: widget.existingReport?.id ?? "",
       doctorId: widget.existingReport?.doctorId ?? widget.doctorId,
       doctorName: widget.doctorName,
-      visitTime: _selectedDate,
+      doctorSpeciality: widget.doctorSpeciality,
+      visitTime: finalDateTime,
       remarks: finalRemark,
       products: finalProductList,
-      workedWith: selectedColleagueIds,
-      //workedWith: selectedColleagueNames,
+      workedWith:      selectedColleagueIds,      // IDs — used for internal selection restore
+      workedWithNames: selectedColleagueDetails,  // [ADDED] id+name — sent in payload
+      businessValuePts: ptsValue,
       isSubmitted: false,
     );
 
@@ -301,7 +445,9 @@ class _ReportingScreenState extends State<ReportingScreen> {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+        ).showSnackBar(SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+        ));
       }
     }
   }
@@ -312,6 +458,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         backgroundColor: const Color(0xFFF8F9FD),
         appBar: AppBar(
           title: Text(
@@ -325,52 +472,54 @@ class _ReportingScreenState extends State<ReportingScreen> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  // === TOP CARD ===
+                  // === TOP CARD (compact) ===
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                     decoration: const BoxDecoration(
                       color: Color(0xFF4A148C),
                       borderRadius: BorderRadius.vertical(
-                        bottom: Radius.circular(20),
+                        bottom: Radius.circular(18),
                       ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
+                            // Doctor name
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
                                 children: [
-                                  Text(
-                                    widget.doctorName,
-                                    style: GoogleFonts.poppins(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
+                                  Expanded(
+                                    child: Text(
+                                      _formatDrName(widget.doctorName),
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.white,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   if (widget.isPlanned)
                                     Container(
-                                      margin: const EdgeInsets.only(top: 4),
+                                      margin: const EdgeInsets.only(left: 6),
                                       padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 2,
+                                        horizontal: 6, vertical: 2,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: Colors.greenAccent.withOpacity(
-                                          0.2,
-                                        ),
+                                        color: Colors.greenAccent.withOpacity(0.2),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: const Text(
-                                        "Planned Visit",
+                                        "Planned",
                                         style: TextStyle(
                                           color: Colors.greenAccent,
-                                          fontSize: 10,
+                                          fontSize: 9,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
@@ -378,33 +527,31 @@ class _ReportingScreenState extends State<ReportingScreen> {
                                 ],
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            // Calendar button
                             InkWell(
                               onTap: _pickDate,
                               borderRadius: BorderRadius.circular(8),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
+                                  horizontal: 10, vertical: 6,
                                 ),
                                 decoration: BoxDecoration(
                                   color: Colors.white.withOpacity(0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const Icon(
-                                      Icons.calendar_month,
-                                      color: Colors.white,
-                                      size: 18,
-                                    ),
-                                    const SizedBox(width: 8),
+                                    const Icon(Icons.calendar_month,
+                                        color: Colors.white, size: 16),
+                                    const SizedBox(width: 4),
                                     Text(
-                                      DateFormat(
-                                        'dd MMM',
-                                      ).format(_selectedDate),
+                                      DateFormat('dd MMM').format(_selectedDate),
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
+                                        fontSize: 12,
                                       ),
                                     ),
                                   ],
@@ -413,25 +560,111 @@ class _ReportingScreenState extends State<ReportingScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        _buildJointWorkSelectorButton(), // NEW SELECTION BUTTON
+                        const SizedBox(height: 8),
+                        // Joint work + visit time on the same row
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildJointWorkSelectorButton(),
+                            ),
+                            const SizedBox(width: 8),
+                            // Visit Time picker
+                            InkWell(
+                              onTap: _pickTime,
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.white38,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.access_time,
+                                        color: Colors.white70, size: 14),
+                                    const SizedBox(width: 6),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          _timeSelected
+                                              ? "Visit Time *"
+                                              : "Set Visit Time *",
+                                          style: GoogleFonts.poppins(
+                                            fontSize: _timeSelected ? 9 : 12,
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                        if (_timeSelected)
+                                        Text(
+                                          _selectedTime.format(context),
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ],
                     ),
                   ),
 
-                  // === PRODUCTS HEADER (NOW INCLUDES RX) ===
+                  // === SEARCH BOX ===
                   Container(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    padding: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val),
+                      decoration: InputDecoration(
+                        hintText: "Search Brands...",
+                        hintStyle: GoogleFonts.poppins(fontSize: 13),
+                        prefixIcon: const Icon(Icons.search,
+                            color: Color(0xFF4A148C), size: 20),
+                        filled: true,
+                        fillColor: Colors.white,
+                        contentPadding:
+                            const EdgeInsets.symmetric(vertical: 0),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              BorderSide(color: Colors.grey.shade300),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide:
+                              BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // === PRODUCTS HEADER ===
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                     child: Row(
                       children: [
                         Expanded(
                           flex: 4,
                           child: Text(
-                            "PRODUCT",
+                            "Brands *",
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
-                              color: Colors.grey[700],
-                              fontSize: 11,
+                              color: const Color(0xFF4A148C),
+                              fontSize: 12,
                             ),
                           ),
                         ),
@@ -439,11 +672,12 @@ class _ReportingScreenState extends State<ReportingScreen> {
                           flex: 2,
                           child: Center(
                             child: Text(
-                              "POB",
+                              "Brand Added\nAfter Last Visit",
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
-                                fontSize: 11,
+                                fontSize: 9,
                               ),
                             ),
                           ),
@@ -452,11 +686,11 @@ class _ReportingScreenState extends State<ReportingScreen> {
                           flex: 2,
                           child: Center(
                             child: Text(
-                              "SPL",
+                              "Sample",
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
-                                fontSize: 11,
+                                fontSize: 9,
                               ),
                             ),
                           ),
@@ -465,11 +699,12 @@ class _ReportingScreenState extends State<ReportingScreen> {
                           flex: 2,
                           child: Center(
                             child: Text(
-                              "RX",
+                              "Brand\nRxbed",
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
-                                fontSize: 11,
+                                fontSize: 9,
                               ),
                             ),
                           ),
@@ -478,120 +713,179 @@ class _ReportingScreenState extends State<ReportingScreen> {
                     ),
                   ),
 
-                  // === PRODUCTS LIST ===
+                  // === PRODUCTS LIST (scrollable, expands to fill space) ===
                   Expanded(
-                    child: ListView.separated(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      itemCount: _uiProducts.length,
-                      separatorBuilder: (c, i) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final p = _uiProducts[index];
-                        return ProductRowItem(
-                          key: ValueKey(p['id']),
-                          product: p,
-                          onCheckChanged: (val) {
-                            setState(() {
-                              p['isSelected'] = val;
-                              if (!val) {
-                                p['pob'] = 0;
-                                p['sample'] = 0;
-                                p['rx'] = 0; // Reset Rx too
-                              }
-                            });
-                          },
-                          onPobChanged: (val) => _updateQty(index, 'pob', val),
-                          onSampleChanged: (val) =>
-                              _updateQty(index, 'sample', val),
-                          onRxChanged: (val) =>
-                              _updateQty(index, 'rx', val), // Rx Handler
-                        );
-                      },
-                    ),
+                    child: Builder(builder: (context) {
+                      final filteredProducts = _uiProducts
+                          .where((p) => p['name']
+                              .toString()
+                              .toLowerCase()
+                              .contains(_searchQuery.toLowerCase()))
+                          .toList();
+                      return ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                        itemCount: filteredProducts.length,
+                        separatorBuilder: (c, i) =>
+                            const SizedBox(height: 5),
+                        itemBuilder: (context, index) {
+                          final p = filteredProducts[index];
+                          final origIndex = _uiProducts.indexOf(p);
+                          return ProductRowItem(
+                            key: ValueKey(p['id']),
+                            product: p,
+                            onCheckChanged: (val) {
+                              setState(() {
+                                p['isSelected'] = val;
+                                if (!val) {
+                                  p['pob'] = 0;
+                                  p['sample'] = 0;
+                                  p['rx'] = 0;
+                                }
+                              });
+                            },
+                            onPobChanged: (val) =>
+                                _updateQty(origIndex, 'pob', val),
+                            onSampleChanged: (val) =>
+                                _updateQty(origIndex, 'sample', val),
+                            onRxChanged: (val) =>
+                                _updateQty(origIndex, 'rx', val),
+                          );
+                        },
+                      );
+                    }),
                   ),
 
-                  // === BOTTOM SHEET (REMARKS & SUBMIT) ===
+                  // === BOTTOM SECTION: hidden when keyboard up (unless typing business value) ===
+                  if (MediaQuery.of(context).viewInsets.bottom == 0 || _businessValueFocused)
                   Container(
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       boxShadow: [
                         BoxShadow(
-                          blurRadius: 15,
-                          color: Colors.black.withOpacity(0.08),
-                          offset: const Offset(0, -5),
+                          blurRadius: 12,
+                          color: Colors.black.withOpacity(0.07),
+                          offset: const Offset(0, -4),
                         ),
                       ],
                       borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(24),
+                        top: Radius.circular(20),
                       ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        DropdownButtonFormField<String>(
-                          value: _selectedRemark,
-                          isExpanded: true,
-                          icon: const Icon(
-                            Icons.arrow_drop_down_circle,
-                            color: Color(0xFF4A148C),
-                          ),
-                          items: remarks
-                              .map(
-                                (r) => DropdownMenuItem(
-                                  value: r,
-                                  child: Text(
-                                    r,
-                                    style: GoogleFonts.poppins(fontSize: 13),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (v) => setState(() {
-                            _selectedRemark = v;
-                            if (v != 'Other') _otherRemarkController.clear();
-                          }),
-                          decoration: InputDecoration(
-                            labelText: "Visit Outcome / Remark",
-                            labelStyle: const TextStyle(fontSize: 12),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(
-                                color: Colors.grey.shade300,
+                        // Business Value
+                        SizedBox(
+                          height: 44,
+                          child: TextField(
+                            controller: _businessValueController,
+                            focusNode: _businessValueFocusNode,
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [
+                              FilteringTextInputFormatter.digitsOnly
+                            ],
+                            style: GoogleFonts.poppins(fontSize: 13),
+                            decoration: InputDecoration(
+                              labelText:
+                                  "Dr. Business Value as per PTS *",
+                              labelStyle: GoogleFonts.poppins(
+                                  fontSize: 11, color: Colors.grey[600]),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade300),
                               ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade300),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 0),
                             ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 0,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // Remark Dropdown
+                        SizedBox(
+                          height: 44,
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedRemark,
+                            isExpanded: true,
+                            icon: const Icon(
+                              Icons.arrow_drop_down_circle,
+                              color: Color(0xFF4A148C),
+                              size: 18,
+                            ),
+                            items: remarks
+                                .map(
+                                  (r) => DropdownMenuItem(
+                                    value: r,
+                                    child: Text(
+                                      r,
+                                      style:
+                                          GoogleFonts.poppins(fontSize: 12),
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) => setState(() {
+                              _selectedRemark = v;
+                              if (v != 'Other')
+                                _otherRemarkController.clear();
+                            }),
+                            decoration: InputDecoration(
+                              labelText: "Visit Outcome / Remark *",
+                              labelStyle: GoogleFonts.poppins(
+                                  fontSize: 11, color: Colors.grey[600]),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade300),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide:
+                                    BorderSide(color: Colors.grey.shade300),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 0),
                             ),
                           ),
                         ),
                         if (_selectedRemark == 'Other') ...[
-                          const SizedBox(height: 12),
-                          TextField(
-                            controller: _otherRemarkController,
-                            decoration: InputDecoration(
-                              labelText: "Type custom remark...",
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              filled: true,
-                              fillColor: Colors.grey.shade50,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 44,
+                            child: TextField(
+                              controller: _otherRemarkController,
+                              style: GoogleFonts.poppins(fontSize: 13),
+                              decoration: InputDecoration(
+                                labelText: "Type custom remark...",
+                                labelStyle: GoogleFonts.poppins(
+                                    fontSize: 11, color: Colors.grey[600]),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 0),
                               ),
                             ),
                           ),
                         ],
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
                         ElevatedButton(
                           onPressed: _submitReport,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF4A148C),
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(10),
                             ),
                             elevation: 2,
                           ),
@@ -602,8 +896,8 @@ class _ReportingScreenState extends State<ReportingScreen> {
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
-                              fontSize: 16,
-                              letterSpacing: 1,
+                              fontSize: 14,
+                              letterSpacing: 0.8,
                             ),
                           ),
                         ),
@@ -622,18 +916,18 @@ class _ReportingScreenState extends State<ReportingScreen> {
 
     return InkWell(
       onTap: _showJointWorkPicker,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           border: Border.all(color: Colors.white24),
         ),
         child: Row(
           children: [
-            const Icon(Icons.group_add, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
+            const Icon(Icons.group_add, color: Colors.white, size: 16),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 count > 0
@@ -642,11 +936,12 @@ class _ReportingScreenState extends State<ReportingScreen> {
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontWeight: count > 0 ? FontWeight.bold : FontWeight.w500,
-                  fontSize: 14,
+                  fontSize: 12,
                 ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Icon(Icons.search, color: Colors.white70, size: 18),
+            const Icon(Icons.chevron_right, color: Colors.white70, size: 16),
           ],
         ),
       ),
@@ -679,41 +974,29 @@ class ProductRowItem extends StatefulWidget {
 }
 
 class _ProductRowItemState extends State<ProductRowItem> {
-  late TextEditingController _pobController;
   late TextEditingController _sampleController;
-  late TextEditingController _rxController; // NEW
 
   @override
   void initState() {
     super.initState();
-    _pobController = TextEditingController(
-      text: widget.product['pob'] == 0 ? '' : widget.product['pob'].toString(),
-    );
     _sampleController = TextEditingController(
       text: widget.product['sample'] == 0
           ? ''
           : widget.product['sample'].toString(),
     );
-    _rxController = TextEditingController(
-      text: widget.product['rx'] == 0 ? '' : widget.product['rx'].toString(),
-    ); // NEW
   }
 
   @override
   void didUpdateWidget(ProductRowItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!widget.product['isSelected']) {
-      if (_pobController.text.isNotEmpty) _pobController.clear();
       if (_sampleController.text.isNotEmpty) _sampleController.clear();
-      if (_rxController.text.isNotEmpty) _rxController.clear(); // NEW
     }
   }
 
   @override
   void dispose() {
-    _pobController.dispose();
     _sampleController.dispose();
-    _rxController.dispose(); // NEW
     super.dispose();
   }
 
@@ -736,7 +1019,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 6),
       child: Row(
         children: [
           // Name and Checkbox (Flex 4)
@@ -773,10 +1056,15 @@ class _ProductRowItemState extends State<ProductRowItem> {
           // Three Inputs (Flex 2 each)
           Expanded(
             flex: 2,
-            child: _buildMiniInput(
-              _pobController,
-              isSelected,
-              widget.onPobChanged,
+            child: Transform.scale(
+              scale: 0.7,
+              child: Switch(
+                value: widget.product['pob'] == 1,
+                onChanged: isSelected ? (val) {
+                  widget.onPobChanged(val ? "1" : "0");
+                } : null,
+                activeColor: const Color(0xFF4A148C),
+              ),
             ),
           ),
           const SizedBox(width: 4),
@@ -791,10 +1079,15 @@ class _ProductRowItemState extends State<ProductRowItem> {
           const SizedBox(width: 4),
           Expanded(
             flex: 2,
-            child: _buildMiniInput(
-              _rxController,
-              isSelected,
-              widget.onRxChanged,
+            child: Transform.scale(
+              scale: 0.7,
+              child: Switch(
+                value: widget.product['rx'] == 1,
+                onChanged: isSelected ? (val) {
+                  widget.onRxChanged(val ? "1" : "0");
+                } : null,
+                activeColor: const Color(0xFF4A148C),
+              ),
             ),
           ),
         ],
@@ -808,7 +1101,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
     Function(String) onChanged,
   ) {
     return Container(
-      height: 40,
+      height: 34,
       decoration: BoxDecoration(
         color: active ? Colors.grey.shade50 : Colors.grey.shade100,
         borderRadius: BorderRadius.circular(8),
@@ -818,6 +1111,7 @@ class _ProductRowItemState extends State<ProductRowItem> {
         controller: controller,
         enabled: active,
         keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         textAlign: TextAlign.center,
         style: GoogleFonts.poppins(
           fontWeight: FontWeight.bold,

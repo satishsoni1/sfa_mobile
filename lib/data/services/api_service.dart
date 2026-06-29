@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'package:intl/intl.dart';
+import 'package:zforce/data/models/attendance_models.dart';
 import 'package:zforce/data/models/visit_report.dart';
 import '../models/doctor.dart' show Doctor;
 import '../models/tour_plan.dart' show TourPlan;
@@ -13,9 +14,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiService {
   // Android Emulator uses 10.0.2.2. For Real Device use your PC IP (e.g., 192.168.1.5)
   static const String baseUrl = 'https://zorvia.globalspace.in/api';
+
+  String _errorMessageFromBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['message'] != null) {
+        return decoded['message'].toString();
+      }
+    } catch (_) {}
+    return body;
+  }
+
   Future<List<dynamic>> getVisitsByDate(String date) async {
     // API Endpoint: /api/visits?date=2026-02-04
-    final url = Uri.parse('$baseUrl/app/visits?date=$date');
+    final url = Uri.parse('$baseUrl/app/new/visits?date=$date');
     final headers = await _getHeaders();
 
     final response = await http.get(url, headers: headers);
@@ -25,7 +37,7 @@ class ApiService {
       // Return the list inside 'data', or empty list if null
       return jsonResponse['data'] ?? [];
     } else {
-      throw Exception('Failed to load visits: ${response.body}');
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 
@@ -157,7 +169,7 @@ class ApiService {
     if (response.statusCode == 200) {
       return jsonDecode(response.body); // Returns list of doctors
     }
-    return [];
+    throw Exception(_errorMessageFromBody(response.body));
   }
 
   // --- 4. VISITS (REPORTING) ---
@@ -165,7 +177,7 @@ class ApiService {
   // Submit Single Visit
   Future<void> submitVisit(Map<String, dynamic> visitData) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/app/visits'),
+      Uri.parse('$baseUrl/app/new/visits'),  //new endpoint
       headers: await _getHeaders(),
       body: jsonEncode(visitData),
     );
@@ -178,7 +190,7 @@ class ApiService {
   Future<List<dynamic>> getTodayVisits() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/app/visits/today'),
+        Uri.parse('$baseUrl/app/new/visits/today'), // new endpoint
         headers: await _getHeaders(),
       );
 
@@ -224,7 +236,7 @@ class ApiService {
   Future<void> submitDayFinal({String? date, required int chemistCount}) async {
     // Use your existing baseUrl variable mechanism
     // Ensure the endpoint path matches your Laravel route (e.g., /visits/submit-day)
-    final url = Uri.parse('$baseUrl/app/visits/submit-day');
+    final url = Uri.parse('$baseUrl/app/new/visits/submit-day');  // new endpoint
     final headers = await _getHeaders();
     final Map<String, dynamic> requestData = {'chemist_count': chemistCount};
     if (date != null) {
@@ -237,7 +249,7 @@ class ApiService {
     final response = await http.post(url, headers: headers, body: body);
 
     if (response.statusCode != 200) {
-      throw Exception('Failed to submit day: ${response.body}');
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 
@@ -387,19 +399,19 @@ class ApiService {
     // }
 
     final response = await http.post(
-      Uri.parse('$baseUrl/app/visits'),
+      Uri.parse('$baseUrl/app/new/visits'), // updated endpoint changed from /app/visits
       headers: await _getHeaders(),
       body: jsonEncode(visitData),
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Failed to save visit: ${response.body}');
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 
   Future<void> updateVisit(String id, Map<String, dynamic> data) async {
     final response = await http.put(
-      Uri.parse('$baseUrl/app/visits/$id'), // Endpoint: /api/app/visits/{id}
+      Uri.parse('$baseUrl/app/new/visits/$id'), // old Endpoint: /api/app/visits/{id}
       headers: await _getHeaders(),
       body: jsonEncode(data),
     );
@@ -448,7 +460,7 @@ class ApiService {
   Future<List<VisitReport>> getDoctorHistory(String doctorId) async {
     // Encode the doctor name to handle spaces properly
     final url = Uri.parse(
-      '$baseUrl/app/visits/history?doctorId=${Uri.encodeComponent(doctorId)}',
+      '$baseUrl/app/new/visits/history?doctorId=${Uri.encodeComponent(doctorId)}',
     );
 
     try {
@@ -589,7 +601,7 @@ class ApiService {
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception("Failed to submit NFW Report");
+      throw Exception(_errorMessageFromBody(response.body));
     }
   }
 
@@ -1135,35 +1147,104 @@ Future<void> submitFullMonth(int month, int year) async {
     return {'from_town': '', 'is_hq': true};
   }
 
-  /// Returns {routes: List<Map>, hq_location: String?}
-  /// hq_location is from expense_rates_ta.from_town_code or
-  /// gst_employee_profile.head_qtr when no TA routes exist.
+  /// Returns {routes, hq_location, has_own_policy, subordinate_locations, ...}
+  /// has_own_policy: true when the employee has their own entries in expense_rates_ta.
+  /// subordinate_locations: flat list of unique town codes from all subordinates (for manager dropdowns).
   Future<Map<String, dynamic>> getTaRoutes() async {
     try {
       final token = await getToken();
       final response = await http.get(
-        Uri.parse('$baseUrl/app/expense/ta-routes'),
+        Uri.parse('$baseUrl/app/expense/ta-routes?include_subordinates=1'),
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );
       if (response.statusCode == 200) {
         final body = json.decode(response.body);
         final list = body['data'] ?? body;
         return {
-          'routes': List<Map<String, dynamic>>.from(
-              list is List ? list : []),
-          'hq_location': body['hq_location']?.toString(),
+          'routes': List<Map<String, dynamic>>.from(list is List ? list : []),
+          'hq_location':           body['hq_location']?.toString(),
+          'has_own_policy':        body['has_own_policy'] == true || body['has_own_policy'] == 1,
+          'subordinate_locations': List<String>.from(body['subordinate_locations'] ?? []),
+          'allow_da_selection':    body['allow_da_selection'],
+          'da_hq':    body['da_hq'],
+          'da_ex_hq': body['da_ex_hq'],
+          'da_ex':    body['da_ex'],
+          'da_os':    body['da_os'],
+          'da_ex_os': body['da_ex_os'],
         };
       }
     } catch (_) {}
-    return {'routes': <Map<String, dynamic>>[], 'hq_location': null};
+    return {
+      'routes': <Map<String, dynamic>>[],
+      'hq_location': null,
+      'has_own_policy': true,
+      'subordinate_locations': <String>[],
+    };
+  }
+
+  /// GET /app/expense/route-km-suggestion?from_town=X&to_town=Y
+  /// Returns the minimum km found in expense_rates_ta for this pair across all
+  /// other employees. Used to pre-fill the "Add Route" form with a suggestion.
+  Future<Map<String, dynamic>> getRouteKmSuggestion({
+    required String fromTown,
+    required String toTown,
+  }) async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse(
+            '$baseUrl/app/expense/route-km-suggestion'
+            '?from_town=${Uri.encodeComponent(fromTown)}'
+            '&to_town=${Uri.encodeComponent(toTown)}'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) return json.decode(response.body);
+    } catch (_) {}
+    return {'found': false, 'suggested_km': null};
+  }
+
+  /// POST /app/expense/save-route
+  /// Saves a new employee-specific route into expense_rates_ta.
+  /// Backend deduplicates by (from_town_code, to_town_code, employee_code).
+  Future<void> saveExpenseRoute({
+    required String fromTown,
+    required String toTown,
+    required String modeOfTravel,
+    required double kms,
+    String? stationType,
+  }) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/expense/save-route'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({
+        'from_town_code': fromTown,
+        'to_town_code': toTown,
+        'mode_of_travel': modeOfTravel,
+        'kms': kms.toStringAsFixed(1),
+        'station_type': stationType,
+      }),
+    );
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(
+          json.decode(response.body)['message'] ?? 'Failed to save route');
+    }
   }
 
   // ─── NFW DA Rate (expense_rates by designation) ──────────────────────────────
 
-  Future<Map<String, dynamic>> getNfwDaRate({String type = 'Meeting'}) async {
+  Future<Map<String, dynamic>> getNfwDaRate({String type = 'Meeting', String? location}) async {
     final token = await getToken();
+    var query = 'type=${Uri.encodeComponent(type)}';
+    if (location != null && location.isNotEmpty) {
+      query += '&location=${Uri.encodeComponent(location)}';
+    }
     final response = await http.get(
-      Uri.parse('$baseUrl/app/expense/nfw-rate?type=${Uri.encodeComponent(type)}'),
+      Uri.parse('$baseUrl/app/expense/nfw-rate?$query'),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
     );
     if (response.statusCode == 200) return json.decode(response.body);
@@ -1186,6 +1267,20 @@ Future<void> submitFullMonth(int month, int year) async {
       }
     } catch (_) {}
     return [];
+  }
+
+  /// GET /app/expense/da-config
+  /// Returns {allow_da_selection: 0/1, da_hq: n, da_ex_hq: n, da_os: n, da_ex_os: n}
+  Future<Map<String, dynamic>> getExpenseDaConfig() async {
+    try {
+      final token = await getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/app/expense/da-config'),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) return json.decode(response.body);
+    } catch (_) {}
+    return {'allow_da_selection': 0};
   }
 
   /// POST /app/expense/recalculate-location
@@ -1784,18 +1879,22 @@ Future<void> submitFullMonth(int month, int year) async {
         return data
             .map(
               (e) => {
-                // Prefer employee_code for report filters; fallback to id.
-                'id': (e['employee_code'] ?? e['emp_code'] ?? e['id'])
+                // Always use the user_id for report filters, as the backend expects the user_id value under the 'employee_code' key.
+                'id': (e['id'] ?? e['user_id'] ?? e['employee_id'] ?? '')
                     .toString(),
-                'name': e['name'].toString(),
+                'name': (e['name'] ?? e['employee_name'] ?? e['emp_name'] ?? '')
+                    .toString(),
                 'employee_code':
                     (e['employee_code'] ?? e['emp_code'] ?? e['id']).toString(),
+                'employee_id': (e['employee_id'] ?? e['id'] ?? '').toString(),
                 'designation': (e['designation'] ?? '').toString(),
-                'head_qtr': (e['head_qtr'] ?? e['hq'] ?? '').toString(),
-                'hq': (e['hq'] ?? e['head_qtr'] ?? '').toString(),
+                'head_qtr':
+                    (e['head_qtr'] ?? e['hq'] ?? e['head_quarter'] ?? '').toString(),
+                'hq':
+                    (e['hq'] ?? e['head_qtr'] ?? e['head_quarter'] ?? '').toString(),
                 'division': (e['division'] ?? '').toString(),
-                'zone': (e['zone'] ?? '').toString(),
-                'state': (e['state'] ?? '').toString(),
+                'zone': (e['zone'] ?? e['zone_name'] ?? '').toString(),
+                'state': (e['state'] ?? e['state_name'] ?? '').toString(),
               },
             )
             .toList();
@@ -1804,6 +1903,67 @@ Future<void> submitFullMonth(int month, int year) async {
       debugPrint("Error fetching team: $e");
     }
     return [];
+  }
+
+  // Added for manager attendance reporting. Summary keys stay backend-driven.
+  Future<AttendanceApiResponse> fetchAttendance({
+    required String fromDate,
+    required String toDate,
+    String? employeeCode,
+    int? employeeId,
+  }) async {
+    final token = await getToken();
+    if (token == null) {
+      return const AttendanceApiResponse(
+        success: false,
+        fromDate: '',
+        toDate: '',
+        records: [],
+      );
+    }
+
+    final uri = Uri.parse('$baseUrl/app/attendance').replace(
+      queryParameters: {
+        'from_date': fromDate,
+        'to_date': toDate,
+        if (employeeCode != null && employeeCode.trim().isNotEmpty)
+          'employee_code': employeeCode.trim(),
+        if (employeeId != null && employeeId > 0) 'employee_id': employeeId.toString(),
+      },
+    );
+
+    final response = await http.get(uri, headers: await _getHeaders());
+    if (response.statusCode == 200) {
+      return AttendanceApiResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  // Added for date tap details in the attendance calendar.
+  Future<AttendanceDetailResponse> fetchAttendanceDetail({
+    required String employeeCode,
+    required String date,
+    int? employeeId,
+  }) async {
+    final uri = Uri.parse('$baseUrl/app/attendance/detail').replace(
+      queryParameters: {
+        'employee_code': employeeCode,
+        if (employeeId != null && employeeId > 0) 'employee_id': employeeId.toString(),
+        'date': date,
+      },
+    );
+
+    final response = await http.get(uri, headers: await _getHeaders());
+    if (response.statusCode == 200) {
+      return AttendanceDetailResponse.fromJson(
+        jsonDecode(response.body) as Map<String, dynamic>,
+      );
+    }
+
+    throw Exception(_errorMessageFromBody(response.body));
   }
 /*
   // 2. Fetch Specific Report Data (Call Avg, TP Deviation, Summary, etc.)

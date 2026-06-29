@@ -281,10 +281,15 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
         Navigator.pop(context, true); // Return TRUE to refresh list
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
+        String errorMsg = e.toString();
+        if (errorMsg.startsWith('Exception: ')) {
+          errorMsg = errorMsg.substring(11);
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
         );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

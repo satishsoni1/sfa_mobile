@@ -39,7 +39,18 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
     final provider = Provider.of<ReportProvider>(context, listen: false);
 
     // 1. ALWAYS FETCH FRESH DATA (No isEmpty check)
+    try {
     await provider.fetchDoctors();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
     await provider.fetchTodayData();
 
     try {
@@ -350,6 +361,7 @@ class _DoctorListScreenState extends State<DoctorListScreen> {
                         builder: (_) => ReportingScreen(
                           doctorId: doc.id.toString(),
                           doctorName: doc.name,
+                          doctorSpeciality: doc.specialization,
                           isPlanned: isPlanned,
                         ),
                       ),

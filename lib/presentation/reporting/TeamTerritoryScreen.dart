@@ -333,6 +333,7 @@ class _TeamTerritoryScreenState extends State<TeamTerritoryScreen> {
                         builder: (_) => ReportingScreen(
                           doctorId: doc.id.toString(),
                           doctorName: doc.name,
+                          doctorSpeciality: doc.specialization,
                         ),
                       ),
                     );

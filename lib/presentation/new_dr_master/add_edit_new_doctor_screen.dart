@@ -397,11 +397,11 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
     if (sp == null || sp.isEmpty) return null;
 
     // Full MCL complete-list cap only: users can exceed individual required
-    // speciality counts, but cannot add beyond +10% of the overall MCL target.
+    // speciality counts, but cannot add beyond +15% of the overall MCL target.
     final fullMclTarget =
         widget.mslTargets.fold<int>(0, (sum, t) => sum + t.quota);
     if (fullMclTarget > 0) {
-      final maxAllowed = (fullMclTarget * 11) ~/ 10;
+      final maxAllowed = (fullMclTarget * 115) ~/ 100;
       final fullMclCount = _otherDoctors
           .where((d) => d.specialtyPracticeType.isNotEmpty)
           .length;

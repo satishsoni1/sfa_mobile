@@ -71,12 +71,12 @@ class ReportsDashboardScreen extends StatelessWidget {
         'type': ReportType.visitSummary,
       },
       {
-        'title': 'Web DCR',
+        'title': 'Visit Report',
         'icon': Icons.assignment_outlined,
         'external_path': 'visit',
       },
       {
-        'title': 'Tab DCR',
+        'title': 'DCR',
         'icon': Icons.description_outlined,
         'external_path': 'dcrview',
       },
@@ -91,7 +91,7 @@ class ReportsDashboardScreen extends StatelessWidget {
       backgroundColor: const Color(0xFFF4F8F9),
       appBar: AppBar(
         title: const Text(
-          "Team Reports",
+          "Reports",
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(color: Colors.white),

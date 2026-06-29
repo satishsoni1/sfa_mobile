@@ -12,6 +12,9 @@ import 'package:zforce/presentation/doctor_list/chemist_list_screen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseManagerScreen.dart';
 import 'package:zforce/presentation/doctor_brand/doctor_brand_screen.dart';
+import 'package:zforce/presentation/leave/leave_list_screen.dart';
+import 'package:zforce/presentation/master/data_upload_screen.dart';
+import 'package:zforce/presentation/master/attendance_report_screen.dart';
 import 'package:zforce/presentation/master/reports_dashboard_screen.dart';
 import 'package:zforce/presentation/route_wise_plan/tour_plan_screen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
@@ -53,6 +56,7 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  // --- APP VERSION (Update this manually before every new build) ---
   static const String CURRENT_APP_VERSION = "1.0.27";
 
   bool _isCheckedIn = false;
@@ -256,7 +260,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _openTabJointWork() {
     final employeeCode =
-        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode.trim();
+        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
+            .trim();
+
     if (employeeCode == null || employeeCode.isEmpty) {
       _showSnack("Employee code not available.");
       return;
@@ -265,7 +271,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context,
       InternalWebViewScreen.routeName,
       arguments: InternalWebViewArgs(
-        url: 'https://zorvia.globalspace.in/dcrapproval/$employeeCode',
+        url: url,
         title: 'Tab Joint Work',
       ),
     );
@@ -273,7 +279,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _openWebLinks() {
     final employeeCode =
-        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode.trim();
+        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
+            .trim();
+
     if (employeeCode == null || employeeCode.isEmpty) {
       _showSnack("Employee code not available.");
       return;
@@ -597,20 +605,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.teal,
             () => _navigateTo(const RouteTourPlanScreen()),
           ),
-          _MenuAction(
-            Icons.slideshow_outlined,
-            "VODOCLM",
-            const Color(0xFF4A148C),
-            () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => ChangeNotifierProvider(
-                  create: (_) => ClmProvider(),
-                  child: const ClmHomeScreen(),
-                ),
-              ),
-            ),
-          ),
+          // _MenuAction(
+          //   Icons.slideshow_outlined,
+          //   "VODOCLM",
+          //   const Color(0xFF4A148C),
+          //   () => Navigator.push(
+          //     context,
+          //     MaterialPageRoute(
+          //       builder: (_) => ChangeNotifierProvider(
+          //         create: (_) => ClmProvider(),
+          //         child: const ClmHomeScreen(),
+          //       ),
+          //     ),
+          //   ),
+          // ),
           if (canUseWebDcr)
             _MenuAction(
               Icons.medical_services_outlined,
@@ -658,28 +666,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         const SizedBox(height: 24),
 
-        _buildSectionTitle("AI Intelligence", const Color(0xFF4A148C)),
+        _buildSectionTitle("AI Intelligence"),
         _buildMenuGrid([
           _MenuAction(
-            Icons.auto_awesome_rounded,
+            Icons.auto_awesome,
             "AI Insights Hub",
             const Color(0xFF4A148C),
             () => _navigateTo(const AiHubScreen()),
           ),
           _MenuAction(
-            Icons.support_agent_rounded,
+            Icons.support_agent,
             "Sales Assistant",
             const Color(0xFF1565C0),
             () => _navigateTo(const AiSalesAssistantScreen()),
           ),
           _MenuAction(
-            Icons.trending_up_rounded,
+            Icons.trending_up,
             "Product Perf.",
             const Color(0xFF2E7D32),
             () => _navigateTo(const AiProductPerformanceScreen()),
           ),
           _MenuAction(
-            Icons.person_search_rounded,
+            Icons.person_search,
             "Doctor Review",
             const Color(0xFF6A1B9A),
             () => _navigateTo(const AiDoctorReviewScreen()),
@@ -687,7 +695,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         const SizedBox(height: 24),
 
-        _buildSectionTitle("Manager Reporting", Colors.blue),
+        _buildSectionTitle("Manager Reporting"),
         _buildMenuGrid([
           _MenuAction(
             Icons.groups_rounded,
@@ -702,29 +710,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
             () => _navigateTo(const ReportsDashboardScreen()),
           ),
           _MenuAction(
-            Icons.approval_rounded,
-            "DCR Approval\n(Web)",
-            Colors.teal,
+            Icons.approval,
+            "DCR Approvals (web)",
+            Colors.green,
             () => _navigateTo(const ManagerJointWorkScreen()),
           ),
           _MenuAction(
             Icons.handshake_outlined,
-            "DCR Approval\n(Tab)",
-            Colors.indigo,
+            "DCR Approvals (Tab)",
+            Colors.blue,
             _openTabJointWork,
           ),
-          _MenuAction(
-            Icons.receipt_long_outlined,
+            _MenuAction(
+            Icons.receipt_long,
             "Team Expenses",
             Colors.deepOrange,
             () => _navigateTo(const ExpenseManagerScreen()),
           ),
           _MenuAction(
-            Icons.link_rounded,
+            Icons.link,
             "Other Links",
             Colors.indigo,
             _openWebLinks,
           ),
+          _MenuAction(Icons.link, "Other Links", Colors.indigo, _openWebLinks),
         ]),
         const SizedBox(height: 24),
 

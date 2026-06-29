@@ -27,6 +27,9 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   List<dynamic> _monthlyClaims = [];
   Map<String, dynamic> _summary = {};
   bool _isSubmitted = false;
+  bool _hasPendingAdminChanges = false;
+  String? _approvalStatus;
+  String? _rejectionReason;
 
   @override
   void initState() {
@@ -54,8 +57,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
       setState(() {
         _expenses = summaryData['expenses'] ?? [];
-        _summary = summaryData['summary'] ?? {};
-        _isSubmitted = _summary['is_already_submitted'] == true;
+        _summary  = summaryData['summary'] ?? {};
+        _isSubmitted              = _summary['is_already_submitted'] == true;
+        _hasPendingAdminChanges   = _summary['has_pending_admin_changes'] == true;
+        _approvalStatus           = _summary['approval_status']?.toString();
+        _rejectionReason          = _summary['rejection_reason']?.toString();
         _monthlyClaims = claimsData;
       });
     } catch (_) {
@@ -123,7 +129,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               },
               child: const Icon(Icons.add, color: Colors.white),
             ),
-      bottomNavigationBar: (!_isLoading && !_isSubmitted && _expenses.isNotEmpty)
+      bottomNavigationBar: (!_isLoading && !_isSubmitted && _expenses.isNotEmpty) ||
+              (!_isLoading && _approvalStatus == 'rejected' && _expenses.isNotEmpty)
           ? _buildSubmitBar()
           : null,
     );
@@ -195,6 +202,65 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               _statusBadge(),
             ],
           ),
+          if (_approvalStatus == 'rejected') ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.cancel_outlined, size: 14, color: Colors.red),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Expense rejected — you can edit and resubmit.',
+                          style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                        if (_rejectionReason != null && _rejectionReason!.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'Reason: $_rejectionReason',
+                            style: TextStyle(color: Colors.red.shade200, fontSize: 11, height: 1.3),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_hasPendingAdminChanges) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 14, color: Colors.amber),
+                  const SizedBox(width: 7),
+                  const Expanded(
+                    child: Text(
+                      'Admin has reviewed your expense. Updated amounts will be visible after the 3rd of next month.',
+                      style: TextStyle(color: Colors.amber, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 6),
           Text(
             '₹${_fmt(grandTotal + claimsTotal)}',
@@ -219,8 +285,14 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   Widget _statusBadge() {
+    if (_approvalStatus == 'rejected') {
+      return _badge('Rejected', Colors.red.shade400, Icons.cancel_outlined);
+    }
+    if (_approvalStatus == 'approved') {
+      return _badge('Approved', Colors.green.shade600, Icons.verified_outlined);
+    }
     if (_isSubmitted) {
-      return _badge('Submitted', Colors.green.shade400, Icons.lock_outline);
+      return _badge('Submitted', Colors.blue.shade400, Icons.hourglass_top_outlined);
     }
     return _badge('Pending', Colors.orange.shade600, Icons.pending_outlined);
   }
@@ -293,7 +365,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   Widget _buildDailyCard(Map<String, dynamic> item) {
-    final isLocked = item['is_submitted_for_month'] == 1;
+    // Rejected months are always editable — user must be able to fix and resubmit
+    final isLocked = item['is_submitted_for_month'] == 1 && _approvalStatus != 'rejected';
     final date = DateTime.tryParse(item['expense_date'] ?? '') ?? DateTime.now();
     final daType = (item['da_type'] ?? 'HQ').toString().toUpperCase();
     final total = _toDouble(item['da_amount']) +
@@ -650,30 +723,32 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
   Widget _buildClaimCard(Map<String, dynamic> claim) {
     final icons = {
-      'Mobile'    : Icons.phone_android,
-      'Internet'  : Icons.wifi,
-      'Hotel'     : Icons.hotel_outlined,
-      'Postage'   : Icons.local_post_office_outlined,
-      'Toll'      : Icons.toll_outlined,
-      'Courier'   : Icons.local_shipping_outlined,
-      'Parking'   : Icons.local_parking,
-      'Food Bill' : Icons.restaurant_outlined,
-      'Stationary': Icons.edit_note_outlined,
-      'Award'     : Icons.emoji_events_outlined,
-      'Misc'      : Icons.more_horiz,
+      'Mobile'         : Icons.phone_android,
+      'Internet'       : Icons.wifi,
+      'Hotel'          : Icons.hotel_outlined,
+      'Postage'        : Icons.local_post_office_outlined,
+      'Toll'           : Icons.toll_outlined,
+      'Courier'        : Icons.local_shipping_outlined,
+      'Parking'        : Icons.local_parking,
+      'Food Bill'      : Icons.restaurant_outlined,
+      'Stationary'     : Icons.edit_note_outlined,
+      'Award'          : Icons.emoji_events_outlined,
+      'Patrol Charges' : Icons.local_police_outlined,
+      'Misc'           : Icons.more_horiz,
     };
     final claimColors = {
-      'Mobile'    : Colors.blue,
-      'Internet'  : Colors.teal,
-      'Hotel'     : Colors.indigo,
-      'Postage'   : Colors.brown,
-      'Toll'      : Colors.deepOrange,
-      'Courier'   : Colors.cyan,
-      'Parking'   : Colors.purple,
-      'Food Bill' : Colors.green,
-      'Stationary': Colors.teal,
-      'Award'     : Colors.amber,
-      'Misc'      : Colors.grey,
+      'Mobile'         : Colors.blue,
+      'Internet'       : Colors.teal,
+      'Hotel'          : Colors.indigo,
+      'Postage'        : Colors.brown,
+      'Toll'           : Colors.deepOrange,
+      'Courier'        : Colors.cyan,
+      'Parking'        : Colors.purple,
+      'Food Bill'      : Colors.green,
+      'Stationary'     : Colors.teal,
+      'Award'          : Colors.amber,
+      'Patrol Charges' : Colors.deepPurple,
+      'Misc'           : Colors.grey,
     };
     final type  = claim['claim_type'] ?? 'Misc';
     final icon  = icons[type]  ?? Icons.receipt;
@@ -829,9 +904,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
-          icon: const Icon(Icons.send_rounded, size: 18),
+          icon: Icon(_approvalStatus == 'rejected' ? Icons.replay_rounded : Icons.send_rounded, size: 18),
           label: Text(
-              'Submit ${DateFormat('MMMM').format(_selectedMonth)} for Approval',
+              _approvalStatus == 'rejected'
+                  ? 'Resubmit ${DateFormat('MMMM').format(_selectedMonth)} for Approval'
+                  : 'Submit ${DateFormat('MMMM').format(_selectedMonth)} for Approval',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
           onPressed: _confirmSubmitMonth,
         ),
@@ -866,7 +943,12 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   void _openDailyExpense(Map<String, dynamic>? editData) async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ExpenseScreen(editData: editData)),
+      MaterialPageRoute(
+        builder: (_) => ExpenseScreen(
+          editData: editData,
+          isRejected: _approvalStatus == 'rejected',
+        ),
+      ),
     );
     _loadData();
   }
@@ -889,6 +971,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   void _confirmSubmitMonth() {
+    final claimsTotal = _monthlyClaims.fold<double>(0, (s, c) => s + _toDouble(c['amount']));
+    final grandTotal = _toDouble(_summary['grand_total']) + claimsTotal;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -906,9 +990,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             ),
             const SizedBox(height: 12),
             _summaryRow('Daily Expenses', _expenses.length.toString(), Icons.receipt),
+            if (claimsTotal > 0)
+              _summaryRow('Claims', '₹${_fmt(claimsTotal)}', Icons.add_card_outlined),
             _summaryRow(
                 'Total Amount',
-                '₹${_fmt(_toDouble(_summary['grand_total']))}',
+                '₹${_fmt(grandTotal)}',
                 Icons.currency_rupee),
           ],
         ),
@@ -1086,6 +1172,14 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         if (otherAmt > 0) {
           remarks = remarks.isEmpty ? "Other: Rs. ${_fmt(otherAmt)}" : "Other: Rs. ${_fmt(otherAmt)}. $remarks";
         }
+
+        // Remarks can accumulate unbounded across multiple admin overrides;
+        // an overlong string here makes a single PDF table row taller than
+        // one page, which MultiPage can never satisfy (TooManyPagesException).
+        const maxRemarksLen = 100;
+        if (remarks.length > maxRemarksLen) {
+          remarks = '${remarks.substring(0, maxRemarksLen)}…';
+        }
       }
 
       tableData.add([
@@ -1161,10 +1255,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'REMARKS',
     ];
 
-    pw.Widget _cell(String text, {
+    pw.Widget cell(String text, {
   bool bold = false,
   bool isNumber = false,
   double fontSize = 7.5,
+  int? maxLines,
 }) {
       return pw.Padding(
         padding: const pw.EdgeInsets.symmetric(
@@ -1178,6 +1273,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
           ),
           textAlign: isNumber ? pw.TextAlign.right : pw.TextAlign.left,
+          maxLines: maxLines,
+          overflow: maxLines != null ? pw.TextOverflow.clip : null,
         ),
       );
     }
@@ -1187,9 +1284,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         pageFormat: PdfPageFormat.a4.landscape,
         margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         build: (ctx) => [
-  pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
             // Header Title
             pw.Center(
               child: pw.Column(
@@ -1281,46 +1375,46 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       color: isEven ? PdfColors.grey50 : PdfColors.white,
                     ),
                     children: [
-                      _cell(row[0], bold: true, fontSize: 7.0),
-                      _cell(row[1], fontSize: 7.0),
-                      _cell(row[2], isNumber: true, fontSize: 7.0),
-                      _cell(row[3], isNumber: true, fontSize: 7.0),
-                      _cell(row[4], fontSize: 7.0),
-                      _cell(row[5], fontSize: 7.0),
-                      _cell(row[6], isNumber: true, fontSize: 7.0),
-                      _cell(row[7], isNumber: true, fontSize: 7.0),
-                      _cell(row[8], isNumber: true, fontSize: 7.0),
-                      _cell(row[9], isNumber: true, fontSize: 7.0),
-                      _cell(row[10], isNumber: true, fontSize: 7.0),
-                      _cell(row[11], isNumber: true, fontSize: 7.0),
-                      _cell(row[12], isNumber: true, fontSize: 7.0),
-                      _cell(row[13], isNumber: true, fontSize: 7.0),
-                      _cell(row[14], isNumber: true, fontSize: 7.0),
-                      _cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
-                      _cell(row[16], fontSize: 4.5),
+                      cell(row[0], bold: true, fontSize: 7.0),
+                      cell(row[1], fontSize: 7.0),
+                      cell(row[2], isNumber: true, fontSize: 7.0),
+                      cell(row[3], isNumber: true, fontSize: 7.0),
+                      cell(row[4], fontSize: 7.0),
+                      cell(row[5], fontSize: 7.0),
+                      cell(row[6], isNumber: true, fontSize: 7.0),
+                      cell(row[7], isNumber: true, fontSize: 7.0),
+                      cell(row[8], isNumber: true, fontSize: 7.0),
+                      cell(row[9], isNumber: true, fontSize: 7.0),
+                      cell(row[10], isNumber: true, fontSize: 7.0),
+                      cell(row[11], isNumber: true, fontSize: 7.0),
+                      cell(row[12], isNumber: true, fontSize: 7.0),
+                      cell(row[13], isNumber: true, fontSize: 7.0),
+                      cell(row[14], isNumber: true, fontSize: 7.0),
+                      cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
+                      cell(row[16], fontSize: 4.5, maxLines: 4),
                     ],
                   );
                 }),
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.purple50),
                   children: [
-                    _cell("TOTAL", bold: true, fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
-                    _cell(colTotalDocVisits > 0 ? colTotalDocVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalChemVisits > 0 ? colTotalChemVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
-                    _cell(colTotalFare > 0 ? _fmt(colTotalFare) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalHq > 0 ? _fmt(colTotalHq) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalExHq > 0 ? _fmt(colTotalExHq) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    _cell("", fontSize: 7.0),
+                    cell("TOTAL", bold: true, fontSize: 7.0),
+                    cell("", fontSize: 7.0),
+                    cell(colTotalDocVisits > 0 ? colTotalDocVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalChemVisits > 0 ? colTotalChemVisits.toString() : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell("", fontSize: 7.0),
+                    cell("", fontSize: 7.0),
+                    cell(colTotalFare > 0 ? _fmt(colTotalFare) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalHq > 0 ? _fmt(colTotalHq) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalExHq > 0 ? _fmt(colTotalExHq) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell("", fontSize: 7.0),
                   ],
                 ),
               ],
@@ -1477,8 +1571,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 ),
               ],
             ),
-                   ],
-        ),
       ],
     ),
   );
@@ -1524,7 +1616,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
 
   static const _claimTypes = [
     'Mobile', 'Internet', 'Hotel', 'Postage',
-    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Misc',
+    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Patrol Charges', 'Misc',
   ];
 
   final _claimIcons = {
@@ -1538,6 +1630,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
     'Food Bill': Icons.restaurant_outlined,
     'Stationary': Icons.edit_note_outlined,
     'Award': Icons.emoji_events_outlined,
+    'Patrol Charges': Icons.local_police_outlined,
     'Misc': Icons.more_horiz,
   };
 
