@@ -4,9 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../../data/models/clm_models.dart';
 import '../../providers/clm_provider.dart';
-import 'clm_checkin_screen.dart';
 import 'clm_doctor_locations_screen.dart';
 import 'clm_doctor_profile_screen.dart';
+import 'clm_pre_call_screen.dart';
 
 class ClmDoctorListScreen extends StatefulWidget {
   const ClmDoctorListScreen({super.key});
@@ -323,7 +323,7 @@ class _DoctorCard extends StatelessWidget {
     final hasAnniversary = doctor.hasAnniversarySoon();
 
     return GestureDetector(
-      onTap: () => _openCart(context),
+      onTap: () => _openPreCall(context),
       onLongPress: () => _openProfile(context),
       child: Container(
         padding: const EdgeInsets.all(14),
@@ -484,7 +484,7 @@ class _DoctorCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     GestureDetector(
-                      onTap: () => _openCart(context),
+                      onTap: () => _openPreCall(context),
                       child: Container(
                         width: 32,
                         height: 28,
@@ -540,14 +540,14 @@ class _DoctorCard extends StatelessWidget {
     );
   }
 
-  Future<void> _openCart(BuildContext context) async {
+  Future<void> _openPreCall(BuildContext context) async {
     final prov = context.read<ClmProvider>();
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ChangeNotifierProvider.value(
           value: prov,
-          child: ClmCheckInScreen(doctor: doctor),
+          child: ClmPreCallScreen(doctor: doctor),
         ),
       ),
     );

@@ -60,7 +60,6 @@ class ClmDatabaseService {
     }
     if (oldVersion < 5) {
       await _createDcrTables(db);
-      await _seedDcrDemoData(db);
     }
   }
 
@@ -172,7 +171,6 @@ class ClmDatabaseService {
     await _createCallReportsTable(db);
     await _createDoctorLocationsTable(db);
     await _createDcrTables(db);
-    await _seedDcrDemoData(db);
   }
 
   Future<void> _createCallReportsTable(Database db) async {
@@ -478,6 +476,17 @@ class ClmDatabaseService {
       limit: limit,
     );
     return rows.map(ClmSession.fromDb).toList();
+  }
+
+  Future<ClmSession?> getSessionById(String sessionId) async {
+    final d = await db;
+    final rows = await d.query(
+      'clm_sessions',
+      where: 'id = ?',
+      whereArgs: [sessionId],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : ClmSession.fromDb(rows.first);
   }
 
   Future<List<ClmSession>> getSessionsForDoctor(int doctorId,
@@ -850,190 +859,33 @@ class ClmDatabaseService {
     );
   }
 
-  // ─── Demo Seeder ─────────────────────────────────────────────────────────────
+  // ─── Cache Check ─────────────────────────────────────────────────────────────
 
-  Future<bool> isDemoSeeded() async {
+  Future<bool> hasCachedData() async {
     final d = await db;
-    final r = await d.rawQuery('SELECT COUNT(*) as cnt FROM clm_doctors');
+    final r = await d.rawQuery('SELECT COUNT(*) as cnt FROM clm_brands');
     return (r.first['cnt'] as int? ?? 0) > 0;
   }
 
-  Future<void> seedDemoData() async {
+  // ─── Clear All Local Data ─────────────────────────────────────────────────────
+
+  Future<void> clearAllData() async {
     final d = await db;
-    final dir = await getApplicationDocumentsDirectory();
-
-    // ── Brands ─────────────────────────────────────────────────────────────────
-    final brands = [
-      {'id': 1, 'name': 'CardioMax', 'therapy_area': 'Cardiovascular',
-        'description': 'First-line ARB for hypertension & heart failure',
-        'slide_count': 4, 'sort_order': 0},
-      {'id': 2, 'name': 'NeuroVite', 'therapy_area': 'Neurology',
-        'description': 'Neuroprotective B-complex for peripheral neuropathy',
-        'slide_count': 4, 'sort_order': 1},
-      {'id': 3, 'name': 'GlucoShield', 'therapy_area': 'Diabetology',
-        'description': 'SGLT2 inhibitor for T2DM with CV protection',
-        'slide_count': 3, 'sort_order': 2},
-    ];
-    for (final b in brands) {
-      await d.insert('clm_brands', b, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-
-    // ── Slides (HTML, written to disk) ────────────────────────────────────────
-    final slideData = [
-      // CardioMax
-      _slide(101, 1, 0, 'Mechanism of Action',    _htmlMoa('CardioMax',  '#C62828', 'Angiotensin II Receptor Blocker (ARB)', 'Selectively blocks AT1 receptors → reduces vasoconstriction → lowers BP by 15–20 mmHg systolic.')),
-      _slide(102, 1, 1, 'Clinical Evidence',       _htmlEvidence('CardioMax', '#C62828', [('ONTARGET Trial', '25% reduction in CV events vs placebo'), ('TRANSCEND Trial', 'Renal protection in diabetic nephropathy'), ('PRoFESS Trial', 'Stroke recurrence reduction by 13%')])),
-      _slide(103, 1, 2, 'Dosage & Administration', _htmlDosage('CardioMax', '#C62828', '40–80 mg once daily', 'Can be uptitrated to 160 mg. No food interaction. Safe in mild–moderate renal impairment.')),
-      _slide(104, 1, 3, 'Patient Benefits',        _htmlBenefits('CardioMax', '#C62828', ['24-hour BP control with once-daily dosing', 'Renoprotective in diabetic patients', 'Well tolerated – no cough (unlike ACEi)', 'Cardioprotective in post-MI patients'])),
-      // NeuroVite
-      _slide(201, 2, 0, 'Product Overview',        _htmlMoa('NeuroVite', '#1565C0', 'Neurotropic B-Complex (B1 + B6 + B12)', 'High-dose benfotiamine (B1) restores nerve conduction; methylcobalamin (B12) promotes axonal regeneration.')),
-      _slide(202, 2, 1, 'Research Evidence',       _htmlEvidence('NeuroVite', '#1565C0', [('BENDIP Trial', '50 mg B1 × 3 – significant NDS improvement at 6 wks'), ('NATHAN I', 'B1 vs placebo: 2× faster nerve regeneration'), ('Meta-analysis (2022)', '73% symptom improvement in DPN within 12 weeks')])),
-      _slide(203, 2, 2, 'Indication & Dosing',    _htmlDosage('NeuroVite', '#1565C0', '1 tablet twice daily with meals', 'For diabetic & alcoholic neuropathy. Minimum 3-month course. Safe in CKD patients.')),
-      _slide(204, 2, 3, 'Symptom Relief Profile', _htmlBenefits('NeuroVite', '#1565C0', ['Reduces burning & tingling within 2 weeks', 'Improves nerve conduction velocity', 'Enhances balance & coordination', 'Safe long-term use with no organ toxicity'])),
-      // GlucoShield
-      _slide(301, 3, 0, 'Mechanism of Action',    _htmlMoa('GlucoShield', '#2E7D32', 'SGLT2 Inhibitor', 'Blocks sodium-glucose co-transporter 2 in proximal tubule → glucosuria → HbA1c ↓ 0.7–1.2% + weight ↓ 2–3 kg.')),
-      _slide(302, 3, 1, 'CV & Renal Benefits',    _htmlEvidence('GlucoShield', '#2E7D32', [('EMPA-REG', '38% reduction in CV death'), ('CANVAS Program', '33% reduction in renal progression'), ('CREDENCE Trial', '30% reduction in ESRD risk')])),
-      _slide(303, 3, 2, 'Dosing Guidance',        _htmlDosage('GlucoShield', '#2E7D32', '10 mg once daily (↑ to 25 mg)', 'Take in the morning. Ensure adequate hydration. Avoid if eGFR < 30. Monitor for UTI/genital infections.')),
-    ];
-
-    for (final s in slideData) {
-      final htmlDir = Directory(p.join(dir.path, 'clm', 'media', 'brand_${s['brand_id']}'));
-      await htmlDir.create(recursive: true);
-      final filePath = p.join(htmlDir.path, 'slide_${s['id']}.html');
-      await File(filePath).writeAsString(s['_html'] as String);
-
-      await d.insert('clm_slides', {
-        'id': s['id'],
-        'brand_id': s['brand_id'],
-        'type': 'html',
-        'title': s['title'],
-        'sequence': s['sequence'],
-        'remote_url': 'https://demo.vodoclm.internal/slides/${s['id']}.html',
-        'local_path': filePath,
-        'duration_secs': 30,
-        'is_downloaded': 1,
-        'file_size': (s['_html'] as String).length,
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-
-    // Update brand slide counts (already set in seed, but confirm downloaded=1)
-    for (final b in brands) {
-      await d.update('clm_brands',
-          {'is_downloaded': 1, 'download_progress': 1.0},
-          where: 'id = ?', whereArgs: [b['id']]);
-    }
-
-    // ── Doctors ────────────────────────────────────────────────────────────────
-    final now = DateTime.now();
-    final doctors = [
-      _doctor(1,  'Dr. Amit Shah',      'Cardiologist',       'A', 'TER-001', 'Ahmedabad',  'Sterling Hospital',  1, [1],    now.subtract(const Duration(days: 3)),  true,  '06-15', null,   'dr.amit.shah@sterling.in',  2, 23.0469, 72.5513),
-      _doctor(2,  'Dr. Priya Mehta',    'Diabetologist',      'A', 'TER-001', 'Ahmedabad',  'Apollo Hospitals',   1, [1, 3], now.subtract(const Duration(days: 7)),  true,  '11-02', '03-20','priya.mehta@apollo.com',    2, 23.0334, 72.5848),
-      _doctor(3,  'Dr. Rajesh Kumar',   'Neurologist',        'B', 'TER-002', 'Gandhinagar','CIMS Hospital',      2, [2],    now.subtract(const Duration(days: 14)), false, '08-28', null,   'rkumar@cims.org',           2, 23.2156, 72.6369),
-      _doctor(4,  'Dr. Sunita Patel',   'Oncologist',         'B', 'TER-002', 'Surat',      'HCG Cancer Centre',  2, [1, 2], now.subtract(const Duration(days: 21)), true,  '01-10', '07-05','sunita.p@hcg.in',           3, 21.1702, 72.8311),
-      _doctor(5,  'Dr. Vikram Nair',    'Gastroenterologist', 'C', 'TER-001', 'Vadodara',   'Baroda Medical',     2, [3],    now.subtract(const Duration(days: 5)),  false, null,    null,   null,                        1, 22.3072, 73.1812),
-      _doctor(6,  'Dr. Anita Roy',      'Pulmonologist',      'A', 'TER-003', 'Rajkot',     'KIMS Hospital',      1, [2],    now.subtract(const Duration(days: 30)), true,  '05-22', '09-14','anita.roy@kims.com',        2, 22.3039, 70.8022),
-      _doctor(7,  'Dr. Sanjay Gupta',   'Rheumatologist',     'B', 'TER-003', 'Rajkot',     'Civil Hospital',     2, [1, 2], null,                                   false, '12-31', null,   'sgupta@civilhosp.in',       2, 22.3115, 70.7957),
-      _doctor(8,  'Dr. Meera Krishnan', 'Endocrinologist',    'C', 'TER-002', 'Surat',      'Sunshine Hospital',  3, [3],    now.subtract(const Duration(days: 60)), false, '03-08', '06-21','meera.k@sunshine.in',       1, 21.1958, 72.8238),
-    ];
-    for (final doc in doctors) {
-      await d.insert('clm_doctors', doc, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-
-    // Seed a few historical call reports for Dr. Amit Shah & Dr. Priya Mehta
-    final reportSeed = [
-      {'id': 'demo-rpt-1', 'session_id': 'demo-sess-1', 'doctor_id': 1, 'created_at': now.subtract(const Duration(days: 30)).toIso8601String(), 'brands_discussed': '[1]', 'reaction': 'positive', 'call_notes': 'Doctor showed strong interest in CardioMax. Asked about renal dosing.', 'topics_discussed': '["Renal dosing","ARB mechanism","Patient case"]', 'key_messages': '["24h BP control","No cough side effect"]', 'next_call_plan': 'Share ONTARGET trial reprint', 'next_call_date': now.subtract(const Duration(days: 3)).toIso8601String(), 'samples_given': 5, 'competitor_mentions': 'Losartan mentioned', 'is_synced': 0},
-      {'id': 'demo-rpt-2', 'session_id': 'demo-sess-2', 'doctor_id': 1, 'created_at': now.subtract(const Duration(days: 14)).toIso8601String(), 'brands_discussed': '[1]', 'reaction': 'receptive', 'call_notes': 'Followed up on trial reprint. He is considering switching 3 patients.', 'topics_discussed': '["ONTARGET trial","Switching patients","Tolerability"]', 'key_messages': '["CV death reduction","Renoprotection"]', 'next_call_plan': 'Bring patient case study', 'next_call_date': now.add(const Duration(days: 7)).toIso8601String(), 'samples_given': 5, 'competitor_mentions': '', 'is_synced': 0},
-      {'id': 'demo-rpt-3', 'session_id': 'demo-sess-3', 'doctor_id': 2, 'created_at': now.subtract(const Duration(days: 21)).toIso8601String(), 'brands_discussed': '[1,3]', 'reaction': 'neutral', 'call_notes': 'Presented both CardioMax and GlucoShield. Interest in SGLT2 data.', 'topics_discussed': '["EMPA-REG","CV protection","Dual therapy"]', 'key_messages': '["CV death reduction","Glucosuria","Weight loss"]', 'next_call_plan': 'GlucoShield 25mg starter pack', 'next_call_date': now.add(const Duration(days: 3)).toIso8601String(), 'samples_given': 10, 'competitor_mentions': 'Jardiance comparison raised', 'is_synced': 0},
-    ];
-    for (final r in reportSeed) {
-      await d.insert('clm_call_reports', r, conflictAlgorithm: ConflictAlgorithm.replace);
-    }
-  }
-
-  // ── Seeder helpers ──────────────────────────────────────────────────────────
-
-  Map<String, dynamic> _slide(int id, int brandId, int seq, String title, String html) =>
-      {'id': id, 'brand_id': brandId, 'sequence': seq, 'title': title, '_html': html};
-
-  Map<String, dynamic> _doctor(
-    int id, String name, String spec, String cat, String territory,
-    String area, String hospital, int priority, List<int> brandIds,
-    DateTime? lastDetailed, bool isPlanned,
-    String? birthday, String? anniversary, String? email, int callFreq,
-    double? lat, double? lng,
-  ) => {
-    'id': id, 'name': name, 'speciality': spec, 'category': cat,
-    'territory': territory, 'area': area, 'mobile': '98${id.toString().padLeft(8, '0')}',
-    'hospital': hospital, 'priority': priority,
-    'brand_ids': '[${brandIds.join(',')}]',
-    'last_detailed_at': lastDetailed?.toIso8601String(),
-    'total_sessions': isPlanned ? 2 : 0,
-    'is_planned': isPlanned ? 1 : 0,
-    'birthday': birthday,
-    'anniversary': anniversary,
-    'email': email,
-    'call_freq_target': callFreq,
-    'latitude': lat,
-    'longitude': lng,
-  };
-
-  // ── HTML slide templates ────────────────────────────────────────────────────
-
-  static String _base(String brand, String accentHex, String content) => '''
-<!DOCTYPE html><html><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<style>
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Segoe UI',sans-serif;background:#f8f9ff;color:#1a1a2e;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-  .header{background:$accentHex;padding:18px 24px;display:flex;align-items:center;gap:14px}
-  .brand{font-size:22px;font-weight:700;color:#fff;letter-spacing:1px}
-  .subtitle{font-size:12px;color:rgba(255,255,255,0.75);margin-top:2px}
-  .body{flex:1;padding:20px 24px;overflow:hidden}
-  h2{font-size:18px;font-weight:700;color:$accentHex;margin-bottom:14px;padding-bottom:8px;border-bottom:2px solid ${accentHex}22}
-  p{font-size:13px;line-height:1.7;color:#333;margin-bottom:10px}
-  .card{background:#fff;border-radius:10px;padding:14px 16px;margin-bottom:10px;border-left:4px solid $accentHex;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
-  .badge{display:inline-block;background:${accentHex}1a;color:$accentHex;font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;margin-bottom:10px}
-  .row{display:flex;gap:10px;margin-bottom:10px}
-  .col{flex:1;background:#fff;border-radius:10px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,0.06);text-align:center}
-  .num{font-size:28px;font-weight:700;color:$accentHex}
-  .lbl{font-size:11px;color:#888;margin-top:2px}
-  ul{list-style:none;padding:0}
-  ul li{font-size:13px;padding:8px 12px;margin-bottom:6px;background:#fff;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,0.05);display:flex;align-items:center;gap:8px}
-  ul li::before{content:"✓";color:$accentHex;font-weight:700;font-size:14px}
-</style></head><body>
-<div class="header"><div><div class="brand">$brand</div></div></div>
-<div class="body">$content</div>
-</body></html>''';
-
-  static String _htmlMoa(String brand, String accent, String className, String desc) =>
-    _base(brand, accent, '''
-<span class="badge">$className</span>
-<h2>Mechanism of Action</h2>
-<div class="card"><p>$desc</p></div>
-<div class="row">
-  <div class="col"><div class="num">↓20%</div><div class="lbl">Systolic BP</div></div>
-  <div class="col"><div class="num">↓15%</div><div class="lbl">Diastolic BP</div></div>
-  <div class="col"><div class="num">24h</div><div class="lbl">Coverage</div></div>
-</div>''');
-
-  static String _htmlEvidence(String brand, String accent, List<(String, String)> trials) {
-    final cards = trials.map((t) =>
-      '<div class="card"><p><strong>${t.$1}</strong><br>${t.$2}</p></div>').join('');
-    return _base(brand, accent, '<h2>Clinical Evidence</h2>$cards');
-  }
-
-  static String _htmlDosage(String brand, String accent, String dose, String notes) =>
-    _base(brand, accent, '''
-<h2>Dosage &amp; Administration</h2>
-<div class="card" style="text-align:center;padding:20px">
-  <div class="num" style="font-size:24px">$dose</div>
-  <div class="lbl" style="margin-top:6px">Recommended Dose</div>
-</div>
-<div class="card"><p>$notes</p></div>''');
-
-  static String _htmlBenefits(String brand, String accent, List<String> points) {
-    final items = points.map((pt) => '<li>$pt</li>').join('');
-    return _base(brand, accent, '<h2>Key Benefits</h2><ul>$items</ul>');
+    await d.transaction((txn) async {
+      // Clear in dependency order (children before parents)
+      for (final table in [
+        'clm_analytics', 'clm_call_reports', 'clm_doctor_locations',
+        'clm_sessions', 'clm_media_index', 'clm_slides', 'clm_brands',
+        'clm_doctors',
+        'dcr_rcpa_competitors', 'dcr_rcpa_entries',
+        'dcr_chemist_employees', 'dcr_chemist_visits',
+        'dcr_visit_signatures', 'dcr_sample_items',
+        'dcr_visit_employees', 'dcr_doctor_visits',
+        'dcr_employees', 'dcr_chemists', 'dcr_products',
+      ]) {
+        await txn.execute('DELETE FROM $table');
+      }
+    });
   }
 
   // ─── DCR Table Creation ───────────────────────────────────────────────────────
@@ -1186,54 +1038,51 @@ class ClmDatabaseService {
     ''');
   }
 
-  Future<void> _seedDcrDemoData(Database db) async {
-    // Products matching existing brands
-    final products = [
-      {'id': 1, 'name': 'CardioMax 80mg Tabs', 'therapy_area': 'Cardiovascular',
-       'stock_available': 120, 'allocation_per_doctor': 5},
-      {'id': 2, 'name': 'CardioMax 160mg Tabs', 'therapy_area': 'Cardiovascular',
-       'stock_available': 60, 'allocation_per_doctor': 3},
-      {'id': 3, 'name': 'NeuroVite B-Complex', 'therapy_area': 'Neurology',
-       'stock_available': 80, 'allocation_per_doctor': 4},
-      {'id': 4, 'name': 'GlucoShield 10mg Tabs', 'therapy_area': 'Diabetology',
-       'stock_available': 100, 'allocation_per_doctor': 4},
-      {'id': 5, 'name': 'GlucoShield 25mg Tabs', 'therapy_area': 'Diabetology',
-       'stock_available': 50, 'allocation_per_doctor': 3},
-      {'id': 6, 'name': 'CardioMax Starter Pack', 'therapy_area': 'Cardiovascular',
-       'stock_available': 30, 'allocation_per_doctor': 2},
-    ];
-    for (final p in products) {
-      await db.insert('dcr_products', p, conflictAlgorithm: ConflictAlgorithm.ignore);
-    }
+  // ─── DCR API Upsert ──────────────────────────────────────────────────────────
 
-    // Demo chemists
-    final chemists = [
-      {'id': 1, 'name': 'Shree Medical Stores', 'area': 'Ahmedabad',
-       'territory': 'TER-001', 'address': 'Shop 12, CG Road', 'mobile': '9876543210'},
-      {'id': 2, 'name': 'Apollo Pharmacy', 'area': 'Ahmedabad',
-       'territory': 'TER-001', 'address': 'Satellite Rd', 'mobile': '9876543211'},
-      {'id': 3, 'name': 'Wellness Medical', 'area': 'Gandhinagar',
-       'territory': 'TER-002', 'address': 'Sector 21', 'mobile': '9876543212'},
-      {'id': 4, 'name': 'City Chemist', 'area': 'Surat',
-       'territory': 'TER-002', 'address': 'Ring Road', 'mobile': '9876543213'},
-      {'id': 5, 'name': 'MedPlus', 'area': 'Rajkot',
-       'territory': 'TER-003', 'address': 'Kalawad Road', 'mobile': '9876543214'},
-    ];
-    for (final c in chemists) {
-      await db.insert('dcr_chemists', c, conflictAlgorithm: ConflictAlgorithm.ignore);
+  Future<void> upsertDcrProducts(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    final batch = d.batch();
+    for (final r in rows) {
+      batch.insert('dcr_products', {
+        'id':                   r['id'],
+        'name':                 r['name'] ?? '',
+        'therapy_area':         r['therapy_area'] ?? '',
+        'stock_available':      r['stock_available'] ?? 0,
+        'allocation_per_doctor': r['allocation_per_doctor'] ?? 2,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
+    await batch.commit(noResult: true);
+  }
 
-    // Demo employees (co-workers)
-    final employees = [
-      {'id': 1, 'name': 'Rahul Sharma', 'employee_code': 'EMP-101', 'designation': 'MR'},
-      {'id': 2, 'name': 'Kavita Desai', 'employee_code': 'EMP-102', 'designation': 'Sr. MR'},
-      {'id': 3, 'name': 'Nitin Joshi', 'employee_code': 'EMP-103', 'designation': 'ABM'},
-      {'id': 4, 'name': 'Pooja Mehta', 'employee_code': 'EMP-104', 'designation': 'MR'},
-      {'id': 5, 'name': 'Suresh Patil', 'employee_code': 'EMP-105', 'designation': 'ZBM'},
-    ];
-    for (final e in employees) {
-      await db.insert('dcr_employees', e, conflictAlgorithm: ConflictAlgorithm.ignore);
+  Future<void> upsertDcrChemists(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    final batch = d.batch();
+    for (final r in rows) {
+      batch.insert('dcr_chemists', {
+        'id':        r['id'],
+        'name':      r['name'] ?? '',
+        'area':      r['area'] ?? '',
+        'territory': r['territory'] ?? '',
+        'address':   r['address'],
+        'mobile':    r['mobile'],
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     }
+    await batch.commit(noResult: true);
+  }
+
+  Future<void> upsertDcrEmployees(List<Map<String, dynamic>> rows) async {
+    final d = await db;
+    final batch = d.batch();
+    for (final r in rows) {
+      batch.insert('dcr_employees', {
+        'id':            r['id'],
+        'name':          r['name'] ?? '',
+        'employee_code': r['employee_code'] ?? '',
+        'designation':   r['role'] ?? r['designation'] ?? '',
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
   }
 
   // ─── DCR Products ─────────────────────────────────────────────────────────────
@@ -1531,16 +1380,6 @@ class ClmDatabaseService {
     final rows = await d.query('dcr_rcpa_competitors',
         where: 'rcpa_entry_id = ?', whereArgs: [rcpaEntryId]);
     return rows.map(DcrRcpaCompetitor.fromDb).toList();
-  }
-
-  // ─── Cleanup ──────────────────────────────────────────────────────────────────
-
-  Future<void> clearAllData() async {
-    final d = await db;
-    await d.delete('clm_doctors');
-    await d.delete('clm_brands');
-    await d.delete('clm_slides');
-    await d.delete('clm_media_index');
   }
 
   Future<void> close() async {

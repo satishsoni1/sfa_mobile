@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/constants/api_constants.dart';
 import '../models/clm_models.dart';
 import 'clm_database_service.dart';
 
@@ -17,7 +18,6 @@ class ClmSyncService {
   factory ClmSyncService() => _instance;
   ClmSyncService._();
 
-  static const String _baseUrl = 'https://zorvia.globalspace.in/api';
   static const String _prefLastSync = 'clm_last_master_sync';
 
   final ClmDatabaseService _db = ClmDatabaseService();
@@ -111,7 +111,7 @@ class ClmSyncService {
 
   Future<void> _syncDoctors(String token) async {
     final res = await http.get(
-      Uri.parse('$_baseUrl/clm/doctors'),
+      Uri.parse(ApiConstants.clmDoctors),
       headers: _headers(token),
     ).timeout(const Duration(seconds: 30));
 
@@ -127,7 +127,7 @@ class ClmSyncService {
 
   Future<void> _syncBrands(String token) async {
     final res = await http.get(
-      Uri.parse('$_baseUrl/clm/brands'),
+      Uri.parse(ApiConstants.clmBrands),
       headers: _headers(token),
     ).timeout(const Duration(seconds: 30));
 
@@ -141,20 +141,40 @@ class ClmSyncService {
 
   Future<void> _syncSlideMetadata(String token) async {
     final brands = await _db.getAllBrands();
+    final mediaDir = await _getMediaDirectory();
+
     for (final brand in brands) {
       try {
         final res = await http.get(
-          Uri.parse('$_baseUrl/clm/brands/${brand.id}/slides'),
+          Uri.parse('${ApiConstants.clmBrands}/${brand.id}/slides'),
           headers: _headers(token),
-        ).timeout(const Duration(seconds: 20));
+        ).timeout(const Duration(seconds: 30));
 
         if (res.statusCode != 200) continue;
         final body = json.decode(res.body);
         final list = (body['data'] ?? body) as List;
-        final slides =
-            list.cast<Map<String, dynamic>>().map(ClmSlide.fromJson).toList();
+        final slides = list.cast<Map<String, dynamic>>().map(ClmSlide.fromJson).toList();
+
+        // Write HTML content to disk immediately if API provides it
+        final brandDir = Directory(p.join(mediaDir.path, 'brand_${brand.id}'));
+        await brandDir.create(recursive: true);
+
+        for (final slide in slides) {
+          if (slide.htmlContent != null && slide.htmlContent!.isNotEmpty) {
+            final filePath = p.join(brandDir.path, 'slide_${slide.id}.html');
+            await File(filePath).writeAsString(slide.htmlContent!);
+            slide.localPath = filePath;
+            slide.isDownloaded = true;
+          }
+        }
+
         await _db.upsertSlides(slides);
-      } catch (_) {
+
+        if (slides.every((s) => s.isDownloaded)) {
+          await _db.updateBrandDownloadProgress(brand.id, 1.0, true);
+        }
+      } catch (e) {
+        debugPrint('[CLM Sync] Slide sync error brand ${brand.id}: $e');
         continue;
       }
     }
@@ -264,7 +284,7 @@ class ClmSyncService {
       try {
         final payload = sessions.map((s) => s.toSyncJson()).toList();
         final res = await http.post(
-          Uri.parse('$_baseUrl/clm/sync/sessions'),
+          Uri.parse(ApiConstants.clmSyncSessions),
           headers: _headers(token),
           body: json.encode({'sessions': payload}),
         ).timeout(const Duration(seconds: 30));
@@ -283,7 +303,7 @@ class ClmSyncService {
       try {
         final payload = events.map((e) => e.toSyncJson()).toList();
         final res = await http.post(
-          Uri.parse('$_baseUrl/clm/sync/analytics'),
+          Uri.parse(ApiConstants.clmSyncAnalytics),
           headers: _headers(token),
           body: json.encode({'events': payload}),
         ).timeout(const Duration(seconds: 30));
@@ -310,10 +330,64 @@ class ClmSyncService {
     return true;
   }
 
+  // ─── DCR Master Sync (products, chemists, employees) ─────────────────────────
+
+  Future<void> syncDcrMasterData() async {
+    if (!await isOnline()) return;
+    final token = await _getToken();
+    if (token == null) return;
+
+    try {
+      await Future.wait([
+        _syncDcrProducts(token),
+        _syncDcrChemists(token),
+        _syncDcrEmployees(token),
+      ]);
+    } catch (e) {
+      debugPrint('[CLM Sync] DCR master sync error: $e');
+    }
+  }
+
+  Future<void> _syncDcrProducts(String token) async {
+    final res = await http.get(
+      Uri.parse(ApiConstants.dcrProducts),
+      headers: _headers(token),
+    ).timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) return;
+    final body = json.decode(res.body);
+    final list = (body['data'] ?? body) as List;
+    await _db.upsertDcrProducts(list.cast<Map<String, dynamic>>());
+  }
+
+  Future<void> _syncDcrChemists(String token) async {
+    final res = await http.get(
+      Uri.parse(ApiConstants.dcrChemists),
+      headers: _headers(token),
+    ).timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) return;
+    final body = json.decode(res.body);
+    final list = (body['data'] ?? body) as List;
+    await _db.upsertDcrChemists(list.cast<Map<String, dynamic>>());
+  }
+
+  Future<void> _syncDcrEmployees(String token) async {
+    final res = await http.get(
+      Uri.parse('${ApiConstants.clmBaseUrl}/dcr/employees'),
+      headers: _headers(token),
+    ).timeout(const Duration(seconds: 20));
+    if (res.statusCode != 200) return;
+    final body = json.decode(res.body);
+    final list = (body['data'] ?? body) as List;
+    await _db.upsertDcrEmployees(list.cast<Map<String, dynamic>>());
+  }
+
   // ─── Full Sync ────────────────────────────────────────────────────────────────
 
   Future<void> fullSync() async {
-    await syncMasterData();
+    await Future.wait([
+      syncMasterData(),
+      syncDcrMasterData(),
+    ]);
     await uploadPendingAnalytics();
   }
 

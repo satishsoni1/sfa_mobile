@@ -77,7 +77,7 @@ class _DcrSampleSheetScreenState extends State<DcrSampleSheetScreen> {
         .map((item) {
           final prod = prods.where((p) => p.id == item.productId).firstOrNull;
           if (prod == null) return null;
-          return _SampleEntry(product: prod, qty: item.quantity);
+          return _SampleEntry(product: prod, qty: item.quantity, batchNumber: item.batchNumber);
         })
         .whereType<_SampleEntry>()
         .toList();
@@ -302,6 +302,7 @@ class _DcrSampleSheetScreenState extends State<DcrSampleSheetScreen> {
               quantity: e.qty,
               allocationLimit: e.product.allocationPerDoctor,
               stockAvailable: e.product.stockAvailable,
+              batchNumber: e.batchNumber,
             ))
         .toList();
     if (mounted) {
@@ -412,8 +413,9 @@ class _DcrSampleSheetScreenState extends State<DcrSampleSheetScreen> {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(children: [
+        padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
           Container(
             width: 6,
             height: 44,
@@ -488,7 +490,32 @@ class _DcrSampleSheetScreenState extends State<DcrSampleSheetScreen> {
                   size: 16, color: Colors.red.shade300),
             ),
           ),
-        ]),
+          ]),  // closes inner Row
+          // Batch number field
+          const SizedBox(height: 8),
+          TextField(
+            controller: TextEditingController(text: e.batchNumber),
+            onChanged: (v) => e.batchNumber = v,
+            style: const TextStyle(fontSize: 12),
+            decoration: InputDecoration(
+              hintText: 'Batch No. (e.g. BT-2024-01)',
+              hintStyle: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+              prefixIcon: Icon(Icons.numbers_outlined,
+                  size: 15, color: Colors.grey.shade400),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              isDense: true,
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            ),
+          ),
+        ]),  // closes outer Column
       ),
     );
   }
@@ -677,5 +704,6 @@ class _DcrSampleSheetScreenState extends State<DcrSampleSheetScreen> {
 class _SampleEntry {
   final DcrProduct product;
   int qty;
-  _SampleEntry({required this.product, required this.qty});
+  String batchNumber;
+  _SampleEntry({required this.product, required this.qty, this.batchNumber = ''});
 }

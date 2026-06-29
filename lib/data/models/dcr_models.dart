@@ -246,6 +246,7 @@ class DcrSampleItem {
   int quantity;
   final int allocationLimit;
   final int stockAvailable;
+  String batchNumber;
 
   DcrSampleItem({
     this.id,
@@ -255,6 +256,7 @@ class DcrSampleItem {
     this.quantity = 0,
     required this.allocationLimit,
     required this.stockAvailable,
+    this.batchNumber = '',
   });
 
   factory DcrSampleItem.fromDb(Map<String, dynamic> r) => DcrSampleItem(
@@ -265,6 +267,7 @@ class DcrSampleItem {
         quantity: r['quantity'] as int? ?? 0,
         allocationLimit: r['allocation_limit'] as int? ?? 2,
         stockAvailable: r['stock_available'] as int? ?? 0,
+        batchNumber: r['batch_number']?.toString() ?? '',
       );
 
   Map<String, dynamic> toDb() => {
@@ -275,6 +278,7 @@ class DcrSampleItem {
         'quantity': quantity,
         'allocation_limit': allocationLimit,
         'stock_available': stockAvailable,
+        'batch_number': batchNumber,
       };
 
   int get effectiveMax =>

@@ -8,23 +8,15 @@ import 'package:universal_html/html.dart'
     as html; // Safe cross-platform HTML handler
 
 // --- SCREENS ---
-import 'package:zforce/presentation/chat/chat_screen.dart';
 import 'package:zforce/presentation/doctor_list/chemist_list_screen.dart';
-import 'package:zforce/presentation/doctor_list/doctor_selection_screen.dart';
-import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseManagerScreen.dart';
 import 'package:zforce/presentation/doctor_brand/doctor_brand_screen.dart';
-import 'package:zforce/presentation/leave/leave_list_screen.dart';
-import 'package:zforce/presentation/master/data_upload_screen.dart';
 import 'package:zforce/presentation/master/reports_dashboard_screen.dart';
 import 'package:zforce/presentation/route_wise_plan/tour_plan_screen.dart';
-import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
-import '../campaign/campaign_list_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
-import '../doctor_list/add_doctor_screen.dart';
 import '../doctor_list/doctor_master_screen.dart';
 import '../new_dr_master/new_dr_master_screen.dart';
 import '../reporting/ManagerJointWorkScreen.dart';
@@ -32,15 +24,13 @@ import '../reporting/TeamTerritoryScreen.dart';
 import 'external_links_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
-import '../tour_plan/tour_plan_screen.dart';
-
-// NEW IMPORT FOR CHEMIST REPORTING
-import '../reporting/chemist_reporting_screen.dart';
-// (Make sure to adjust the import path above to wherever you saved the new file)
 
 // --- CLM MODULE ---
 import '../clm/clm_home_screen.dart';
 import '../../providers/clm_provider.dart';
+
+// --- DATA BANK MODULE ---
+import '../data_bank/data_bank_home_screen.dart';
 
 // --- AI HUB MODULE ---
 import '../ai_hub/ai_hub_screen.dart';
@@ -63,10 +53,8 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  // --- APP VERSION (Update this manually before every new build) ---
   static const String CURRENT_APP_VERSION = "1.0.27";
 
-  // --- STATE ---
   bool _isCheckedIn = false;
   DateTime? _checkInTime;
   String _statusText = "Loading...";
@@ -74,14 +62,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isRefreshing = false;
   bool? _attendanceWebDcrAllowed;
 
-  // Expense Data
   String _expClaimed = "0";
   String _expPending = "0";
 
   Timer? _timer;
   String _elapsedTime = "00:00";
 
-  // --- COLORS ---
   final Color primaryColor = const Color(0xFF4A148C);
   final Color accentColor = const Color(0xFF7B1FA2);
   final Color bgColor = const Color(0xFFF4F6F9);
@@ -106,8 +92,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  // --- LOGIC ---
-
   Future<void> _loadInitialData() async {
     if (!mounted) return;
     setState(() => _isRefreshing = true);
@@ -116,7 +100,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final apiService = ApiService();
 
     try {
-      // 1. Parallel Data Fetching
       await Future.wait([
         _checkAppVersion(apiService),
         reportProvider.fetchTodayData(),
@@ -130,13 +113,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  // --- VERSION CONTROL LOGIC ---
   Future<void> _checkAppVersion(ApiService api) async {
     if (!kIsWeb) return;
-
     try {
       final serverVersion = await api.getServerAppVersion();
-
       if (serverVersion != null && serverVersion != CURRENT_APP_VERSION) {
         if (mounted) _showUpdatePopup();
       }
@@ -149,20 +129,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => WillPopScope(
-        onWillPop: () async => false,
+      builder: (ctx) => PopScope(
+        canPop: false,
         child: AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
-            children: [
-              const Icon(Icons.system_update, color: Colors.blue, size: 28),
-              const SizedBox(width: 10),
-              const Text(
-                "Update Available",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+            children: const [
+              Icon(Icons.system_update, color: Colors.blue, size: 28),
+              SizedBox(width: 10),
+              Text("Update Available", style: TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
           content: const Text(
@@ -174,24 +149,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () {
-                  if (kIsWeb) {
-                    html.window.location.reload();
-                  }
+                  if (kIsWeb) html.window.location.reload();
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryColor,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 child: const Text(
                   "Refresh App Now",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                 ),
               ),
             ),
@@ -213,9 +180,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           : null;
 
       setState(() {
-        if (webDcrAllowed != null) {
-          _attendanceWebDcrAllowed = webDcrAllowed;
-        }
+        if (webDcrAllowed != null) _attendanceWebDcrAllowed = webDcrAllowed;
         if (status == 'Working' || status == 'On Break') {
           _isCheckedIn = true;
           _checkInTime = data != null && data['check_in_time'] != null
@@ -238,15 +203,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  bool _flagEnabled(dynamic value) {
-    return value == 1 || value == true || value?.toString() == '1';
-  }
+  bool _flagEnabled(dynamic value) =>
+      value == 1 || value == true || value?.toString() == '1';
 
   Future<void> _fetchExpenseSummary(ApiService api) async {
     try {
       final data = await api.getMonthlyExpenses(DateTime.now());
       if (!mounted) return;
-
       final summary = data['summary'];
       setState(() {
         final fmt = NumberFormat("#,##0");
@@ -261,13 +224,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _updateElapsed() {
     if (_isCheckedIn && _checkInTime != null) {
       final duration = DateTime.now().difference(_checkInTime!);
-      final hours = duration.inHours;
-      final minutes = duration.inMinutes.remainder(60);
       setState(() {
-        _elapsedTime = "${hours}h ${minutes}m";
+        _elapsedTime = "${duration.inHours}h ${duration.inMinutes.remainder(60)}m";
       });
     } else {
-      setState(() => _elapsedTime = "00:00");
+      setState(() => _elapsedTime = "--");
     }
   }
 
@@ -282,7 +243,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         await apiService.checkOut();
       }
       await Future.delayed(const Duration(milliseconds: 500));
-      await _loadInitialData(); // Reload all data
+      await _loadInitialData();
     } catch (e) {
       if (mounted) _showSnack("Action failed: $e");
     } finally {
@@ -290,27 +251,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _handleLogout() {
-    Provider.of<AuthProvider>(context, listen: false).logout();
-  }
+  void _handleLogout() =>
+      Provider.of<AuthProvider>(context, listen: false).logout();
 
   void _openTabJointWork() {
     final employeeCode =
-        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
-            .trim();
-
+        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode.trim();
     if (employeeCode == null || employeeCode.isEmpty) {
       _showSnack("Employee code not available.");
       return;
     }
-
-    final url = 'https://zorvia.globalspace.in/dcrapproval/$employeeCode';
-
     Navigator.pushNamed(
       context,
       InternalWebViewScreen.routeName,
       arguments: InternalWebViewArgs(
-        url: url,
+        url: 'https://zorvia.globalspace.in/dcrapproval/$employeeCode',
         title: 'Tab Joint Work',
       ),
     );
@@ -318,43 +273,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _openWebLinks() {
     final employeeCode =
-        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode
-            .trim();
-
+        Provider.of<AuthProvider>(context, listen: false).user?.employeeCode.trim();
     if (employeeCode == null || employeeCode.isEmpty) {
       _showSnack("Employee code not available.");
       return;
     }
-
     _navigateTo(ExternalLinksScreen(employeeCode: employeeCode));
   }
 
-  String _getZoneLogo(String? division) {
-    final zone = division?.toLowerCase() ?? "";
-    if (zone.contains("1")) return "assets/images/3.png";
-    if (zone.contains("2")) return "assets/images/4.png";
-    return "assets/images/5.png";
-  }
-
-  // --- UI BUILDER ---
+  // --- BUILD ---
 
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
-    const double headerHeight = 340;
-    const double cardOverlap = 60;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final headerHeight = screenWidth < 360 ? 300.0 : 320.0;
+    const cardOverlap = 56.0;
 
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: bgColor,
       drawer: _buildDrawer(user),
       body: RefreshIndicator(
+        color: primaryColor,
         onRefresh: _loadInitialData,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              // HEADER
               Stack(
                 clipBehavior: Clip.none,
                 alignment: Alignment.topCenter,
@@ -363,23 +309,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Container(
                     margin: EdgeInsets.only(
                       top: headerHeight - cardOverlap,
-                      left: 20,
-                      right: 20,
+                      left: 16,
+                      right: 16,
                     ),
                     child: _buildAttendanceCard(),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-
-              // BODY
+              const SizedBox(height: 16),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildVisitsOverview(),
-                    const SizedBox(height: 24),
+                    _buildStatsRow(),
+                    const SizedBox(height: 20),
                     _buildQuickActions(),
                   ],
                 ),
@@ -391,83 +335,87 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // --- WIDGETS ---
+  // --- HEADER ---
 
   Widget _buildHeaderBackground(User? user, double height) {
+    final today = DateFormat('EEE, d MMM yyyy').format(DateTime.now());
     return Container(
       height: height,
       width: double.infinity,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [primaryColor, const Color(0xFF6A1B9A)],
+        gradient: const LinearGradient(
+          colors: [Color(0xFF4A148C), Color(0xFF6A1B9A), Color(0xFF9C27B0)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(36)),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Top bar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.menu, color: Colors.white),
+                    icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 26),
                     onPressed: () => _scaffoldKey.currentState?.openDrawer(),
                   ),
-                  InkWell(
-                    onTap: _loadInitialData,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.refresh,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
+                  Row(
+                    children: [
+                      if (_isRefreshing)
+                        const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      else
+                        GestureDetector(
+                          onTap: _loadInitialData,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+                          ),
+                        ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
+              // Welcome text
               Text(
                 "Welcome back,",
-                style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13),
+                style: GoogleFonts.poppins(color: Colors.white60, fontSize: 13),
               ),
               Text(
                 user?.firstName ?? "Employee",
                 style: GoogleFonts.poppins(
                   color: Colors.white,
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 4),
+              // Date chip
               Container(
-                width: double.infinity,
-                height: 80,
-                padding: const EdgeInsets.all(10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      _getZoneLogo(user?.division),
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Text(
-                        user?.division ?? "ZONE",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  today,
+                  style: GoogleFonts.poppins(color: Colors.white70, fontSize: 11),
                 ),
               ),
             ],
@@ -477,106 +425,96 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // --- ATTENDANCE CARD ---
+
   Widget _buildAttendanceCard() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 15,
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _isCheckedIn
-                      ? Colors.green.shade50
-                      : Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.circle,
-                      size: 10,
-                      color: _isCheckedIn ? Colors.green : Colors.red,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _statusText.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: _isCheckedIn
-                            ? Colors.green.shade700
-                            : Colors.red.shade700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
+          // Status badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: _isCheckedIn ? Colors.green.shade50 : Colors.red.shade50,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: _isCheckedIn ? Colors.green.shade200 : Colors.red.shade200,
               ),
-            ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.circle,
+                    size: 8,
+                    color: _isCheckedIn ? Colors.green : Colors.red),
+                const SizedBox(width: 6),
+                Text(
+                  _statusText.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: _isCheckedIn ? Colors.green.shade700 : Colors.red.shade700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+          // Time display
           Text(
             _isCheckedIn && _checkInTime != null
                 ? DateFormat('h:mm a').format(_checkInTime!)
                 : "--:--",
             style: GoogleFonts.poppins(
-              fontSize: 40,
+              fontSize: 36,
               fontWeight: FontWeight.bold,
               color: Colors.black87,
+              height: 1.1,
             ),
           ),
           Text(
             _isCheckedIn ? "Checked In Time" : "Ready to Start?",
-            style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey),
+            style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+          // Action button
           SizedBox(
             width: double.infinity,
-            height: 55,
+            height: 50,
             child: ElevatedButton(
               onPressed: _isLoadingAction ? null : _handleMainAction,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _isCheckedIn
-                    ? const Color(0xFFEF5350)
-                    : const Color(0xFF66BB6A),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                backgroundColor:
+                    _isCheckedIn ? const Color(0xFFEF5350) : const Color(0xFF43A047),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 elevation: 0,
               ),
               child: _isLoadingAction
                   ? const SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                     )
                   : Text(
                       _isCheckedIn ? "CHECK OUT" : "CHECK IN",
                       style: GoogleFonts.poppins(
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
-                        letterSpacing: 1,
+                        letterSpacing: 1.2,
                       ),
                     ),
             ),
@@ -586,62 +524,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildVisitsOverview() {
+  // --- STATS ROW ---
+
+  Widget _buildStatsRow() {
     final visitCount = Provider.of<ReportProvider>(context).visitCount;
     return Row(
       children: [
-        _buildSummaryItem(
-          "Visits",
-          "$visitCount",
-          Icons.people_outline,
-          Colors.blue,
-        ),
-        const SizedBox(width: 12),
-        _buildSummaryItem(
-          "Online",
-          _elapsedTime,
-          Icons.timer_outlined,
-          Colors.orange,
-        ),
+        _buildStatCard("Visits", "$visitCount", Icons.people_outline_rounded, Colors.blue),
+        const SizedBox(width: 10),
+        _buildStatCard("On Duty", _elapsedTime, Icons.timer_outlined, Colors.orange),
+        const SizedBox(width: 10),
+        _buildStatCard("Exp.", "₹$_expClaimed", Icons.account_balance_wallet_outlined, Colors.green),
       ],
     );
   }
 
-  Widget _buildSummaryItem(
-    String label,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+  Widget _buildStatCard(String label, String value, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: Colors.grey.shade100),
           boxShadow: [
-            BoxShadow(
-              color: Colors.grey.shade100,
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
+            BoxShadow(color: Colors.grey.shade100, blurRadius: 6, offset: const Offset(0, 3)),
           ],
         ),
         child: Column(
           children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 18),
+            ),
+            const SizedBox(height: 6),
             Text(
               value,
               style: GoogleFonts.poppins(
-                fontSize: 18,
+                fontSize: 15,
                 fontWeight: FontWeight.bold,
+                color: Colors.black87,
               ),
             ),
             Text(
               label,
-              style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+              style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade600),
             ),
           ],
         ),
@@ -649,24 +580,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // --- QUICK ACTIONS ---
+
   Widget _buildQuickActions() {
     final user = Provider.of<AuthProvider>(context).user;
-    final canUseWebDcr =
-        _attendanceWebDcrAllowed ?? user?.isWebDcrAllowed ?? false;
+    final canUseWebDcr = _attendanceWebDcrAllowed ?? user?.isWebDcrAllowed ?? false;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildSectionTitle("Field Operations"),
+        _buildSectionTitle("Field Operations", Colors.teal),
         _buildMenuGrid([
-          // _MenuAction(
-          //   Icons.map,
-          //   "Tour Plan",
-          //   Colors.teal,
-          //   () => _navigateTo(const TourPlanScreen()),
-          // ),
           _MenuAction(
-            Icons.map,
-            "Route wise Tour Plan",
+            Icons.map_outlined,
+            "Route Tour Plan",
             Colors.teal,
             () => _navigateTo(const RouteTourPlanScreen()),
           ),
@@ -685,38 +612,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           if (canUseWebDcr)
-            _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
+            _MenuAction(
+              Icons.medical_services_outlined,
+              "Dr. Call",
+              Colors.purple,
+              () {
+                if (_isCheckedIn) {
+                  _navigateTo(const DoctorListScreen());
+                } else {
+                  _showSnack("Please Check In first!");
+                }
+              },
+            ),
+          _MenuAction(
+            Icons.account_balance_wallet_outlined,
+            "Expense",
+            Colors.deepOrange,
+            () => _navigateTo(ExpenseSummaryScreen()),
+          ),
+          _MenuAction(
+            Icons.storefront_outlined,
+            "Daily POBS",
+            Colors.green,
+            () {
               if (_isCheckedIn) {
-                _navigateTo(const DoctorListScreen());
+                _navigateTo(const ChemistListScreen());
               } else {
                 _showSnack("Please Check In first!");
               }
-            }),
-          _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
-            _navigateTo(ExpenseSummaryScreen());
-          }),
-
-          // --- NEW ACTION FOR CHEMIST CALL ---
-          _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
-            if (_isCheckedIn) {
-              // Usually navigates to a ChemistListScreen first, but for now
-              // we can mock passing a direct chemist or you can create the list screen next.
-              // For demonstration purposes:
-              _navigateTo(const ChemistListScreen());
-            } else {
-              _showSnack("Please Check In first!");
-            }
-          }),
-
+            },
+          ),
           if (canUseWebDcr)
             _MenuAction(
-              Icons.assignment_turned_in,
+              Icons.assignment_turned_in_outlined,
               "Daily Report",
               Colors.orange,
               () => _navigateTo(const DailyReportScreen()),
             ),
           _MenuAction(
-            Icons.business_center,
+            Icons.business_center_outlined,
             "NFW Report",
             Colors.brown,
             () => _navigateTo(const NfwReportScreen()),
@@ -724,28 +658,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         const SizedBox(height: 24),
 
-        _buildSectionTitle("AI Intelligence"),
+        _buildSectionTitle("AI Intelligence", const Color(0xFF4A148C)),
         _buildMenuGrid([
           _MenuAction(
-            Icons.auto_awesome,
+            Icons.auto_awesome_rounded,
             "AI Insights Hub",
             const Color(0xFF4A148C),
             () => _navigateTo(const AiHubScreen()),
           ),
           _MenuAction(
-            Icons.support_agent,
+            Icons.support_agent_rounded,
             "Sales Assistant",
             const Color(0xFF1565C0),
             () => _navigateTo(const AiSalesAssistantScreen()),
           ),
           _MenuAction(
-            Icons.trending_up,
+            Icons.trending_up_rounded,
             "Product Perf.",
             const Color(0xFF2E7D32),
             () => _navigateTo(const AiProductPerformanceScreen()),
           ),
           _MenuAction(
-            Icons.person_search,
+            Icons.person_search_rounded,
             "Doctor Review",
             const Color(0xFF6A1B9A),
             () => _navigateTo(const AiDoctorReviewScreen()),
@@ -753,40 +687,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         const SizedBox(height: 24),
 
-        _buildSectionTitle("Manager Reporting"),
+        _buildSectionTitle("Manager Reporting", Colors.blue),
         _buildMenuGrid([
           _MenuAction(
-            Icons.groups,
+            Icons.groups_rounded,
             "Team View",
             Colors.blue,
             () => _navigateTo(const TeamTerritoryScreen()),
           ),
           _MenuAction(
-            Icons.bar_chart,
+            Icons.bar_chart_rounded,
             "Reports",
             Colors.green,
             () => _navigateTo(const ReportsDashboardScreen()),
           ),
           _MenuAction(
-            Icons.approval,
-            "DCR Approvals (web)",
-            Colors.green,
+            Icons.approval_rounded,
+            "DCR Approval\n(Web)",
+            Colors.teal,
             () => _navigateTo(const ManagerJointWorkScreen()),
           ),
           _MenuAction(
             Icons.handshake_outlined,
-            "DCR Approvals (Tab)",
-            Colors.blue,
+            "DCR Approval\n(Tab)",
+            Colors.indigo,
             _openTabJointWork,
           ),
-            _MenuAction(
-            Icons.receipt_long,
+          _MenuAction(
+            Icons.receipt_long_outlined,
             "Team Expenses",
-            Colors.teal,
+            Colors.deepOrange,
             () => _navigateTo(const ExpenseManagerScreen()),
           ),
           _MenuAction(
-            Icons.link,
+            Icons.link_rounded,
             "Other Links",
             Colors.indigo,
             _openWebLinks,
@@ -794,16 +728,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         const SizedBox(height: 24),
 
-        _buildSectionTitle("Utilities"),
+        _buildSectionTitle("Learning & Resources", const Color(0xFF6A1B9A)),
         _buildMenuGrid([
           _MenuAction(
-            Icons.person_search,
+            Icons.library_books_rounded,
+            "Data Bank",
+            const Color(0xFF6A1B9A),
+            _openDataBank,
+          ),
+          _MenuAction(
+            Icons.school_outlined,
+            "Training\nMaterials",
+            Colors.indigo,
+            _openDataBank,
+          ),
+          _MenuAction(
+            Icons.quiz_outlined,
+            "Compliance\nDocs",
+            Colors.teal,
+            _openDataBank,
+          ),
+        ]),
+        const SizedBox(height: 24),
+
+        _buildSectionTitle("Utilities", Colors.deepPurple),
+        _buildMenuGrid([
+          _MenuAction(
+            Icons.person_search_rounded,
             "MCL Updation",
             Colors.deepPurple,
             () => _navigateTo(const NewDrMasterScreen()),
           ),
           _MenuAction(
-            Icons.folder_shared,
+            Icons.folder_shared_outlined,
             "Dr. Master",
             Colors.deepPurple,
             () => _navigateTo(const DoctorMasterScreen()),
@@ -814,32 +771,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.pink,
             () => _navigateTo(const DoctorBrandScreen()),
           ),
-          // _MenuAction(
-          //   Icons.business_center,
-          //   "Data Upload",
-          //   Colors.cyan,
-          //   () => _navigateTo(const DataUploadScreen(isManager: true)),
-          // ),
-          // _MenuAction(
-          //   Icons.business_center,
-          //   "Doctor Selection",
-          //   Colors.cyan,
-          //   () => _navigateTo(DoctorSelectionScreen(isManager: true,division: user?.division ?? "",)),
-          // ),
-          // _MenuAction(
-          //   Icons.person_add_alt_1,
-          //   "Add Doctor",
-          //   Colors.pinkAccent,
-          //   () => _navigateTo(const AddDoctorScreen()),
-          // ),
           _MenuAction(
-            Icons.support_agent,
+            Icons.support_agent_outlined,
             "Support",
             Colors.cyan,
             () => _navigateTo(const SupportScreen()),
           ),
           _MenuAction(
-            Icons.settings,
+            Icons.settings_rounded,
             "Settings",
             Colors.blueGrey,
             _showSettingsSheet,
@@ -850,70 +789,122 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  // --- SECTION TITLE ---
+
+  Widget _buildSectionTitle(String title, Color accentBar) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 4),
-      child: Text(
-        title,
-        style: GoogleFonts.poppins(
-          fontSize: 15,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
+      padding: const EdgeInsets.only(bottom: 12, left: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 4,
+            height: 18,
+            decoration: BoxDecoration(
+              color: accentBar,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Colors.black87,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- RESPONSIVE MENU GRID ---
+
+  Widget _buildMenuGrid(List<_MenuAction> actions) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final int crossAxisCount = width < 300
+            ? 3
+            : width < 420
+                ? 4
+                : width < 600
+                    ? 5
+                    : 6;
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            childAspectRatio: 0.70,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+          ),
+          itemCount: actions.length,
+          itemBuilder: (context, index) =>
+              _buildMenuGridItem(actions[index], crossAxisCount),
+        );
+      },
+    );
+  }
+
+  Widget _buildMenuGridItem(_MenuAction action, int crossAxisCount) {
+    final double iconBoxSize = crossAxisCount <= 3 ? 62 : (crossAxisCount <= 4 ? 56 : 50);
+    final double iconSize = crossAxisCount <= 3 ? 28 : (crossAxisCount <= 4 ? 24 : 22);
+    final double fontSize = crossAxisCount <= 3 ? 11.0 : (crossAxisCount <= 4 ? 10.0 : 9.5);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: action.onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                height: iconBoxSize,
+                width: iconBoxSize,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      action.color.withValues(alpha: 0.18),
+                      action.color.withValues(alpha: 0.06),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(iconBoxSize * 0.28),
+                  border: Border.all(color: action.color.withValues(alpha: 0.22), width: 1),
+                ),
+                child: Icon(action.icon, color: action.color, size: iconSize),
+              ),
+              const SizedBox(height: 6),
+              Flexible(
+                child: Text(
+                  action.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.poppins(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                    height: 1.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildMenuGrid(List<_MenuAction> actions) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 4,
-        // Slightly taller cards prevent bottom overflow for longer labels.
-        childAspectRatio: 0.68,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: actions.length,
-      itemBuilder: (context, index) {
-        final action = actions[index];
-        return Column(
-          children: [
-            InkWell(
-              onTap: action.onTap,
-              borderRadius: BorderRadius.circular(18),
-              child: Container(
-                height: 56,
-                width: 56,
-                decoration: BoxDecoration(
-                  color: action.color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Icon(action.icon, color: action.color, size: 26),
-              ),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 42,
-              child: Text(
-                action.label,
-                textAlign: TextAlign.center,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.black87,
-                  height: 1.15,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
+  // --- DRAWER ---
 
   Widget _buildDrawer(User? user) {
     return Drawer(
@@ -957,8 +948,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ListTile(
             leading: const Icon(Icons.lock_reset),
             title: const Text("Change Password"),
-            onTap: () =>
-                _navigateTo(const ChangePasswordScreen(isForced: false)),
+            onTap: () => _navigateTo(const ChangePasswordScreen(isForced: false)),
           ),
           const Divider(),
           ListTile(
@@ -971,12 +961,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // --- DATA BANK ---
+
+  void _openDataBank() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DataBankHomeScreen()),
+    );
+  }
+
+  // --- HELPERS ---
+
   void _navigateTo(Widget screen) =>
       Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
 
   void _showSnack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
-  );
+        SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
+      );
 
   void _showSettingsSheet() {
     showModalBottomSheet(
@@ -1004,9 +1005,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Install App"),
-        content: const Text(
-          "1. Tap Share/Menu.\n2. Select 'Add to Home Screen'.",
-        ),
+        content: const Text("1. Tap Share/Menu.\n2. Select 'Add to Home Screen'."),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -1023,5 +1022,5 @@ class _MenuAction {
   final String label;
   final Color color;
   final VoidCallback onTap;
-  _MenuAction(this.icon, this.label, this.color, this.onTap);
+  const _MenuAction(this.icon, this.label, this.color, this.onTap);
 }

@@ -1,12 +1,51 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/models/clm_models.dart';
 import '../../data/models/dcr_models.dart';
+import '../../providers/clm_provider.dart';
 import '../../providers/dcr_provider.dart';
+import '../clm/clm_merged_call_dcr_screen.dart';
 import 'dcr_doctor_visit_screen.dart';
 import 'dcr_chemist_visit_screen.dart';
+
+// ─── Pending CLM draft (read from SharedPreferences) ─────────────────────────
+
+class _ClmDraft {
+  final int doctorId;
+  final String doctorName;
+  final String doctorSpeciality;
+  final String prefsKey;
+  final DateTime savedAt;
+  final String reaction;
+  final List<int> brandIds;
+
+  const _ClmDraft({
+    required this.doctorId,
+    required this.doctorName,
+    this.doctorSpeciality = '',
+    required this.prefsKey,
+    required this.savedAt,
+    this.reaction = 'neutral',
+    this.brandIds = const [],
+  });
+
+  /// Reconstruct a minimal ClmDoctor so we can open ClmMergedCallDcrScreen.
+  ClmDoctor toMinimalDoctor() => ClmDoctor(
+        id: doctorId,
+        name: doctorName,
+        speciality: doctorSpeciality,
+        category: 'C',
+        territory: '',
+        area: '',
+        mobile: '',
+      );
+}
 
 class DcrDashboardScreen extends StatefulWidget {
   const DcrDashboardScreen({super.key});
@@ -19,12 +58,92 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
   static const _purple = Color(0xFF4A148C);
   static const _teal = Color(0xFF00695C);
 
+  List<_ClmDraft> _clmDrafts = [];
+  bool _draftsLoading = true;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<DcrProvider>().init();
+      if (mounted) {
+        context.read<DcrProvider>().init();
+        _loadClmDrafts();
+      }
     });
+  }
+
+  // ─── Load pending CLM drafts from SharedPreferences ────────────────────────
+
+  Future<void> _loadClmDrafts() async {
+    setState(() => _draftsLoading = true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keys = prefs.getKeys().where((k) => k.startsWith('clm_draft_')).toList();
+      final drafts = <_ClmDraft>[];
+
+      for (final key in keys) {
+        try {
+          final raw = prefs.getString(key);
+          if (raw == null) continue;
+          final data = json.decode(raw) as Map<String, dynamic>;
+
+          // Extract doctorId from key (clm_draft_{doctorId})
+          final doctorId = int.tryParse(key.replaceFirst('clm_draft_', ''));
+          if (doctorId == null) continue;
+
+          // Get doctor name from CLM provider brands/visits or from draft data
+          final savedAt = data['savedAt'] != null
+              ? DateTime.tryParse(data['savedAt'].toString()) ?? DateTime.now()
+              : DateTime.now();
+
+          final brandIds = (data['brands'] as List? ?? [])
+              .map((e) => (e as num).toInt())
+              .toList();
+
+          drafts.add(_ClmDraft(
+            doctorId: doctorId,
+            doctorName: data['doctorName']?.toString() ?? 'Doctor #$doctorId',
+            doctorSpeciality: data['doctorSpeciality']?.toString() ?? '',
+            prefsKey: key,
+            savedAt: savedAt,
+            reaction: data['reaction'] ?? 'neutral',
+            brandIds: brandIds,
+          ));
+        } catch (_) {}
+      }
+
+      if (mounted) setState(() { _clmDrafts = drafts; _draftsLoading = false; });
+    } catch (_) {
+      if (mounted) setState(() => _draftsLoading = false);
+    }
+  }
+
+  Future<void> _discardClmDraft(_ClmDraft draft) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text('Discard Draft',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        content: const Text(
+            'This will permanently delete this pending call report draft.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Discard'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(draft.prefsKey);
+      _loadClmDrafts();
+    }
   }
 
   @override
@@ -32,16 +151,13 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FB),
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Daily Call Report',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w700, fontSize: 16)),
-            Text(DateFormat('EEEE, d MMM yyyy').format(DateTime.now()),
-                style: const TextStyle(fontSize: 11, color: Colors.white70)),
-          ],
-        ),
+        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Daily Call Report',
+              style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w700, fontSize: 16)),
+          Text(DateFormat('EEEE, d MMM yyyy').format(DateTime.now()),
+              style: const TextStyle(fontSize: 11, color: Colors.white70)),
+        ]),
         backgroundColor: _purple,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -49,7 +165,10 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
           IconButton(
             icon: const Icon(Icons.refresh_outlined),
             tooltip: 'Refresh',
-            onPressed: () => context.read<DcrProvider>().loadTodaySummary(),
+            onPressed: () {
+              context.read<DcrProvider>().loadTodaySummary();
+              _loadClmDrafts();
+            },
           ),
         ],
       ),
@@ -59,12 +178,29 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           return RefreshIndicator(
-            onRefresh: () => prov.loadTodaySummary(),
+            onRefresh: () async {
+              await prov.loadTodaySummary();
+              await _loadClmDrafts();
+            },
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              padding: const EdgeInsets.fromLTRB(14, 14, 14, 120),
               children: [
                 _buildStatRow(prov),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
+
+                // ── Pending CLM Drafts ─────────────────────────────────────
+                if (!_draftsLoading && _clmDrafts.isNotEmpty) ...[
+                  _buildSectionHeader(
+                      'Pending Call Reports (CLM)',
+                      Icons.pending_actions_outlined,
+                      Colors.amber.shade700,
+                      _clmDrafts.length),
+                  const SizedBox(height: 8),
+                  ..._clmDrafts.map((d) => _buildClmDraftCard(d)),
+                  const SizedBox(height: 18),
+                ],
+
+                // ── Doctor Visits ──────────────────────────────────────────
                 _buildSectionHeader('Doctor Visits', Icons.person_outline,
                     _purple, prov.todaySummary.doctorVisits.length),
                 const SizedBox(height: 8),
@@ -74,7 +210,9 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
                 else
                   ...prov.todaySummary.doctorVisits
                       .map((v) => _buildDoctorVisitCard(context, v, prov)),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
+
+                // ── Chemist Visits ─────────────────────────────────────────
                 _buildSectionHeader('Chemist Visits', Icons.store_outlined,
                     _teal, prov.todaySummary.chemistVisits.length),
                 const SizedBox(height: 8),
@@ -84,7 +222,8 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
                 else
                   ...prov.todaySummary.chemistVisits
                       .map((v) => _buildChemistVisitCard(context, v, prov)),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
+
                 _buildSubmitButton(prov),
               ],
             ),
@@ -102,20 +241,22 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
     return Row(children: [
       _statCard('Doctor\nVisits', '${s.doctorVisits.length}', _purple,
           Icons.medical_services_outlined),
-      const SizedBox(width: 10),
+      const SizedBox(width: 8),
       _statCard('Chemist\nVisits', '${s.chemistVisits.length}', _teal,
           Icons.store_outlined),
-      const SizedBox(width: 10),
+      const SizedBox(width: 8),
       _statCard('Samples\nGiven', '${s.totalSamples}',
           const Color(0xFFE65100), Icons.medication_outlined),
+      const SizedBox(width: 8),
+      _statCard('Drafts', '${s.draftCount + _clmDrafts.length}',
+          Colors.amber.shade700, Icons.pending_actions_outlined),
     ]);
   }
 
-  Widget _statCard(
-      String label, String value, Color color, IconData icon) {
+  Widget _statCard(String label, String value, Color color, IconData icon) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(14),
@@ -127,17 +268,15 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
           ],
         ),
         child: Column(children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 6),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 5),
           Text(value,
               style: GoogleFonts.poppins(
-                  fontSize: 22, fontWeight: FontWeight.w800, color: color)),
+                  fontSize: 20, fontWeight: FontWeight.w800, color: color)),
           Text(label,
               textAlign: TextAlign.center,
               style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey.shade600,
-                  height: 1.3)),
+                  fontSize: 9, color: Colors.grey.shade600, height: 1.3)),
         ]),
       ),
     );
@@ -148,12 +287,17 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
   Widget _buildSectionHeader(
       String title, IconData icon, Color color, int count) {
     return Row(children: [
-      Icon(icon, color: color, size: 18),
+      Container(
+        width: 3, height: 16,
+        decoration:
+            BoxDecoration(color: color, borderRadius: BorderRadius.circular(4)),
+      ),
       const SizedBox(width: 8),
+      Icon(icon, color: color, size: 16),
+      const SizedBox(width: 6),
       Text(title,
           style: GoogleFonts.poppins(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
+              fontWeight: FontWeight.w700, fontSize: 14,
               color: const Color(0xFF1A1A2E))),
       const SizedBox(width: 8),
       Container(
@@ -167,6 +311,131 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
                 color: color, fontSize: 11, fontWeight: FontWeight.w700)),
       ),
     ]);
+  }
+
+  // ─── CLM Draft Card ───────────────────────────────────────────────────────────
+
+  Widget _buildClmDraftCard(_ClmDraft draft) {
+    final daysAgo = DateTime.now().difference(draft.savedAt).inDays;
+    final timeLabel = daysAgo == 0
+        ? 'Today, ${DateFormat('hh:mm a').format(draft.savedAt)}'
+        : '$daysAgo day${daysAgo != 1 ? 's' : ''} ago';
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.amber.shade300, width: 1.5),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _resumeClmDraft(draft),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.pending_actions_outlined,
+                    color: Colors.amber.shade700, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(draft.doctorName,
+                      style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.w600, fontSize: 13)),
+                  if (draft.doctorSpeciality.isNotEmpty)
+                    Text(draft.doctorSpeciality,
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade500)),
+                  Text('CLM Draft  ·  $timeLabel',
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.grey.shade400)),
+                ]),
+              ),
+              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text('PENDING',
+                      style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.amber.shade800)),
+                ),
+                const SizedBox(height: 6),
+                GestureDetector(
+                  onTap: () => _discardClmDraft(draft),
+                  child: Icon(Icons.delete_outline,
+                      size: 18, color: Colors.red.shade300),
+                ),
+              ]),
+            ]),
+            if (draft.brandIds.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6, runSpacing: 4,
+                children: draft.brandIds.take(4).map((id) => Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.amber.shade200),
+                  ),
+                  child: Text('Brand #$id',
+                      style: TextStyle(
+                          fontSize: 10, color: Colors.amber.shade800)),
+                )).toList(),
+              ),
+            ],
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () => _resumeClmDraft(draft),
+                icon: const Icon(Icons.edit_note_rounded, size: 16),
+                label: const Text('Resume & Fill Report',
+                    style: TextStyle(fontSize: 13)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.amber.shade700,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _resumeClmDraft(_ClmDraft draft) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider(
+          create: (_) => ClmProvider()..init(),
+          child: ClmMergedCallDcrScreen(
+            doctor: draft.toMinimalDoctor(),
+            // session is null — draft-resume mode
+          ),
+        ),
+      ),
+    ).then((_) => _loadClmDrafts()); // refresh draft list after return
   }
 
   // ─── Empty Card ───────────────────────────────────────────────────────────────
@@ -183,8 +452,7 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
       child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
         Icon(icon, size: 20, color: Colors.grey.shade300),
         const SizedBox(width: 10),
-        Text(msg,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+        Text(msg, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
       ]),
     );
   }
@@ -212,9 +480,12 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: _purple.withValues(alpha: 0.1),
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: _purple.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
               child: Icon(Icons.person_outline, color: _purple, size: 20),
             ),
             const SizedBox(width: 12),
@@ -222,34 +493,35 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(visit.doctorName,
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600, fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_fmtTime(visit.visitStartTime)}${visit.visitEndTime != null ? ' – ${_fmtTime(visit.visitEndTime!)}' : ''}',
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade500),
-                    ),
-                  ]),
+                Text(visit.doctorName,
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 2),
+                Row(children: [
+                  Icon(Icons.access_time_outlined,
+                      size: 11, color: Colors.grey.shade400),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${_fmtTime(visit.visitStartTime)}'
+                    '${visit.visitEndTime != null ? ' – ${_fmtTime(visit.visitEndTime!)}' : ''}',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+                ]),
+              ]),
             ),
             _statusBadge(isDraft),
-            const SizedBox(width: 4),
             PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert,
-                  size: 18, color: Colors.grey.shade400),
+              icon: Icon(Icons.more_vert, size: 18, color: Colors.grey.shade400),
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                    value: 'edit', child: Text('Edit')),
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 const PopupMenuItem(
                     value: 'delete',
-                    child:
-                        Text('Delete', style: TextStyle(color: Colors.red))),
+                    child: Text('Delete', style: TextStyle(color: Colors.red))),
               ],
               onSelected: (v) async {
                 if (v == 'edit') {
                   _openDoctorVisit(context, existingVisit: visit);
-                } else if (v == 'delete') {
+                } else {
                   final ok = await _confirmDelete(context);
                   if (ok == true) await prov.deleteDoctorVisit(visit.id!);
                 }
@@ -284,9 +556,12 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: _teal.withValues(alpha: 0.1),
+            Container(
+              width: 40, height: 40,
+              decoration: BoxDecoration(
+                color: _teal.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
               child: Icon(Icons.store_outlined, color: _teal, size: 20),
             ),
             const SizedBox(width: 12),
@@ -294,49 +569,47 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(visit.chemistName,
-                        style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600, fontSize: 13)),
-                    const SizedBox(height: 2),
-                    Row(children: [
-                      Text(_fmtTime(visit.visitStartTime),
-                          style: TextStyle(
-                              fontSize: 11, color: Colors.grey.shade500)),
-                      if (visit.productAvailable) ...[
-                        const SizedBox(width: 8),
-                        const Icon(Icons.check_circle_outline,
-                            size: 12, color: Colors.green),
-                        const SizedBox(width: 2),
-                        const Text('Available',
-                            style: TextStyle(
-                                fontSize: 10, color: Colors.green)),
-                      ],
-                      if (visit.pobUnits > 0) ...[
-                        const SizedBox(width: 8),
-                        Text('POB: ${visit.pobUnits}',
-                            style: const TextStyle(
-                                fontSize: 10, color: Color(0xFFE65100))),
-                      ],
-                    ]),
-                  ]),
+                Text(visit.chemistName,
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 2),
+                Row(children: [
+                  Icon(Icons.access_time_outlined,
+                      size: 11, color: Colors.grey.shade400),
+                  const SizedBox(width: 3),
+                  Text(_fmtTime(visit.visitStartTime),
+                      style: TextStyle(
+                          fontSize: 11, color: Colors.grey.shade500)),
+                  if (visit.productAvailable) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.check_circle_outline,
+                        size: 11, color: Colors.green),
+                    const SizedBox(width: 2),
+                    const Text('Available',
+                        style: TextStyle(fontSize: 10, color: Colors.green)),
+                  ],
+                  if (visit.pobUnits > 0) ...[
+                    const SizedBox(width: 8),
+                    Text('POB: ${visit.pobUnits}',
+                        style: const TextStyle(
+                            fontSize: 10, color: Color(0xFFE65100))),
+                  ],
+                ]),
+              ]),
             ),
             _statusBadge(isDraft),
-            const SizedBox(width: 4),
             PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert,
-                  size: 18, color: Colors.grey.shade400),
+              icon: Icon(Icons.more_vert, size: 18, color: Colors.grey.shade400),
               itemBuilder: (_) => [
-                const PopupMenuItem(
-                    value: 'edit', child: Text('Edit')),
+                const PopupMenuItem(value: 'edit', child: Text('Edit')),
                 const PopupMenuItem(
                     value: 'delete',
-                    child:
-                        Text('Delete', style: TextStyle(color: Colors.red))),
+                    child: Text('Delete', style: TextStyle(color: Colors.red))),
               ],
               onSelected: (v) async {
                 if (v == 'edit') {
                   _openChemistVisit(context, existing: visit);
-                } else if (v == 'delete') {
+                } else {
                   final ok = await _confirmDelete(context);
                   if (ok == true) await prov.deleteChemistVisit(visit.id!);
                 }
@@ -352,26 +625,31 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
 
   Widget _buildSubmitButton(DcrProvider prov) {
     final s = prov.todaySummary;
-    final canSubmit = s.allSubmitted;
-    final draftCount = s.draftCount;
+    final canSubmit = s.allSubmitted && _clmDrafts.isEmpty;
+    final totalDrafts = s.draftCount + _clmDrafts.length;
+
     return Column(children: [
-      if (draftCount > 0)
-        Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.info_outline,
-                  size: 14, color: Colors.orange.shade700),
-              const SizedBox(width: 6),
-              Text(
-                '$draftCount visit${draftCount > 1 ? 's' : ''} still in draft. Submit all before final DCR submission.',
-                style: TextStyle(
-                    fontSize: 12, color: Colors.orange.shade700),
-                textAlign: TextAlign.center,
-              ),
-            ],
+      if (totalDrafts > 0)
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.orange.shade200),
           ),
+          child: Row(children: [
+            Icon(Icons.info_outline, size: 16, color: Colors.orange.shade700),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '$totalDrafts report${totalDrafts > 1 ? 's' : ''} pending. '
+                'Complete all before final DCR submission.',
+                style: TextStyle(
+                    fontSize: 12, color: Colors.orange.shade800),
+              ),
+            ),
+          ]),
         ),
       SizedBox(
         width: double.infinity,
@@ -383,15 +661,15 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
                 ? 'Submit Today\'s DCR'
                 : s.doctorVisits.isEmpty && s.chemistVisits.isEmpty
                     ? 'Add Visits to Submit DCR'
-                    : 'Complete All Visits to Submit',
+                    : 'Complete All Reports to Submit',
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
           ),
           style: ElevatedButton.styleFrom(
             backgroundColor: canSubmit ? _purple : Colors.grey.shade300,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 14),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
@@ -432,6 +710,7 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
 
   Widget _statusBadge(bool isDraft) {
     return Container(
+      margin: const EdgeInsets.only(right: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: isDraft
@@ -440,7 +719,7 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(
-        isDraft ? 'Draft' : 'Submitted',
+        isDraft ? 'Draft' : 'Done',
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w700,
@@ -457,16 +736,14 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
         builder: (_) => AlertDialog(
           title: Text('Delete Visit',
               style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
-          content:
-              const Text('This visit and all its data will be deleted.'),
+          content: const Text('This visit and all its data will be deleted.'),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(context, false),
                 child: const Text('Cancel')),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white),
+                  backgroundColor: Colors.red, foregroundColor: Colors.white),
               onPressed: () => Navigator.pop(context, true),
               child: const Text('Delete'),
             ),
@@ -488,8 +765,7 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
     ).then((_) => prov.loadTodaySummary());
   }
 
-  void _openChemistVisit(BuildContext context,
-      {DcrChemistVisit? existing}) {
+  void _openChemistVisit(BuildContext context, {DcrChemistVisit? existing}) {
     final prov = context.read<DcrProvider>();
     Navigator.push(
       context,
@@ -506,23 +782,29 @@ class _DcrDashboardScreenState extends State<DcrDashboardScreen> {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text('Submit DCR',
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(children: [
+          const Icon(Icons.send_outlined, color: Color(0xFF4A148C)),
+          const SizedBox(width: 10),
+          Text('Submit DCR',
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w700)),
+        ]),
         content: const Text(
-            'Are you sure you want to submit today\'s Daily Call Report? This action cannot be undone.'),
+            'Submit today\'s Daily Call Report? All visits will be marked as final.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-                backgroundColor: _purple, foregroundColor: Colors.white),
+                backgroundColor: _purple, foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8))),
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text(
-                      'DCR submitted successfully! Pending sync.'),
+                  content: Text('DCR submitted successfully! Pending sync.'),
                   backgroundColor: Colors.green,
                 ),
               );

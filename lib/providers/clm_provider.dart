@@ -74,17 +74,22 @@ class ClmProvider extends ChangeNotifier {
   // ─── Initialise ───────────────────────────────────────────────────────────────
 
   Future<void> init() async {
-    final seeded = await _db.isDemoSeeded();
-    if (!seeded) await _db.seedDemoData();
-
+    // Load whatever is already cached so the UI is instantly responsive
     await loadDoctors();
     await loadBrands();
     await loadDashboardStats();
     await _loadLikedBrands();
+    await _restoreIncompleteSession();
 
     final online = await _sync.isOnline();
     if (online) {
-      unawaited(_sync.uploadPendingAnalytics());
+      // Pull fresh master data (CLM + DCR) then reload UI
+      unawaited(_sync.fullSync().then((_) async {
+        await loadDoctors();
+        await loadBrands();
+        await loadDashboardStats();
+        notifyListeners();
+      }));
     }
   }
 
@@ -107,14 +112,6 @@ class ClmProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setStringList(
         'clm_liked_brands', _likedBrandIds.map((e) => e.toString()).toList());
-  }
-
-  Future<void> seedDemoData() async {
-    await _db.seedDemoData();
-    await loadDoctors();
-    await loadBrands();
-    await loadDashboardStats();
-    notifyListeners();
   }
 
   // ─── Doctor Loading ───────────────────────────────────────────────────────────
@@ -286,7 +283,29 @@ class ClmProvider extends ChangeNotifier {
 
   // ─── Session Management ───────────────────────────────────────────────────────
 
+  static const _activeSessionPrefKey = 'clm_active_session_id';
+
+  /// True if there is an in-progress session for a DIFFERENT doctor.
+  bool hasConflictingSession(int doctorId) =>
+      _activeSession != null && _activeSession!.doctorId != doctorId;
+
+  /// True if the same doctor is already checked in (session in progress).
+  bool isSameDocCheckedIn(int doctorId) =>
+      _activeSession != null && _activeSession!.doctorId == doctorId;
+
+  /// Starts a new detailing session.
+  /// If a session for a DIFFERENT doctor is still open, it is auto-ended first.
+  /// If it is the SAME doctor, this is a no-op (returns the existing session).
   Future<void> startSession(ClmDoctor doctor, {Position? position}) async {
+    // Auto-checkout a session for a different doctor
+    if (_activeSession != null && _activeSession!.doctorId != doctor.id) {
+      await endSession();
+    }
+    // Same doctor already checked in – don't create a duplicate session
+    if (_activeSession != null && _activeSession!.doctorId == doctor.id) {
+      return;
+    }
+
     final brandIds = _cart.map((c) => c.brand.id).toList();
     _activeSession = await _analytics.createSession(
       doctor: doctor,
@@ -294,14 +313,22 @@ class ClmProvider extends ChangeNotifier {
       latitude: position?.latitude.toString(),
       longitude: position?.longitude.toString(),
     );
+
+    // Persist so we can restore after a cold restart
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_activeSessionPrefKey, _activeSession!.id);
+
     notifyListeners();
   }
 
   Future<void> endSession() async {
     if (_activeSession == null) return;
     await _analytics.endSession(_activeSession!.id);
-    await _db.updateDoctorSession(
-        _activeSession!.doctorId, DateTime.now());
+    await _db.updateDoctorSession(_activeSession!.doctorId, DateTime.now());
+
+    // Clear the persisted session key
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_activeSessionPrefKey);
 
     // Re-load doctor list so last_detailed_at is fresh
     await loadDoctors();
@@ -310,8 +337,25 @@ class ClmProvider extends ChangeNotifier {
     _activeSession = null;
     notifyListeners();
 
-    // Background upload
     unawaited(_sync.uploadPendingAnalytics());
+  }
+
+  /// Recovers any incomplete session left open from a previous app run.
+  Future<void> _restoreIncompleteSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final sessionId = prefs.getString(_activeSessionPrefKey);
+    if (sessionId == null) return;
+    try {
+      final session = await _db.getSessionById(sessionId);
+      if (session != null && session.endTime == null) {
+        _activeSession = session;
+        notifyListeners();
+      } else {
+        await prefs.remove(_activeSessionPrefKey);
+      }
+    } catch (_) {
+      await prefs.remove(_activeSessionPrefKey);
+    }
   }
 
   // ─── Dashboard Stats ──────────────────────────────────────────────────────────
@@ -328,10 +372,38 @@ class ClmProvider extends ChangeNotifier {
   // ─── Sync ─────────────────────────────────────────────────────────────────────
 
   Future<void> syncNow() async {
+    if (!await _sync.isOnline()) {
+      _syncStatus = const ClmSyncStatus(
+          state: SyncState.error, message: 'No internet connection');
+      notifyListeners();
+      return;
+    }
     await _sync.fullSync();
     await loadDoctors();
     await loadBrands();
     await loadDashboardStats();
+    notifyListeners();
+  }
+
+  Future<void> clearAndResync() async {
+    _syncStatus = const ClmSyncStatus(
+        state: SyncState.syncing, message: 'Clearing local data…');
+    _allDoctors = [];
+    _filteredDoctors = [];
+    _allBrands = [];
+    notifyListeners();
+
+    await _db.clearAllData();
+
+    _syncStatus = const ClmSyncStatus(
+        state: SyncState.syncing, message: 'Syncing from server…');
+    notifyListeners();
+
+    await _sync.fullSync();
+    await loadDoctors();
+    await loadBrands();
+    await loadDashboardStats();
+    notifyListeners();
   }
 
   Future<void> downloadBrand(int brandId,
@@ -354,6 +426,11 @@ class ClmProvider extends ChangeNotifier {
 
   Future<List<ClmCallReport>> getCallReportsForDoctor(int doctorId) =>
       _db.getCallReportsForDoctor(doctorId);
+
+  Future<ClmCallReport?> getLastCallReportForDoctor(int doctorId) async {
+    final reports = await _db.getCallReportsForDoctor(doctorId);
+    return reports.isNotEmpty ? reports.first : null;
+  }
 
   Future<ClmCallReport?> getCallReportForSession(String sessionId) =>
       _db.getCallReportForSession(sessionId);

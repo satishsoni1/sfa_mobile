@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
+import 'providers/auth_provider.dart';
+import 'providers/clm_provider.dart';
+import 'providers/data_bank_provider.dart';
 import 'providers/report_provider.dart';
-import 'providers/auth_provider.dart'; // Ensure this file exists
+import 'providers/ai_hub_provider.dart';
 import 'presentation/dashboard/dashboard_screen.dart';
 import 'presentation/login/login_screen.dart';
 import 'presentation/webview/internal_webview_screen.dart';
@@ -14,10 +17,10 @@ void main() {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ReportProvider()),
-        // We initialize AuthProvider and immediately check login status
-        ChangeNotifierProvider(
-          create: (_) => AuthProvider()..checkLoginStatus(),
-        ),
+        ChangeNotifierProvider(create: (_) => AuthProvider()..checkLoginStatus()),
+        ChangeNotifierProvider(create: (_) => ClmProvider()),
+        ChangeNotifierProvider(create: (_) => DataBankProvider()),
+        ChangeNotifierProvider(create: (_) => AiHubProvider()),
       ],
       child: const ZForceApp(),
     ),

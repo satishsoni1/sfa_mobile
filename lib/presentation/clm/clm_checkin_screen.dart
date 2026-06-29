@@ -481,6 +481,11 @@ class _ClmCheckInScreenState extends State<ClmCheckInScreen>
   // ─── Bottom Bar ───────────────────────────────────────────────────────────────
 
   Widget _buildBottomBar() {
+    final prov = context.read<ClmProvider>();
+    final sameDocActive = prov.isSameDocCheckedIn(widget.doctor.id);
+    final conflicting = prov.hasConflictingSession(widget.doctor.id);
+    final activeSession = prov.activeSession;
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
       decoration: BoxDecoration(
@@ -493,6 +498,57 @@ class _ClmCheckInScreenState extends State<ClmCheckInScreen>
         ],
       ),
       child: Column(mainAxisSize: MainAxisSize.min, children: [
+        // Auto-checkout notice
+        if (conflicting && activeSession != null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.orange.shade200),
+            ),
+            child: Row(children: [
+              Icon(Icons.swap_horiz_rounded,
+                  size: 16, color: Colors.orange.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${activeSession.doctorName} session will be '
+                  'auto-checked out.',
+                  style: TextStyle(
+                      fontSize: 11, color: Colors.orange.shade800,
+                      fontWeight: FontWeight.w500),
+                ),
+              ),
+            ]),
+          ),
+        ],
+        // Already checked in for THIS doctor
+        if (sameDocActive) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.blue.shade200),
+            ),
+            child: Row(children: [
+              Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Already checked in with this doctor. Continuing will '
+                  'resume the current session.',
+                  style: TextStyle(fontSize: 11, color: Colors.blue.shade800),
+                ),
+              ),
+            ]),
+          ),
+        ],
         SizedBox(
           width: double.infinity,
           height: 50,
@@ -506,19 +562,24 @@ class _ClmCheckInScreenState extends State<ClmCheckInScreen>
                     height: 18,
                     child: CircularProgressIndicator(
                         color: Colors.white, strokeWidth: 2))
-                : const Icon(Icons.check_circle_outline),
+                : Icon(sameDocActive
+                    ? Icons.play_arrow_rounded
+                    : Icons.check_circle_outline),
             label: Text(
               _checkingIn
                   ? 'Starting…'
-                  : _withinRange
-                      ? 'Check In & Start Detailing'
-                      : 'Too Far Away',
+                  : sameDocActive
+                      ? 'Resume Detailing'
+                      : _withinRange || !_doctorHasLocation
+                          ? 'Check In & Start Detailing'
+                          : 'Too Far Away',
               style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600, fontSize: 14),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  _withinRange || !_doctorHasLocation ? _green : Colors.grey.shade300,
+              backgroundColor: _withinRange || !_doctorHasLocation
+                  ? (sameDocActive ? const Color(0xFF1565C0) : _green)
+                  : Colors.grey.shade300,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(

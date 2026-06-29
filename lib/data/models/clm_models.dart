@@ -51,34 +51,45 @@ class ClmDoctor {
   });
 
   factory ClmDoctor.fromJson(Map<String, dynamic> j) => ClmDoctor(
-        id: (j['id'] as num).toInt(),
-        name: _titleCase(j['doctor_name'] ?? j['name'] ?? ''),
+        id: int.parse(j['id'].toString()),
+        name: _titleCase(
+            j['doctor_name']?.toString() ?? j['name']?.toString() ?? ''),
         speciality: j['speciality']?.toString() ?? '',
         category: j['category']?.toString() ?? 'C',
-        territory: j['territory']?.toString() ?? '',
+        // API sends 'territory_type'; fall back to 'territory'
+        territory: (j['territory_type'] ?? j['territory'])?.toString() ?? '',
         area: j['area']?.toString() ?? '',
-        mobile: j['mobile_no']?.toString() ?? j['mobile']?.toString() ?? '',
+        mobile: (j['mobile_no'] ?? j['mobile'])?.toString() ?? '',
         email: j['email']?.toString(),
-        hospital: j['hospital']?.toString(),
+        hospital: j['clinic_name']?.toString() ?? j['hospital']?.toString(),
         address: j['address']?.toString(),
-        priority: (j['priority'] as num?)?.toInt() ?? 2,
+        priority: int.tryParse((j['priority'] ?? '').toString()) ?? 2,
         assignedBrandIds: (j['brand_ids'] as List?)
-                ?.map((e) => (e as num).toInt())
+                ?.map((e) => int.parse(e.toString()))
                 .toList() ??
             [],
         lastDetailedAt: j['last_detailed_at'] != null
             ? DateTime.tryParse(j['last_detailed_at'].toString())
             : null,
-        totalSessions: (j['total_sessions'] as num?)?.toInt() ?? 0,
+        totalSessions: int.tryParse((j['total_sessions'] ?? '').toString()) ?? 0,
         isPlanned: j['is_planned'] == 1 || j['is_planned'] == true,
-        birthday: j['birthday']?.toString(),
-        anniversary: j['anniversary']?.toString(),
+        // API sends 'date_of_birth'; fall back to 'birthday'
+        birthday: (j['date_of_birth'] ?? j['birthday'])?.toString(),
+        // API sends 'marriage_anniversary'; fall back to 'anniversary'
+        anniversary:
+            (j['marriage_anniversary'] ?? j['anniversary'])?.toString(),
         nextCallDate: j['next_call_date'] != null
             ? DateTime.tryParse(j['next_call_date'].toString())
             : null,
-        callFrequencyTarget: (j['call_freq_target'] as num?)?.toInt() ?? 2,
-        latitude: (j['latitude'] as num?)?.toDouble(),
-        longitude: (j['longitude'] as num?)?.toDouble(),
+        callFrequencyTarget:
+            int.tryParse((j['call_freq_target'] ?? '').toString()) ?? 2,
+        // Stored as VARCHAR in MySQL — always parse from string
+        latitude: j['latitude'] != null
+            ? double.tryParse(j['latitude'].toString())
+            : null,
+        longitude: j['longitude'] != null
+            ? double.tryParse(j['longitude'].toString())
+            : null,
       );
 
   factory ClmDoctor.fromDb(Map<String, dynamic> r) => ClmDoctor(
@@ -281,6 +292,8 @@ class ClmSlide {
   bool isDownloaded;
   bool isStarred;
   final int fileSize; // bytes
+  // Carried only during API sync — written to disk, not persisted in SQLite
+  final String? htmlContent;
 
   ClmSlide({
     required this.id,
@@ -295,18 +308,20 @@ class ClmSlide {
     this.isDownloaded = false,
     this.isStarred = false,
     this.fileSize = 0,
+    this.htmlContent,
   });
 
   factory ClmSlide.fromJson(Map<String, dynamic> j) => ClmSlide(
-        id: (j['id'] as num).toInt(),
-        brandId: (j['brand_id'] as num).toInt(),
-        type: j['type']?.toString() ?? 'image',
-        title: j['title']?.toString() ?? '',
-        sequence: (j['sequence'] as num?)?.toInt() ?? 0,
-        remoteUrl: j['url']?.toString() ?? j['remote_url']?.toString(),
-        durationSecs: (j['duration'] as num?)?.toInt() ?? 0,
-        checksum: j['checksum']?.toString() ?? '',
-        fileSize: (j['file_size'] as num?)?.toInt() ?? 0,
+        id:           int.parse(j['id'].toString()),
+        brandId:      int.parse(j['brand_id'].toString()),
+        type:         j['type']?.toString() ?? 'html',
+        title:        j['title']?.toString() ?? '',
+        sequence:     int.tryParse((j['sequence'] ?? '').toString()) ?? 0,
+        remoteUrl:    j['remote_url']?.toString() ?? j['url']?.toString(),
+        durationSecs: int.tryParse((j['duration_secs'] ?? j['duration'] ?? '').toString()) ?? 0,
+        checksum:     j['checksum']?.toString() ?? '',
+        fileSize:     int.tryParse((j['file_size'] ?? '').toString()) ?? 0,
+        htmlContent:  j['content']?.toString(),
       );
 
   factory ClmSlide.fromDb(Map<String, dynamic> r) => ClmSlide(
@@ -432,6 +447,7 @@ class ClmSession {
   Map<String, dynamic> toSyncJson() => {
         'session_id': id,
         'doctor_id': doctorId,
+        'doctor_name': doctorName,
         'mr_employee_code': mrEmployeeCode,
         'start_time': startTime.toIso8601String(),
         'end_time': endTime?.toIso8601String(),

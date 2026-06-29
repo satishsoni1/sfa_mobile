@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -24,7 +26,10 @@ class ClmAnalyticsService {
     String? longitude,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final employeeCode = prefs.getString('employee_code') ?? '';
+    final userJson = prefs.getString('user_data');
+    final employeeCode = userJson != null
+        ? (jsonDecode(userJson) as Map<String, dynamic>)['employee_code']?.toString() ?? ''
+        : '';
     final deviceInfo = 'Flutter/Android';
 
     final session = ClmSession(

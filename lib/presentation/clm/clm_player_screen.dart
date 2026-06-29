@@ -12,7 +12,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../data/models/clm_models.dart';
 import '../../providers/clm_provider.dart';
-import 'clm_call_report_screen.dart';
+import 'clm_merged_call_dcr_screen.dart';
 
 class ClmPlayerScreen extends StatefulWidget {
   final ClmDoctor doctor;
@@ -141,7 +141,7 @@ class _ClmPlayerScreenState extends State<ClmPlayerScreen>
         MaterialPageRoute(
           builder: (_) => ChangeNotifierProvider.value(
             value: _prov,
-            child: ClmCallReportScreen(
+            child: ClmMergedCallDcrScreen(
               doctor: widget.doctor,
               session: widget.session,
               brands: brands,

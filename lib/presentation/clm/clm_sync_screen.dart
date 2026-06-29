@@ -3,8 +3,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../data/models/clm_models.dart';
 import '../../providers/clm_provider.dart';
+import '../../providers/data_bank_provider.dart';
 
 class ClmSyncScreen extends StatefulWidget {
   const ClmSyncScreen({super.key});
@@ -20,14 +23,51 @@ class _ClmSyncScreenState extends State<ClmSyncScreen> {
   String? _downloadingBrandId;
   bool _seeding = false;
 
-  Future<void> _seedDemoData(BuildContext context, ClmProvider prov) async {
+  Future<void> _clearAndResync(BuildContext context, ClmProvider clmProv) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear & Resync'),
+        content: const Text(
+          'This will delete all locally cached doctors, brands, products, '
+          'chemists, and training materials, then reload everything fresh from the server.\n\n'
+          'Unsynced visit data will NOT be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.deepPurple),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear & Sync'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
     setState(() => _seeding = true);
     try {
-      await prov.seedDemoData();
+      // Clear CLM + DCR data and resync
+      await clmProv.clearAndResync();
+
+      // Clear DataBank data and resync
+      if (context.mounted) {
+        final dbProv = context.read<DataBankProvider>();
+        final prefs = await SharedPreferences.getInstance();
+        final token = prefs.getString('auth_token') ?? '';
+        if (token.isNotEmpty) {
+          await dbProv.clearAndResync(token: token);
+        }
+      }
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Demo data loaded — 8 doctors, 3 brands, 11 slides'),
+            content: const Text('All data cleared and resynced from server'),
             backgroundColor: Colors.deepPurple.shade600,
             behavior: SnackBarBehavior.floating,
           ),
@@ -37,7 +77,7 @@ class _ClmSyncScreenState extends State<ClmSyncScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Seed failed: $e'),
+            content: Text('Sync failed: $e'),
             backgroundColor: Colors.red.shade600,
           ),
         );
@@ -304,8 +344,8 @@ class _ClmSyncScreenState extends State<ClmSyncScreen> {
                   ? const SizedBox(
                       width: 14, height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.science_outlined, size: 16),
-              label: Text(_seeding ? 'Loading…' : 'Load Demo Data',
+                  : const Icon(Icons.cloud_sync_outlined, size: 16),
+              label: Text(_seeding ? 'Syncing…' : 'Force Sync from Server',
                   style: const TextStyle(fontSize: 13)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.deepPurple.shade400,
@@ -316,7 +356,7 @@ class _ClmSyncScreenState extends State<ClmSyncScreen> {
               ),
               onPressed: _seeding
                   ? null
-                  : () => _seedDemoData(context, prov),
+                  : () => _clearAndResync(context, prov),
             ),
           ),
         ],
