@@ -711,6 +711,77 @@ class ApiService {
     }
   }
 
+  // --- DCR UNLOCK REQUEST ---
+  Future<Map<String, dynamic>> requestDcrUnlock({
+    required String requestType,
+    required int employeeId,
+    required String reason,
+    String? fromDate,
+    String? toDate,
+  }) async {
+    final token = await getToken();
+
+    final fields = <String, String>{
+      'request_type': requestType,
+      'employee_id': employeeId.toString(),
+      'reason': reason,
+    };
+    if (requestType == 'WEB' && fromDate != null && toDate != null) {
+      fields['from_date'] = fromDate;
+      fields['to_date'] = toDate;
+    }
+
+    final uri = Uri.parse('$baseUrl/dcr/unlock');
+    final response = await http.post(uri, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    }, body: fields);
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    throw Exception('Unexpected response from DCR unlock API');
+  }
+
+  // --- DCR STATUS ---
+  Future<Map<String, dynamic>> fetchDcrStatus({required int employeeId}) async {
+    final token = await getToken();
+    final uri = Uri.parse(
+        '$baseUrl/dcr/status?employee_id=$employeeId');
+    final response = await http.get(uri, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) return decoded;
+    throw Exception('Unexpected response from DCR status API');
+  }
+
+  // --- DCR REQUESTS (manager inbox) ---
+  Future<List<Map<String, dynamic>>> fetchDcrRequests({required int employeeId}) async {
+    final token = await getToken();
+    final uri = Uri.parse(
+        '$baseUrl/dcr/requests?employee_id=$employeeId');
+    final response = await http.get(uri, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      final data = decoded['data'];
+      if (data is Map<String, dynamic>) {
+        final raw = data['requests'];
+        if (raw is List) {
+          return raw
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+      }
+    }
+    return <Map<String, dynamic>>[];
+  }
+
   // 3. Get Leave History List
   Future<List<dynamic>> getLeaves() async {
     final token = await getToken();

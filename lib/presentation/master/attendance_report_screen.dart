@@ -830,6 +830,7 @@ class _AttendanceDetailSheet extends StatelessWidget {
         return 'has_dcr';
       case 'chemist_reports':
       case 'chemist_report':
+      case 'chemist report':
         return 'has_chemist_report';
       default:
         return 'has_$key';

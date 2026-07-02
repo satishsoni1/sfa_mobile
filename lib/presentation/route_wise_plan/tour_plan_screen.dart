@@ -193,12 +193,37 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            DateFormat('MMMM yyyy').format(_selectedDate),
-            style: GoogleFonts.poppins(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+          DropdownButtonHideUnderline(
+            child: DropdownButton<DateTime>(
+              value: DateTime(_selectedDate.year, _selectedDate.month, 1),
+              icon: const Icon(Icons.arrow_drop_down, color: Colors.black87),
+              isDense: true,
+              items: [
+                // Generate a list of months: 3 months ago up to the current month
+                for (int i = -3; i <= 0; i++)
+                  DateTime(DateTime.now().year, DateTime.now().month + i, 1)
+              ].map((date) {
+                return DropdownMenuItem<DateTime>(
+                  value: date,
+                  child: Text(
+                    DateFormat('MMMM yyyy').format(date),
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (newMonth) {
+                if (newMonth != null) {
+                  setState(() {
+                    // Switch to the 1st of the selected month
+                    _selectedDate = newMonth;
+                  });
+                  _fetchMonthlyPlans();
+                }
+              },
             ),
           ),
           ElevatedButton.icon(
@@ -236,7 +261,11 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
 
   Widget _buildDateStrip() {
     int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
-    return Container(
+    return SizedBox(
+      height: 90,
+      child: Stack(
+        children: [
+          Container(
       height: 90,
       color: Colors.white,
       child: ListView.builder(
@@ -301,6 +330,38 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             ),
           );
         },
+            ),
+          ),
+
+          // ── Scroll hint arrow on the right edge ───────────────────────────
+          Positioned(
+            top: 0,
+            right: 0,
+            bottom: 0,
+            child: IgnorePointer(
+              child: Container(
+                width: 48,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                    colors: [
+                      Colors.white.withOpacity(0.0),
+                      Colors.white.withOpacity(0.85),
+                    ],
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    color: _primaryColor.withOpacity(0.7),
+                    size: 26,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

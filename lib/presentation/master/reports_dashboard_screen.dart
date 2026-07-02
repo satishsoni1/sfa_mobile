@@ -66,7 +66,7 @@ class ReportsDashboardScreen extends StatelessWidget {
         'type': ReportType.pobSummary,
       },
       {
-        'title': 'Doctor Selection',
+        'title': 'Visit Frequency',
         'icon': Icons.person_search_outlined,
         'type': ReportType.visitSummary,
       },

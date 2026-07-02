@@ -33,6 +33,7 @@ import '../reporting/TeamTerritoryScreen.dart';
 import 'external_links_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
+import '../dcr/dcr_unlock_request_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
 
 // NEW IMPORT FOR CHEMIST REPORTING
@@ -65,7 +66,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.51";
+  static const String CURRENT_APP_VERSION = "1.0.52";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -78,6 +79,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Expense Data
   String _expClaimed = "0";
   String _expPending = "0";
+
+  // DCR Requests (notification inbox)
+  List<Map<String, dynamic>> _dcrRequests = [];
+  bool _isFetchingDcrSheet = false;
 
   Timer? _timer;
   String _elapsedTime = "00:00";
@@ -123,6 +128,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         reportProvider.fetchTodayData(),
         _fetchAttendance(apiService),
         _fetchExpenseSummary(apiService),
+        _fetchDcrRequests(apiService),
       ]);
     } catch (e) {
       if (mounted) setState(() => _statusText = "Offline");
@@ -243,6 +249,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return value == 1 || value == true || value?.toString() == '1';
   }
 
+  Future<void> _fetchDcrRequests(ApiService api) async {
+    try {
+      final user = Provider.of<AuthProvider>(context, listen: false).user;
+      if (user == null) return;
+      final requests = await api.fetchDcrRequests(employeeId: user.employeeId);
+      if (!mounted) return;
+      setState(() => _dcrRequests = requests);
+    } catch (_) {
+      // Silently ignore — notification badge simply stays at 0
+    }
+  }
+
   Future<void> _fetchExpenseSummary(ApiService api) async {
     try {
       final data = await api.getMonthlyExpenses(DateTime.now());
@@ -295,7 +313,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Provider.of<AuthProvider>(context, listen: false).logout();
   }
 
-  void _openTabJointWork() {
+  void _openTabJointWork() async {
     final employeeCode =
         Provider.of<AuthProvider>(context, listen: false,
     ).user?.employeeCode.trim();
@@ -307,16 +325,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final url = 'https://zorvia.globalspace.in/dcrapproval/$employeeCode';
 
-    Navigator.pushNamed(
+    await Navigator.pushNamed(
       context,
       InternalWebViewScreen.routeName,
       arguments: InternalWebViewArgs(
         url: url,
          title: 'Tab Joint Work'),
     );
+    
+    if (mounted) _fetchDcrRequests(ApiService());
   }
 
-  void _openActionCenter() {
+  void _openActionCenter() async {
     final employeeCode = Provider.of<AuthProvider>(
       context,
       listen: false,
@@ -330,11 +350,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final url =
         'https://zorvia.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
 
-    Navigator.pushNamed(
+    await Navigator.pushNamed(
       context,
       InternalWebViewScreen.routeName,
       arguments: InternalWebViewArgs(url: url, title: 'Action Center'),
     );
+
+    if (mounted) _fetchDcrRequests(ApiService());
   }
 
   void _openWebLinks() {
@@ -610,17 +632,134 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildVisitsOverview() {
     final visitCount = Provider.of<ReportProvider>(context).visitCount;
+    final notifCount = _dcrRequests.length;
     return Row(
       children: [
-        _buildSummaryItem(
-          "Visits",
-          "$visitCount",
-          Icons.people_outline,
-          Colors.blue,
+        // ── Visits + Notification card (split 50/50 inside one card) ─────────
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.grey.shade200),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.shade100,
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  // ── Left half: Visit count ─────────────────────────────────
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.people_outline, color: Colors.blue, size: 22),
+                        const SizedBox(height: 6),
+                        Text(
+                          '$visitCount',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          'Visits',
+                          style: GoogleFonts.poppins(
+                              fontSize: 11, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ── Divider ────────────────────────────────────────────────
+                  VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: Colors.grey.shade200,
+                    indent: 8,
+                    endIndent: 8,
+                  ),
+                  // ── Right half: Notification bell ──────────────────────────
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _showDcrRequestsSheet,
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          // Bell with red count badge on top-right
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              Icon(
+                                Icons.notifications_outlined,
+                                color: primaryColor,
+                                size: 26,
+                              ),
+                              if (notifCount > 0)
+                                Positioned(
+                                  top: -6,
+                                  right: -8,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.red,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    child: Text(
+                                      '$notifCount',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'DCR\nRequests',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.poppins(
+                                fontSize: 11, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 4),
+                          if (_isFetchingDcrSheet)
+                            SizedBox(
+                              width: 40,
+                              height: 2,
+                              child: LinearProgressIndicator(
+                                backgroundColor: primaryColor.withOpacity(0.2),
+                                valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                              ),
+                            )
+                          else
+                            const SizedBox(height: 2),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
         const SizedBox(width: 12),
+        // ── Online card ──────────────────────────────────────────────────────
         _buildSummaryItem(
-          "Online",
+          'Online',
           _elapsedTime,
           Icons.timer_outlined,
           Colors.orange,
@@ -628,6 +767,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ],
     );
   }
+
 
   Widget _buildSummaryItem(
     String label,
@@ -667,6 +807,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ── DCR Requests bottom sheet ─────────────────────────────────────────────
+  Future<void> _showDcrRequestsSheet() async {
+    if (_isFetchingDcrSheet) return;
+    setState(() => _isFetchingDcrSheet = true);
+
+    // Fetch fresh data every time the bell is tapped
+    await _fetchDcrRequests(ApiService());
+    
+    if (!mounted) return;
+    setState(() => _isFetchingDcrSheet = false);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _DcrRequestsSheet(
+        requests: _dcrRequests,
+        primaryColor: primaryColor,
+        onActionTap: () {
+          Navigator.pop(context); 
+          _openActionCenter();    
+        },
       ),
     );
   }
@@ -742,6 +908,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "NFW Report",
             Colors.brown,
             () => _navigateTo(const NfwReportScreen()),
+          ),
+          _MenuAction(
+            Icons.lock_open,
+            "DCR Unlock\nRequest",
+            Colors.redAccent,
+            () => _navigateTo(const DcrUnlockRequestScreen()),
           ),
         ]),
         const SizedBox(height: 24),
@@ -999,8 +1171,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _navigateTo(Widget screen) =>
-      Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+  void _navigateTo(Widget screen) async {
+      await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+      if (mounted) _fetchDcrRequests(ApiService());
+  }
 
   void _showSnack(String msg) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
@@ -1052,4 +1226,363 @@ class _MenuAction {
   final Color color;
   final VoidCallback onTap;
   _MenuAction(this.icon, this.label, this.color, this.onTap);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DCR Requests Bottom Sheet
+// ─────────────────────────────────────────────────────────────────────────────
+class _DcrRequestsSheet extends StatelessWidget {
+  final List<Map<String, dynamic>> requests;
+  final Color primaryColor;
+  final VoidCallback onActionTap;
+
+  const _DcrRequestsSheet({
+    required this.requests,
+    required this.primaryColor,
+    required this.onActionTap,
+  });
+
+  String _formatDateTime(String? iso) {
+    if (iso == null) return '—';
+    try {
+      final dt = DateTime.parse(iso);
+      const months = [
+        '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${dt.day} ${months[dt.month]} ${dt.year}';
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.82,
+      ),
+      decoration: const BoxDecoration(
+        color: Color(0xFFF4F6F9),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ── Handle bar ──────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 4),
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          // ── Header ──────────────────────────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4A148C).withOpacity(0.10),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    Icons.notifications_active_outlined,
+                    color: primaryColor,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'DCR Unlock Requests',
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      '${requests.length} pending ${requests.length == 1 ? 'request' : 'requests'}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, thickness: 1),
+          // ── List ──────────────────────────────────────────────────────────
+          Flexible(
+            child: requests.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      children: [
+                        Icon(Icons.notifications_none,
+                            size: 52, color: Colors.grey.shade300),
+                        const SizedBox(height: 12),
+                        Text(
+                          'No pending requests',
+                          style: GoogleFonts.poppins(
+                            color: Colors.grey.shade500,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                    shrinkWrap: true,
+                    itemCount: requests.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
+                    itemBuilder: (context, index) {
+                      final req = requests[index];
+                      return _DcrRequestCard(
+                        request: req,
+                        primaryColor: primaryColor,
+                        formatDateTime: _formatDateTime,
+                        onTap: onActionTap,
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Single DCR Request Card
+// ─────────────────────────────────────────────────────────────────────────────
+class _DcrRequestCard extends StatelessWidget {
+  final Map<String, dynamic> request;
+  final Color primaryColor;
+  final String Function(String?) formatDateTime;
+  final VoidCallback onTap;
+
+  const _DcrRequestCard({
+    required this.request,
+    required this.primaryColor,
+    required this.formatDateTime,
+    required this.onTap,
+  });
+
+  /// Safe string getter — never crashes on dart2js even if value is JS undefined
+  String _str(String key, [String fallback = '']) {
+    final v = request[key];
+    if (v == null) return fallback;
+    return v.toString();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rawName = _str('first_name');
+    final rawId   = _str('employee_id');
+    final employeeName = rawName.trim().isNotEmpty ? rawName.trim() : (rawId.trim().isNotEmpty ? rawId.trim() : 'Unknown');
+
+    final requestType = _str('request_type', 'TAB').toUpperCase();
+    final isWeb = requestType == 'WEB';
+    final typeLabel = isWeb ? 'Web DCR Unlock Request' : 'Tab DCR Unlock Request';
+    final typeColor = isWeb ? Colors.orange.shade700 : Colors.blue.shade700;
+    final typeBg    = isWeb ? Colors.orange.shade50  : Colors.blue.shade50;
+    final typeIcon  = isWeb ? Icons.language_outlined : Icons.tablet_android_outlined;
+
+    final reason      = _str('request_reason', '—');
+    final requestedAt = formatDateTime(_str('requested_at').isEmpty ? null : _str('requested_at'));
+
+    final rawFrom = _str('from_date');
+    final rawTo   = _str('to_date');
+    final fromDate = rawFrom.isNotEmpty ? formatDateTime(rawFrom) : null;
+    final toDate   = rawTo.isNotEmpty   ? formatDateTime(rawTo)   : null;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Card Header ──────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: primaryColor.withOpacity(0.04),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 18,
+                    backgroundColor: primaryColor.withOpacity(0.12),
+                    child: Text(
+                      employeeName.isNotEmpty
+                          ? employeeName[0].toUpperCase()
+                          : '?',
+                      style: TextStyle(
+                        color: primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      employeeName,
+                      style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: primaryColor,
+                      ),
+                    ),
+                  ),
+                  // Type badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: typeBg,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(typeIcon, size: 12, color: typeColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          requestType,
+                          style: GoogleFonts.poppins(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: typeColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // ── Chevron arrow ──────────────────────────────────────────
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: Colors.grey.shade400,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
+            // ── Card Body ────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    typeLabel,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _infoRow(
+                    Icons.comment_outlined,
+                    'Requested Reason',
+                    reason,
+                    Colors.grey.shade700,
+                  ),
+                  if (fromDate != null) ...[
+                    const SizedBox(height: 8),
+                    _infoRow(
+                      Icons.calendar_today_outlined,
+                      'From Date',
+                      fromDate,
+                      Colors.grey.shade700,
+                    ),
+                  ],
+                  if (toDate != null) ...[
+                    const SizedBox(height: 8),
+                    _infoRow(
+                      Icons.event_outlined,
+                      'To Date',
+                      toDate,
+                      Colors.grey.shade700,
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  _infoRow(
+                    Icons.access_time_outlined,
+                    'Requested At',
+                    requestedAt,
+                    Colors.grey.shade500,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+
+  Widget _infoRow(IconData icon, String label, String value, Color valueColor) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: Colors.grey.shade400),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 110,
+          child: Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 11,
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
