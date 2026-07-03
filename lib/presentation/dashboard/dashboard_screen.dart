@@ -66,7 +66,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.52";
+  static const String CURRENT_APP_VERSION = "1.0.53";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -330,7 +330,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       InternalWebViewScreen.routeName,
       arguments: InternalWebViewArgs(
         url: url,
-         title: 'Tab Joint Work'),
+         title: 'Joint Work'),
     );
     
     if (mounted) _fetchDcrRequests(ApiService());
