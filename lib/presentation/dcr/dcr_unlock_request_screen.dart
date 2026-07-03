@@ -30,9 +30,9 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
   bool _isSubmitting = false;
   DateTime? _fromDate;
 
-  // to_date is always fromDate + 1 day (sent silently in API, not shown)
+  // to_date is always today's date (sent silently in API, shown as read-only)
   DateTime? get _toDate =>
-      _fromDate != null ? _fromDate!.add(const Duration(days: 1)) : null;
+      _fromDate != null ? DateTime.now() : null;
 
   // ── Derived helpers ────────────────────────────────────────────────────────
   bool get _isTabLocked    => _tabStatus?['locked'] == true;
@@ -205,17 +205,45 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
                     _buildTypeToggle(),
                     const SizedBox(height: 24),
 
-                    // ── Web: The Date only (to_date sent silently) ───────────
+                    // ── Web: From Date and To Date ───────────────────────────
                     if (_requestType == 'WEB') ...[
-                      _sectionLabel('Date*'),
+                      _sectionLabel('From Date*'),
                       const SizedBox(height: 8),
                       _buildDateField(
                         label: _fromDate == null
-                            ? 'Select The Date'
+                            ? 'Select From Date'
                             : DateFormat('dd MMM yyyy').format(_fromDate!),
                         icon: Icons.calendar_today_outlined,
                         onTap: _isAlreadyActive ? null : _pickFromDate,
                       ),
+                      const SizedBox(height: 16),
+                      _sectionLabel('To Date'),
+                      const SizedBox(height: 8),
+                      _buildDateField(
+                        label: _toDate == null
+                            ? '${DateFormat('dd MMM yyyy').format(DateTime.now())}'
+                            : DateFormat('dd MMM yyyy').format(_toDate!),
+                        icon: Icons.lock_outline,
+                        onTap: null, // Disabled, since it's auto-calculated
+                      ),
+                      if (_webStatus?['expiry_after'] != null) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 14, color: Colors.red.shade700),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Once approved, Web DCR will be unlocked for ${_webStatus!['expiry_after']} hours.',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: Colors.red.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                       const SizedBox(height: 24),
                     ],
 

@@ -66,7 +66,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.53";
+  static const String CURRENT_APP_VERSION = "1.0.54";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -215,9 +215,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final status = statusData['status'];
       final data = statusData['data'];
       final employee = statusData['employee'];
-      final webDcrAllowed = employee is Map<String, dynamic>
-          ? _flagEnabled(employee['is_web_dcr_allowed'])
-          : null;
+      final webDcrAllowed = data is Map<String, dynamic> && data.containsKey('is_web_dcr_allowed')
+          ? _flagEnabled(data['is_web_dcr_allowed'])
+          : (employee is Map<String, dynamic>
+              ? _flagEnabled(employee['is_web_dcr_allowed'])
+              : null);
 
       setState(() {
         if (webDcrAllowed != null) {
