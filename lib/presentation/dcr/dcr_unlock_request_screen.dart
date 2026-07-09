@@ -46,6 +46,12 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
       (_requestType == 'TAB' && !_isTabLocked) ||
       (_requestType == 'WEB' && _isWebEnabled);
 
+  bool get _isPending =>
+      (_requestType == 'TAB' && _isTabRequested) ||
+      (_requestType == 'WEB' && _isWebRequested);
+
+  bool get _isFormDisabled => _isAlreadyActive || _isPending;
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
   @override
   void initState() {
@@ -214,7 +220,7 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
                             ? 'Select From Date'
                             : DateFormat('dd MMM yyyy').format(_fromDate!),
                         icon: Icons.calendar_today_outlined,
-                        onTap: _isAlreadyActive ? null : _pickFromDate,
+                        onTap: _isFormDisabled ? null : _pickFromDate,
                       ),
                       const SizedBox(height: 16),
                       _sectionLabel('To Date'),
@@ -254,14 +260,14 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
                       controller: _reasonController,
                       maxLines: 5,
                       maxLength: 500,
-                      enabled: !_isAlreadyActive,
+                      enabled: !_isFormDisabled,
                       style: GoogleFonts.poppins(fontSize: 14),
                       decoration: InputDecoration(
                         hintText: 'Enter your reason for unlocking DCR...',
                         hintStyle: TextStyle(
                             color: Colors.grey.shade400, fontSize: 13),
                         filled: true,
-                        fillColor: _isAlreadyActive
+                        fillColor: _isFormDisabled
                             ? Colors.grey.shade100
                             : Colors.white,
                         contentPadding: const EdgeInsets.all(16),
@@ -311,7 +317,7 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
                       height: 52,
                       child: ElevatedButton(
                         onPressed:
-                            (_isSubmitting || _isAlreadyActive) ? null : _submit,
+                            (_isSubmitting || _isFormDisabled) ? null : _submit,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           disabledBackgroundColor:
@@ -319,7 +325,7 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          elevation: _isAlreadyActive ? 0 : 2,
+                          elevation: _isFormDisabled ? 0 : 2,
                         ),
                         child: _isSubmitting
                             ? const SizedBox(
@@ -334,7 +340,7 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
                                 'SUBMIT REQUEST',
                                 style: GoogleFonts.poppins(
                                   color: Colors.white
-                                      .withOpacity(_isAlreadyActive ? 0.55 : 1),
+                                      .withOpacity(_isFormDisabled ? 0.55 : 1),
                                   fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.8,
@@ -372,14 +378,30 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
 
     // locked = true & requested = true  →  pending
     if (_isTabRequested) {
-      final requestedAt = _tabStatus?['request']?['requested_at'] as String?;
+      final requestInfo = _tabStatus?['request'] as Map<String, dynamic>?;
+      final requestedAt = requestInfo?['requested_at'] as String?;
+      final approver = requestInfo?['approver']?.toString() ?? 'the manager';
       final formatted = _formatDateTime(requestedAt);
       return _StatusCard(
         icon: Icons.hourglass_top_rounded,
         color: Colors.orange,
         title: 'Request Pending',
-        subtitle:
-            "Your last request, made on $formatted, is still pending approval on the manager's side.",
+        subtitleWidget: RichText(
+          text: TextSpan(
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.black87,
+              height: 1.5,
+            ),
+            children: [
+              const TextSpan(text: "Your last request, made on "),
+              TextSpan(text: formatted, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const TextSpan(text: ", is still pending approval from "),
+              TextSpan(text: approver, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const TextSpan(text: "."),
+            ],
+          ),
+        ),
       );
     }
 
@@ -400,14 +422,30 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
 
     // enabled = false & requested = true  →  pending
     if (_isWebRequested) {
-      final requestedAt = _webStatus?['request']?['requested_at'] as String?;
+      final requestInfo = _webStatus?['request'] as Map<String, dynamic>?;
+      final requestedAt = requestInfo?['requested_at'] as String?;
+      final approver = requestInfo?['approver']?.toString() ?? 'the manager';
       final formatted = _formatDateTime(requestedAt);
       return _StatusCard(
         icon: Icons.hourglass_top_rounded,
         color: Colors.orange,
         title: 'Request Pending',
-        subtitle:
-            "Your last request, made on $formatted, is still pending approval on the manager's side.",
+        subtitleWidget: RichText(
+          text: TextSpan(
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.black87,
+              height: 1.5,
+            ),
+            children: [
+              const TextSpan(text: "Your last request, made on "),
+              TextSpan(text: formatted, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const TextSpan(text: ", is still pending approval from "),
+              TextSpan(text: approver, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const TextSpan(text: "."),
+            ],
+          ),
+        ),
       );
     }
 
@@ -552,13 +590,15 @@ class _StatusCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String title;
-  final String subtitle;
+  final String? subtitle;
+  final Widget? subtitleWidget;
 
   const _StatusCard({
     required this.icon,
     required this.color,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
+    this.subtitleWidget,
   });
 
   @override
@@ -595,14 +635,16 @@ class _StatusCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
+                if (subtitle != null)
                 Text(
-                  subtitle,
+                  subtitle!,
                   style: GoogleFonts.poppins(
                     fontSize: 12,
                     color: Colors.black87,
                     height: 1.5,
                   ),
                 ),
+                if (subtitleWidget != null) subtitleWidget!,
               ],
             ),
           ),

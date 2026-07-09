@@ -678,6 +678,7 @@ class _ChemistListScreenState extends State<ChemistListScreen> {
                             builder: (_) => ChemistHistoryScreen(
                               chemistId: chemist.id.toString(),
                               chemistName: chemist.name,
+                              targetUserId: _selectedSubordinate?['id'],
                             ),
                           ),
                         );

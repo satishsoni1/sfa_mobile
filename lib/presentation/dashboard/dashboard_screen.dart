@@ -66,7 +66,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.55";
+  static const String CURRENT_APP_VERSION = "1.0.56";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -1036,7 +1036,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // ),
           _MenuAction(
             Icons.support_agent,
-            "Support",
+            "Help & Support",
             Colors.cyan,
             () => _navigateTo(const SupportScreen()),
           ),
@@ -1122,28 +1122,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: ListView(
         padding: EdgeInsets.zero,
         children: [
-          UserAccountsDrawerHeader(
+          DrawerHeader(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: [primaryColor, accentColor]),
             ),
-            accountName: Text(
-              user?.firstName ?? "User",
-              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-            ),
-            accountEmail: Text(
-              user?.division ?? "Employee",
-              style: GoogleFonts.poppins(),
-            ),
-            currentAccountPicture: CircleAvatar(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  radius: 26,
               backgroundColor: Colors.white,
               child: Text(
-                (user?.firstName ?? "U")[0],
+                (user?.firstName ?? "U")[0].toUpperCase(),
                 style: TextStyle(
-                  fontSize: 24,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
                   color: primaryColor,
                 ),
               ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  user?.firstName ?? "User",
+                  style: GoogleFonts.poppins(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  "${user?.employeeCode ?? '-'} · ${(user?.division ?? '-').toUpperCase()}",
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.normal,
+                    color: Colors.white.withOpacity(0.85),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  user?.designation ?? '-',
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.normal,
+                    color: Colors.white.withOpacity(0.85),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
           ListTile(

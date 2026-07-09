@@ -2499,10 +2499,14 @@ Future<void> submitFullMonth(int month, int year) async {
     return [];
   }
 
-  Future<List<dynamic>> getChemistHistory(String chemistId) async {
+  Future<List<dynamic>> getChemistHistory(String chemistId, {int? userId}) async {
     try {
+      String url = '$baseUrl/app/chemists/$chemistId/history';
+      if (userId != null) {
+        url += '?user_id=$userId';
+      }
       final response = await http.get(
-        Uri.parse('$baseUrl/app/chemists/$chemistId/history'),
+        Uri.parse(url),
         headers: await _getHeaders(),
       );
 

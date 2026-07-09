@@ -9,10 +9,12 @@ import '../../providers/report_provider.dart'; // Import the provider
 class ChemistHistoryScreen extends StatefulWidget {
   final String chemistId;
   final String chemistName;
+  final int? targetUserId;
 
   const ChemistHistoryScreen({
     required this.chemistId,
     required this.chemistName,
+    this.targetUserId,
     super.key,
   });
 
@@ -38,7 +40,7 @@ class _ChemistHistoryScreenState extends State<ChemistHistoryScreen> {
   Future<void> _fetchHistory() async {
     setState(() => _isLoading = true);
     try {
-      final data = await ApiService().getChemistHistory(widget.chemistId);
+      final data = await ApiService().getChemistHistory(widget.chemistId, userId: widget.targetUserId);
       if (mounted) {
         setState(() {
           _history = data;
