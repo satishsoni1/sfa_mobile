@@ -128,6 +128,17 @@ class SupportScreen extends StatelessWidget {
                   color: const Color(0xFF4A148C),
                   onTap: () => _launchAction(context, Uri.parse(_supportUrl)),
                 ),
+                const SizedBox(height: 16),
+
+                // 4. HELP CENTER (WEB)
+                _buildContactCard(
+                  icon: Icons.help_outline,
+                  title: "Help Center",
+                  subtitle: "Browse FAQs and knowledge base articles",
+                  actionText: "Visit Site",
+                  color: Colors.blue,
+                  onTap: () => _launchAction(context, Uri.parse("https://zorvia.globalspace.in/help")),
+                ),
                 const SizedBox(height: 40),
 
                 // Footer Info
