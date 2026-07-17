@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Android Emulator uses 10.0.2.2. For Real Device use your PC IP (e.g., 192.168.1.5)
-  static const String baseUrl = 'https://zorvia.globalspace.in/api';
+  static const String baseUrl = 'https://vodo-app.globalspace.in/api';
 
   String _errorMessageFromBody(String body) {
     try {

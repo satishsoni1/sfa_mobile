@@ -1,0 +1,158 @@
+Complete List of APIs Used in SFA Mobile App
+
+This document provides a comprehensive list of all backend API endpoints called by the mobile application. The current Base URL for all these endpoints is https://vodo-app.globalspace.in/api
+
+Authentication
+Most of the endpoints listed below require a Bearer token in the Authorization header, obtained via the /login endpoint.
+
+--------------------------------------------------
+1. Authentication & User Management
+--------------------------------------------------
+[POST] /login : Authenticates a regular user
+[POST] /loginadmin : Authenticates an admin user
+[POST] /app/change-password : Changes the logged-in user's password
+[POST] /forgot-password/send-otp : Sends a password reset OTP
+[POST] /forgot-password/verify-otp : Verifies the OTP
+[POST] /forgot-password/reset : Resets the password
+[GET]  /app/version : Fetches the latest server app version
+
+--------------------------------------------------
+2. Attendance & Leaves
+--------------------------------------------------
+[GET]  /app/attendance/status : Fetches today's check-in status
+[POST] /app/attendance/check-in : Submits check-in time
+[POST] /app/attendance/break : Toggles break status
+[POST] /app/attendance/check-out : Submits check-out time
+[GET]  /app/attendance : Fetches attendance summary (supports date ranges & user ID)
+[GET]  /app/attendance/detail : Fetches detailed log for a specific date
+[GET]  /app/leave/meta : Fetches leave types and balances
+[POST] /app/leave/apply : Applies for a leave
+[GET]  /app/leaves : Fetches leave history list
+[GET]  /app/leaves/{id} : Fetches details for a single leave
+
+--------------------------------------------------
+3. Tour Plans (TP)
+--------------------------------------------------
+[GET]  /app/tour-plans?month=YYYY-MM : Fetches tour plans for a given month
+[POST] /app/tour-plans : Saves or adds a tour plan for a specific date
+[POST] /app/tour-plans/duplicate : Duplicates a plan from one date to another
+[DELETE] /app/tour-plans/{date} : Deletes a tour plan for a specific date
+[GET]  /tour-plan/monthly?month=YYYY-MM : Fetches full monthly tour plans
+[POST] /tour-plan/save : Saves an Area-based Tour Plan
+[POST] /tour-plan/bulk-action : Bulk approves/rejects multiple dates
+[POST] /tour-plan/submit-month : Submits the entire month plan for review
+[POST] /tour-plan/review-month : Manager reviews entire month's plan
+[PATCH] /app/tour-plans/{planId}/status : Updates the approval status of a single plan
+
+--------------------------------------------------
+4. Daily Call Reports (DCR) & Visits
+--------------------------------------------------
+[GET]  /app/new/visits?date=YYYY-MM-DD : Fetches visits by specific date
+[GET]  /app/new/visits/today : Fetches today's visits
+[POST] /app/new/visits : Submits a single new visit
+[PUT]  /app/new/visits/{id} : Updates a single visit
+[POST] /app/new/visits/submit-day : Final submission for the day
+[GET]  /app/new/visits/history?doctorId={id} : Fetches past visit history for a specific doctor
+[POST] /app/nfw-submit : Submits Non-Field Work (NFW) report
+[GET]  /app/nfw-history : Fetches NFW history
+[GET]  /app/team/joint-work : Fetches list of team members for joint work
+[GET]  /app/manager/joint-requests : Manager fetches joint work requests
+[POST] /app/manager/approve-joint : Manager approves joint work
+[POST] /dcr/unlock : Requests unlocking of DCR
+[GET]  /dcr/status?employee_id={id} : Fetches status of DCR unlock request
+[GET]  /dcr/requests?employee_id={id} : Fetches DCR requests for managers
+[GET]  /app/reports/daily-call : Fetches daily call report summary
+[GET]  /app/reports/execution : Fetches call report execution across a date range
+[POST] /app/employee/visit : Fetches visit summary details
+
+--------------------------------------------------
+5. Doctors & Brands (Master Data)
+--------------------------------------------------
+[GET]  /app/doctors : Fetches doctors list (supports ?search=)
+[POST] /app/doctors : Adds or updates a doctor (legacy)
+[GET]  /app/products : Fetches list of products
+[GET]  /app/doctors/master : Fetches the full Master list of Doctors
+[GET]  /app/doctors/my-list : Fetches logged-in user's doctor list
+[GET]  /app/manager/doctors/{userId} : Manager fetches subordinate's doctors
+[GET]  /export-mcl-dr-list : Generates a CSV export of the Doctor list
+[GET]  /app/new-doctor-master : New endpoints for Doctor Master management
+[POST] /app/new-doctor-master : Add new doctor to master
+[PUT]  /app/new-doctor-master/{id} : Update doctor in master
+[POST] /app/new-doctor-master/{id}/category : Update doctor's visit category
+[GET]  /app/new-doctor-master/speciality-targets : Fetches targets per speciality
+[GET]  /app/new-doctor-master/options : Fetches dropdown options (specialties/qualifications)
+[GET]  /app/new-doctor-master/practice-types : Fetches practice types filtered by speciality
+[POST] /app/new-doctor-master/submit-approval : Submits list for approval
+[POST] /app/new-doctor-master/{id}/approve : Manager approves doctor list
+[POST] /app/new-doctor-master/{id}/reject : Manager rejects doctor list
+[GET]  /app/brands : Fetches brands
+[GET]  /app/brands/{id}/doctors : Fetches doctors mapped to a brand
+[POST] /app/brands/{id}/doctors : Mapped doctors to brand
+[DELETE] /app/brands/{brandId}/doctors/{doctorId} : Unmaps doctor from a brand
+[POST] /app/brands/submit : Submits brands for approval
+[POST] /app/brands/{userId}/approve : Manager approves brands
+[POST] /app/brands/{userId}/reject : Manager rejects brands
+[GET]  /app/brands/doctor-summary : Fetches summary of doctor brand mapping
+[POST] /app/save-doctor-selection : Saves doctor selection (core/focus/etc.)
+[POST] /app/approve-doctor-selection : Manager approves doctor selections
+
+--------------------------------------------------
+6. Chemists & Pharmacy
+--------------------------------------------------
+[GET]  /app/chemists : Fetches list of chemists
+[POST] /app/chemists/add : Adds a new chemist
+[POST] /app/chemists/update/{id} : Updates chemist details
+[POST] /app/chemist-reports/save : Saves a chemist visit report
+[GET]  /app/chemist-reports/date?date={date} : Fetches chemist visits by date
+[GET]  /app/chemists/{id}/history : Fetches visit history for a specific chemist
+
+--------------------------------------------------
+7. Expenses
+--------------------------------------------------
+[GET]  /app/expense/calculate?date={date} : Calculates automated TA/DA based on DCR
+[POST] /app/expense/submit : Submits a daily expense with attachments
+[DELETE] /app/expense/{id} : Deletes a daily expense
+[GET]  /app/expense/all-rates : Fetches Daily Allowance (DA) rates
+[GET]  /app/expense/ta-routes : Fetches Traveling Allowance (TA) routes & rules
+[GET]  /app/expense/route-km-suggestion : Suggests KM between two towns
+[POST] /app/expense/save-route : Saves a custom TA route for user
+[GET]  /app/expense/nfw-rate : Fetches rates for Non-Field Work
+[GET]  /app/expense/admin-work-types : Fetches Admin Work categories
+[GET]  /app/expense/da-config : Fetches configuration for DA rules
+[POST] /app/expense/recalculate-location : Recalculates TA based on new waypoints
+[GET]  /app/expense/monthly : Fetches expenses for a given month
+[GET]  /app/expense/monthly-summary : Fetches monthly total summary
+[POST] /app/expense/submit-month : Submits all expenses for the month for approval
+[GET]  /app/expense/monthly-claims : Fetches internet/mobile monthly claims
+[POST] /app/expense/monthly-claim : Submits an internet/mobile claim
+[DELETE] /app/expense/monthly-claim/{id} : Deletes an internet/mobile claim
+[GET]  /app/expense/claim-rates : Fetches allowance limits for claims
+[GET]  /app/expense/gst-bills : Fetches GST bills uploaded during expenses
+[GET]  /app/expense/calendar-status : Fetches expense submission calendar status
+[GET]  /app/expense/subordinate-summary : Manager fetches subordinate expense summary
+[GET]  /app/expense/subordinate-daily : Manager fetches subordinate daily expenses
+[POST] /app/expense/approve-month : Manager approves monthly expense
+[POST] /app/expense/reject-month : Manager rejects monthly expense
+
+--------------------------------------------------
+8. E-Detailing (CLM) Sync (Vodoclm Pro Integration)
+--------------------------------------------------
+[GET]  /clm/doctors : Syncs doctor data for e-detailing
+[GET]  /clm/brands : Syncs brand data for e-detailing
+[GET]  /clm/brands/{id}/slides : Syncs presentation slides and metadata for a brand
+[GET]  [Dynamic URL] : Downloads the actual media assets (video, html zip, image)
+[POST] /clm/sync/sessions : Uploads offline-recorded presentation sessions
+[POST] /clm/sync/analytics : Uploads detailed per-slide tracking analytics
+
+--------------------------------------------------
+9. Miscellaneous & Master Uploads
+--------------------------------------------------
+[GET]  /links : Fetches dynamic external links for external modules
+[GET]  /app/manager/team : Fetches subordinates reporting to the logged-in manager
+[GET]  /app/manager/subordinates : Fetches subordinates list
+[GET]  /app/locations : Fetches available locations (Towns/HQs)
+[GET]  /areas : Fetches area list
+[POST] /areas : Creates a new area/territory
+[POST] /app/upload-master-data : Uploads bulk master data files (Excel/CSV)
+[GET]  /app/master-data : Fetches uploaded master data logs
+[GET]  /app/manager/reports-new/{type} : Unified endpoint for various hierarchy reports

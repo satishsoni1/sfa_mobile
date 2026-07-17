@@ -45,7 +45,7 @@ class _ExternalLinksScreenState extends State<ExternalLinksScreen> {
  Future<void> _openLink(_ExternalLink link) async {
     final url = _buildEmployeeUrl(link.url);
     final uri = Uri.tryParse(url);
-    final opensInsideApp = uri?.host == 'zorvia.globalspace.in';
+    final opensInsideApp = uri?.host == 'vodo-app.globalspace.in';
 
     if (!opensInsideApp && uri != null) {
       final launched = await launchUrl(

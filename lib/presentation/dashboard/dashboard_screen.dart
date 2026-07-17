@@ -66,7 +66,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.58";
+  static const String CURRENT_APP_VERSION = "1.0.59";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -325,7 +325,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    final url = 'https://zorvia.globalspace.in/dcrapproval/$employeeCode';
+    final url = 'https://vodo-app.globalspace.in/dcrapproval/$employeeCode';
 
     await Navigator.pushNamed(
       context,
@@ -350,7 +350,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final url =
-        'https://zorvia.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://vodo-app.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     await Navigator.pushNamed(
       context,
@@ -387,7 +387,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
-    const double headerHeight = 340;
+    const double headerHeight = 240;
     const double cardOverlap = 60;
 
     return Scaffold(
@@ -492,28 +492,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: Colors.white,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                height: 80,
-                padding: const EdgeInsets.all(10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Image.asset(
-                      _getZoneLogo(user?.division),
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => Text(
-                        user?.division ?? "ZONE",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ],

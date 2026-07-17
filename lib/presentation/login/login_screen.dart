@@ -110,65 +110,117 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () =>
-          FocusManager.instance.primaryFocus?.unfocus(),
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: Scaffold(
         backgroundColor: Colors.white,
         resizeToAvoidBottomInset: true,
-        body: Center(
+        body: Container(
+          width: double.infinity,
+          height: double.infinity,
+          color: Colors.white,
+          child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 24, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 450, 
+              constraints: const BoxConstraints(maxWidth: 400),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.grey[300]!,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 15,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
+                      // Logo
                   SizedBox(
-                    height: 200,
+                    height: 60,
                     child: Image.asset(
                       'assets/images/demo_logo.png',
                       fit: BoxFit.contain,
-                      errorBuilder:
-                          (context, error, stackTrace) {
-                        return const Icon(
-                          Icons.broken_image,
-                          size: 50,
-                          color: Colors.grey,
-                        );
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Icon(Icons.broken_image, size: 50, color: Colors.grey);
                       },
                     ),
                   ),
+                      const SizedBox(height: 16),
+                      Text(
+                        "Welcome Back",
+                        style: GoogleFonts.poppins(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF4A148C),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "Sign in to continue",
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 35),
 
-                  const SizedBox(height: 30),
-
+                      // Employee ID Field
                   TextField(
                     controller: _empIdController,
                     textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Employee ID',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                  ),
+                          labelStyle: TextStyle(color: Colors.grey[600]),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF4A148C), width: 1.5),
+                          ),
+                          prefixIcon: const Icon(Icons.person_outline, color: Color(0xFF4A148C)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
-                  const SizedBox(height: 16),
-
+                      // Password Field
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _handleLogin(),
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Password',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.lock),
-                    ),
-                  ),
+                          labelStyle: TextStyle(color: Colors.grey[600]),
+                          filled: true,
+                          fillColor: Colors.grey[100],
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: Color(0xFF4A148C), width: 1.5),
+                          ),
+                          prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF4A148C)),
+                        ),
+                      ),
 
-                  // --- NEW: Forgot Password Button ---
+                      const SizedBox(height: 12),
+
+                      // Forgot Password
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
@@ -180,96 +232,98 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         );
                       },
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(50, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                       child: Text(
                         "Forgot Password?",
                         style: GoogleFonts.poppins(
-                          color: Colors.blueAccent,
+                          color: const Color(0xFF6A1B9A),
                           fontWeight: FontWeight.w600,
+                              fontSize: 13,
                         ),
                       ),
                     ),
                   ),
+                      const SizedBox(height: 30),
 
-                  const SizedBox(height: 10),
-
+                      // Login Button
                   SizedBox(
-                    height: 52,
+                    height: 54,
                     width: double.infinity,
                     child: ElevatedButton(
-                      onPressed:
-                          _isLoading ? null : _handleLogin,
+                      onPressed: _isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent,
+                        backgroundColor: const Color(0xFF4A148C),
                         foregroundColor: Colors.white,
+                            elevation: 5,
+                            shadowColor: const Color(0xFF4A148C).withOpacity(0.5),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                       ),
                       child: _isLoading
                           ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child:
-                                  CircularProgressIndicator(
+                              height: 24,
+                              width: 24,
+                              child: CircularProgressIndicator(
                                 color: Colors.white,
-                                strokeWidth: 2,
+                                strokeWidth: 2.5,
                               ),
                             )
-                          : const Text(
+                          : Text(
                               'LOGIN',
-                              style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight:
-                                      FontWeight.bold),
+                              style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2,
+                              ),
                             ),
                     ),
                   ),
+                      const SizedBox(height: 30),
 
-                  const SizedBox(height: 25),
-
+                      // Support & Version
+                      Divider(color: Colors.grey[200], thickness: 1.5),
+                  const SizedBox(height: 15),
                   TextButton.icon(
                     onPressed: _callSupport,
                     icon: const Icon(
                       Icons.support_agent_rounded,
-                      color: Colors.blueAccent,
+                      color: Color(0xFF6A1B9A),
                       size: 20,
                     ),
                     label: Text(
                       "Need Help? Call Support",
                       style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: Colors.blueAccent,
+                        fontSize: 13,
+                        color: const Color(0xFF6A1B9A),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  Column(
-                    children: [
-                      Text(
-                        'Powered by',
-                        style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            color: Colors.grey[600]),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 10),
                       Text(
-                        'GlobalSpace',
-                        style: GoogleFonts.poppins(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        _appVersion,
+                        'Powered by GlobalSpace',
                         style: GoogleFonts.poppins(
                           fontSize: 11,
                           color: Colors.grey[500],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        _appVersion,
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.grey[400],
                         ),
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
             ),
           ),

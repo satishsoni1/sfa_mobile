@@ -17,7 +17,7 @@ class ClmSyncService {
   factory ClmSyncService() => _instance;
   ClmSyncService._();
 
-  static const String _baseUrl = 'https://zorvia.globalspace.in/api';
+  static const String _baseUrl = 'https://vodo-app.globalspace.in/api';
   static const String _prefLastSync = 'clm_last_master_sync';
 
   final ClmDatabaseService _db = ClmDatabaseService();

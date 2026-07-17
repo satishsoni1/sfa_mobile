@@ -137,7 +137,7 @@ class SupportScreen extends StatelessWidget {
                   subtitle: "Browse FAQs and knowledge base articles",
                   actionText: "Visit Site",
                   color: Colors.blue,
-                  onTap: () => _launchAction(context, Uri.parse("https://zorvia.globalspace.in/help")),
+                  onTap: () => _launchAction(context, Uri.parse("https://vodo-app.globalspace.in/help")),
                 ),
                 const SizedBox(height: 40),
 
