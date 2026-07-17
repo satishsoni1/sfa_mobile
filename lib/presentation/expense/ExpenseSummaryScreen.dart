@@ -1288,7 +1288,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             pw.Center(
               child: pw.Column(
                 children: [
-                  pw.Text('ZORVIA TOUR EXPENSE STATEMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: const PdfColor.fromInt(0xFF4A148C))),
+                  pw.Text('DEMO TOUR EXPENSE STATEMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: const PdfColor.fromInt(0xFF4A148C))),
                   pw.SizedBox(height: 1),
                   pw.Text('DIVISION: ${division.toUpperCase()}  |  ZONE: ${(_summary['zone'] ?? 'ZF').toString().toUpperCase()}  |  STATUS: ${_isSubmitted ? "SUBMITTED" : "PENDING"}',
                       style: pw.TextStyle(fontSize: 7.0, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),

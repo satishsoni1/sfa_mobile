@@ -66,7 +66,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.57";
+  static const String CURRENT_APP_VERSION = "1.0.58";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -377,9 +377,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _getZoneLogo(String? division) {
     final zone = division?.toLowerCase() ?? "";
-    if (zone.contains("1")) return "assets/images/3.png";
-    if (zone.contains("2")) return "assets/images/4.png";
-    return "assets/images/5.png";
+    if (zone.contains("1")) return "assets/images/demo_logo.png";
+    if (zone.contains("2")) return "assets/images/demo_logo.png";
+    return "assets/images/demo_logo.png";
   }
 
   // --- UI BUILDER ---
