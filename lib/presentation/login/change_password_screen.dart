@@ -210,6 +210,26 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                           ),
                   ),
                 ),
+
+                const SizedBox(height: 16),
+
+                // 5. Skip Button
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const DashboardScreen()),
+                    );
+                  },
+                  child: Text(
+                    "Remind Me Later",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey[600],
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),

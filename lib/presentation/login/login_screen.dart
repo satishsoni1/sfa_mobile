@@ -21,6 +21,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   bool _isLoading = false;
+  bool _obscurePassword = true;
 
   final String _appVersion = "v1.0.0";
   final String _supportNumber = "+919321962944";
@@ -198,7 +199,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Password Field
                   TextField(
                     controller: _passwordController,
-                    obscureText: true,
+                    obscureText: _obscurePassword,
                     textInputAction: TextInputAction.done,
                     onSubmitted: (_) => _handleLogin(),
                     decoration: InputDecoration(
@@ -215,6 +216,17 @@ class _LoginScreenState extends State<LoginScreen> {
                             borderSide: const BorderSide(color: Color(0xFF4A148C), width: 1.5),
                           ),
                           prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF4A148C)),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              color: Colors.grey[600],
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
+                          ),
                         ),
                       ),
 
