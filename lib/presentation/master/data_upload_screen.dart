@@ -80,7 +80,7 @@ class _DataUploadScreenState extends State<DataUploadScreen> {
   // --- Actual Download Logic ---
   Future<void> _downloadSample(String fileType) async {
     // Base URL of your uploads folder
-    const String baseUrl = "https://vodo-app.globalspace.in/assets/uploads";
+    const String baseUrl = "https://vodoclm-pro.globalspace.in/assets/uploads";
 
     // Set the exact filename based on the type requested
     String fileName = "";

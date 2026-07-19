@@ -66,7 +66,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.59";
+  static const String CURRENT_APP_VERSION = "1.0.60";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -325,7 +325,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    final url = 'https://vodo-app.globalspace.in/dcrapproval/$employeeCode';
+    final url = 'https://vodoclm-pro.globalspace.in/dcrapproval/$employeeCode';
 
     await Navigator.pushNamed(
       context,
@@ -350,7 +350,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final url =
-        'https://vodo-app.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://vodoclm-pro.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     await Navigator.pushNamed(
       context,
@@ -377,9 +377,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _getZoneLogo(String? division) {
     final zone = division?.toLowerCase() ?? "";
-    if (zone.contains("1")) return "assets/images/demo_logo.png";
-    if (zone.contains("2")) return "assets/images/demo_logo.png";
-    return "assets/images/demo_logo.png";
+    if (zone.contains("1")) return "assets/images/vodo_clm_new_logo.png";
+    if (zone.contains("2")) return "assets/images/vodo_clm_new_logo.png";
+    return "assets/images/vodo_clm_new_logo.png";
   }
 
   // --- UI BUILDER ---

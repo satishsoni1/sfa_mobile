@@ -94,9 +94,9 @@ flutter:
 flutter_icons:
   android: true
   ios: true
-  image_path: "assets/images/patgpt-512.png"
+  image_path: "assets/images/new_favicon.png"
   adaptive_icon_background: "#ffffff"
-  adaptive_icon_foreground: "assets/images/patgpt-512.png"
+  adaptive_icon_foreground: "assets/images/new_favicon.png"
 
   # To add assets to your application, add an assets section, like this:
   # assets:

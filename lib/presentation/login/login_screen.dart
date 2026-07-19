@@ -145,9 +145,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                       // Logo
                   SizedBox(
-                    height: 60,
+                    height: 45,
                     child: Image.asset(
-                      'assets/images/demo_logo.png',
+                      'assets/images/vodo_clm_new_logo.png',
                       fit: BoxFit.contain,
                       errorBuilder: (context, error, stackTrace) {
                         return const Icon(Icons.broken_image, size: 50, color: Colors.grey);
@@ -158,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Text(
                         "Welcome Back",
                         style: GoogleFonts.poppins(
-                          fontSize: 22,
+                          fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: const Color(0xFF4A148C),
                         ),

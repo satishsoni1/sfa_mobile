@@ -27,13 +27,22 @@ class _ExternalLinksScreenState extends State<ExternalLinksScreen> {
     final response =
         await ApiService().getExternalLinks(employeeCode: widget.employeeCode);
 
-    return response
+    final apiLinks = response
         .whereType<Map<String, dynamic>>()
         .map(_ExternalLink.fromJson)
         .where(
           (link) => link.isWeb && link.title.isNotEmpty && link.url.isNotEmpty,
         )
         .toList();
+
+    return [
+      const _ExternalLink(
+        title: 'Dashboard',
+        url: 'https://vodoclm-pro.globalspace.in/login',
+        isWeb: true,
+      ),
+      ...apiLinks,
+    ];
   }
 
   String _buildEmployeeUrl(String rawUrl) {
@@ -45,7 +54,7 @@ class _ExternalLinksScreenState extends State<ExternalLinksScreen> {
  Future<void> _openLink(_ExternalLink link) async {
     final url = _buildEmployeeUrl(link.url);
     final uri = Uri.tryParse(url);
-    final opensInsideApp = uri?.host == 'vodo-app.globalspace.in';
+    final opensInsideApp = uri?.host == 'vodoclm-pro.globalspace.in';
 
     if (!opensInsideApp && uri != null) {
       final launched = await launchUrl(

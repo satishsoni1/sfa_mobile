@@ -1,6 +1,6 @@
 Complete List of APIs Used in SFA Mobile App
 
-This document provides a comprehensive list of all backend API endpoints called by the mobile application. The current Base URL for all these endpoints is https://vodo-app.globalspace.in/api
+This document provides a comprehensive list of all backend API endpoints called by the mobile application. The current Base URL for all these endpoints is https://vodoclm-pro.globalspace.in/api
 
 Authentication
 Most of the endpoints listed below require a Bearer token in the Authorization header, obtained via the /login endpoint.
