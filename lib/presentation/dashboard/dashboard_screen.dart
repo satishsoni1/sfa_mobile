@@ -24,6 +24,7 @@ import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
 import 'package:zforce/presentation/login/login_screen.dart';
+import 'package:zforce/presentation/login/login_screen.dart';
 import '../campaign/campaign_list_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
@@ -314,10 +315,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _handleLogout() {
     Provider.of<AuthProvider>(context, listen: false).logout();
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const LoginScreen()),
-      (route) => false,
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (Route<dynamic> route) => false,
     );
   }
 
@@ -904,34 +904,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ]),
         const SizedBox(height: 24),
 
-        // _buildSectionTitle("AI Intelligence"),
-        // _buildMenuGrid([
-        //   _MenuAction(
-        //     Icons.auto_awesome,
-        //     "AI Insights Hub",
-        //     const Color(0xFF4A148C),
-        //     () => _navigateTo(const AiHubScreen()),
-        //   ),
-        //   _MenuAction(
-        //     Icons.support_agent,
-        //     "Sales Assistant",
-        //     const Color(0xFF1565C0),
-        //     () => _navigateTo(const AiSalesAssistantScreen()),
-        //   ),
-        //   _MenuAction(
-        //     Icons.trending_up,
-        //     "Product Perf.",
-        //     const Color(0xFF2E7D32),
-        //     () => _navigateTo(const AiProductPerformanceScreen()),
-        //   ),
-        //   _MenuAction(
-        //     Icons.person_search,
-        //     "Doctor Review",
-        //     const Color(0xFF6A1B9A),
-        //     () => _navigateTo(const AiDoctorReviewScreen()),
-        //   ),
-        // ]),
-        // const SizedBox(height: 24),
+        _buildSectionTitle("AI Intelligence"),
+        _buildMenuGrid([
+          _MenuAction(
+            Icons.auto_awesome,
+            "AI Insights Hub",
+            const Color(0xFF4A148C),
+            () => _navigateTo(const AiHubScreen()),
+          ),
+          _MenuAction(
+            Icons.support_agent,
+            "Sales Assistant",
+            const Color(0xFF1565C0),
+            () => _navigateTo(const AiSalesAssistantScreen()),
+          ),
+          _MenuAction(
+            Icons.trending_up,
+            "Product Perf.",
+            const Color(0xFF2E7D32),
+            () => _navigateTo(const AiProductPerformanceScreen()),
+          ),
+          _MenuAction(
+            Icons.person_search,
+            "Doctor Review",
+            const Color(0xFF6A1B9A),
+            () => _navigateTo(const AiDoctorReviewScreen()),
+          ),
+        ]),
+        const SizedBox(height: 24),
         _buildSectionTitle("Manager Reporting"),
         _buildMenuGrid([
           _MenuAction(

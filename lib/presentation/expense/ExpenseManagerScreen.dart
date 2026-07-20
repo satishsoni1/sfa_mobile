@@ -432,15 +432,17 @@ class _ExpenseManagerScreenState extends State<ExpenseManagerScreen>
         final daAmt  = _toDouble(e['da_amount']);
         final taAmt  = _toDouble(e['ta_amount']);
         final otherAmt = _toDouble(e['other_amount']);
-        final total  = _toDouble(e['total_amount'] ?? (daAmt + taAmt + otherAmt));
+        final pocket  = _toDouble(e['pocket_allowance']);
+        final hotel   = _toDouble(e['hotel_amount']);
+        final meal    = _toDouble(e['meal_amount']);
+        final total  = _toDouble(e['total_amount']) > 0
+            ? _toDouble(e['total_amount'])
+            : (daAmt + taAmt + otherAmt + pocket + hotel + meal);
         final mode   = e['mode_of_travel']?.toString() ?? '';
         final km     = _toDouble(e['ta_distance']);
         final from   = e['from_location']?.toString() ?? '';
         final to     = e['to_location']?.toString() ?? '';
         final remarks = e['remarks']?.toString() ?? '';
-        final pocket  = _toDouble(e['pocket_allowance']);
-        final hotel   = _toDouble(e['hotel_amount']);
-        final meal    = _toDouble(e['meal_amount']);
 
         final color = daType.contains('OS')
             ? Colors.red

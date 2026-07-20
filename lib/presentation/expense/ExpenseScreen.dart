@@ -355,6 +355,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             _hotelBillClaimed = d['hotel_bill_claimed'] == 1 || d['hotel_bill_claimed'] == '1';
             _hotelAmount    = _toDouble(d['hotel_amount']);
             _mealAmount     = _toDouble(d['meal_amount']);
+            // _hotelBillFlag above (line ~329) reflects a freshly re-resolved
+            // da_type off today's DCR data, which can disagree with what was
+            // actually saved (routes/visits can change after submission).
+            // Trust the saved da_type instead so the hotel/meal toggle still
+            // renders for an expense that was OS/EX_OS at save time.
+            if (_serverDaType == 'OS' || _serverDaType == 'EX_OS') {
+              _hotelBillFlag = true;
+            }
           }
         } else {
           // New expense: use fresh API values
@@ -391,6 +399,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             _expenseMode = 'FIELD';
             _calcData = {'route': []};
             _isDaTypeManual = true;
+            // Live recalculation failed (no DCR visit found for this date), so
+            // hotel_bill_flag/pocket_allowance — normally sourced from that
+            // call — never get set, which hides the hotel/meal toggle even
+            // though _hotelBillClaimed was already restored above. Recover
+            // them from the saved record so the toggle still renders.
+            if (daType == 'OS' || daType == 'EX_OS') {
+              _hotelBillFlag = true;
+            }
+            _pocketAllowance = _toDouble(widget.editData!['pocket_allowance']);
           });
           _recalculateTotal();
           return;
@@ -4098,9 +4115,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         final kmFinal = _serverTaKm > 0
             ? _serverTaKm.toStringAsFixed(2)
             : (kmManual.isNotEmpty ? kmManual : (_calcData!['total_km'] ?? '0').toString());
-        final daAmt = _hotelBillClaimed
-            ? ((_calcData!['pocket_allowance'] as num?)?.toDouble() ?? _serverDaAmount)
-            : _serverDaAmount;
+        // Hotel/meal override replaces the OS/EX_OS DA for the day — pocket
+      // allowance, hotel, and meal are separate fields, so da_amount must be
+      // 0 here, not the pocket allowance value (server enforces this too).
+      final daAmt = _hotelBillClaimed ? 0.0 : _serverDaAmount;
         final activeWaypoints = _fieldWaypoints
             .where((w) => w != null && w.isNotEmpty)
             .cast<String>()

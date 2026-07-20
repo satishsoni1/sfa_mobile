@@ -168,10 +168,24 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   // ─── Summary Card ────────────────────────────────────────────────────────────
 
   Widget _buildSummaryCard() {
-    final grandTotal = _toDouble(_summary['grand_total']);
-    final totalDa = _toDouble(_summary['total_da']);
-    final totalTa = _toDouble(_summary['total_ta']);
-    final totalOther = _toDouble(_summary['total_other']);
+    // Computed from the actual daily expenses (rather than the server's
+    // total_da/total_ta/grand_total) because those aggregates omit
+    // pocket_allowance/hotel_amount/meal_amount for entries where an admin
+    // override split the DA into those components — leaving the server total
+    // short of the sum shown on each daily card.
+    double totalDa = 0, totalTa = 0, totalOther = 0;
+    double totalPocket = 0, totalHotel = 0, totalMeal = 0;
+    for (final e in _expenses) {
+      final item = e as Map<String, dynamic>;
+      totalDa += _toDouble(item['da_amount']);
+      totalTa += _toDouble(item['ta_amount']);
+      totalOther += _toDouble(item['other_amount']);
+      totalPocket += _toDouble(item['pocket_allowance']);
+      totalHotel += _toDouble(item['hotel_amount']);
+      totalMeal += _toDouble(item['meal_amount']);
+    }
+    final grandTotal =
+        totalDa + totalTa + totalOther + totalPocket + totalHotel + totalMeal;
     final claimsTotal = _monthlyClaims.fold<double>(
         0, (sum, c) => sum + _toDouble(c['amount']));
 
@@ -270,11 +284,18 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 fontWeight: FontWeight.bold),
           ),
           const Divider(color: Colors.white24, height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+          Wrap(
+            alignment: WrapAlignment.spaceAround,
+            runSpacing: 12,
             children: [
               _statItem('DA', totalDa, Icons.person_outline),
               _statItem('TA', totalTa, Icons.directions_car_outlined),
+              if (totalPocket > 0)
+                _statItem('Pocket', totalPocket, Icons.wallet_outlined),
+              if (totalHotel > 0)
+                _statItem('Hotel', totalHotel, Icons.hotel_outlined),
+              if (totalMeal > 0)
+                _statItem('Meal', totalMeal, Icons.restaurant_outlined),
               _statItem('Other', totalOther, Icons.receipt_outlined),
               _statItem('Claims', claimsTotal, Icons.add_card_outlined),
             ],
@@ -315,15 +336,18 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   Widget _statItem(String label, double val, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, color: Colors.white60, size: 16),
-        const SizedBox(height: 3),
-        Text('₹${_fmt(val)}',
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
-        Text(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
-      ],
+    return SizedBox(
+      width: 68,
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.white60, size: 16),
+          const SizedBox(height: 3),
+          Text('₹${_fmt(val)}',
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(label, style: const TextStyle(color: Colors.white60, fontSize: 10)),
+        ],
+      ),
     );
   }
 
@@ -369,9 +393,15 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     final isLocked = item['is_submitted_for_month'] == 1 && _approvalStatus != 'rejected';
     final date = DateTime.tryParse(item['expense_date'] ?? '') ?? DateTime.now();
     final daType = (item['da_type'] ?? 'HQ').toString().toUpperCase();
+    final pocket = _toDouble(item['pocket_allowance']);
+    final hotel = _toDouble(item['hotel_amount']);
+    final meal = _toDouble(item['meal_amount']);
     final total = _toDouble(item['da_amount']) +
         _toDouble(item['ta_amount']) +
-        _toDouble(item['other_amount']);
+        _toDouble(item['other_amount']) +
+        pocket +
+        hotel +
+        meal;
     final fromLoc = (item['from_location'] ?? item['start_location'] ?? '').toString();
     final toLoc = (item['to_location'] ?? item['end_location'] ?? '').toString();
     final taDir = (item['ta_direction'] ?? 'one_way').toString();
@@ -433,7 +463,15 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'DA ₹${_fmt(_toDouble(item['da_amount']))}  •  TA ${_fmt(_toDouble(item['ta_distance']))}km ₹${_fmt(_toDouble(item['ta_amount']))}  •  Other ₹${_fmt(_toDouble(item['other_amount']))}',
+                      [
+                        'DA ₹${_fmt(_toDouble(item['da_amount']))}',
+                        'TA ${_fmt(_toDouble(item['ta_distance']))}km ₹${_fmt(_toDouble(item['ta_amount']))}',
+                        if (pocket > 0) 'Pocket ₹${_fmt(pocket)}',
+                        if (hotel > 0) 'Hotel ₹${_fmt(hotel)}',
+                        if (meal > 0) 'Meal ₹${_fmt(meal)}',
+                        if (_toDouble(item['other_amount']) > 0)
+                          'Other ₹${_fmt(_toDouble(item['other_amount']))}',
+                      ].join('  •  '),
                       style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                     ),
                     if (fromLoc.isNotEmpty || toLoc.isNotEmpty) ...[
@@ -754,6 +792,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     final icon  = icons[type]  ?? Icons.receipt;
     final color = claimColors[type] ?? Colors.grey;
 
+    final isOverridden = claim['is_admin_override'] == 1 || claim['is_admin_override'] == true;
+    final adminRemark = (claim['admin_remark'] ?? '').toString();
+    final originalAmount =
+        claim['original_amount'] != null ? _toDouble(claim['original_amount']) : null;
+
     final card = Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
@@ -761,39 +804,80 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: Colors.grey.shade200),
       ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        leading: CircleAvatar(
-          backgroundColor: color.withValues(alpha: 0.1),
-          child: Icon(icon, color: color, size: 20),
-        ),
-        title: Text(type,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-        subtitle: Text(
-          claim['bill_attachment'] != null ? 'Bill attached' : 'No bill uploaded',
-          style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('₹${_fmt(_toDouble(claim['amount']))}',
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF4A148C),
-                    fontSize: 15)),
-            if (!_isSubmitted) ...[
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: () => _deleteClaim(claim),
-                child: Padding(
-                  padding: const EdgeInsets.all(4),
-                  child: Icon(Icons.delete_outline,
-                      color: Colors.red.shade300, size: 18),
-                ),
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            leading: CircleAvatar(
+              backgroundColor: color.withValues(alpha: 0.1),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            title: Text(type,
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
+            subtitle: Text(
+              claim['bill_attachment'] != null ? 'Bill attached' : 'No bill uploaded',
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (originalAmount != null &&
+                    originalAmount != _toDouble(claim['amount']))
+                  Text('₹${_fmt(originalAmount)}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey.shade400,
+                          decoration: TextDecoration.lineThrough)),
+                if (originalAmount != null &&
+                    originalAmount != _toDouble(claim['amount']))
+                  const SizedBox(width: 6),
+                Text('₹${_fmt(_toDouble(claim['amount']))}',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF4A148C),
+                        fontSize: 15)),
+                if (!_isSubmitted) ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => _deleteClaim(claim),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.delete_outline,
+                          color: Colors.red.shade300, size: 18),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (isOverridden && adminRemark.isNotEmpty)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.withValues(alpha: 0.4)),
               ),
-            ],
-          ],
-        ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, size: 13, color: Colors.amber.shade800),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      adminRemark,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.amber.shade900,
+                          height: 1.3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
 
@@ -972,7 +1056,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
   void _confirmSubmitMonth() {
     final claimsTotal = _monthlyClaims.fold<double>(0, (s, c) => s + _toDouble(c['amount']));
-    final grandTotal = _toDouble(_summary['grand_total']) + claimsTotal;
+    final grandTotal = _computeDailyExpenseTotal() + claimsTotal;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1073,6 +1157,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
     double colTotalFare = 0;
     double colTotalHq = 0;
+    double colTotalMeeting = 0;
     double colTotalExHq = 0;
     double colTotalOs = 0;
     double colTotalExOs = 0;
@@ -1083,12 +1168,14 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     double colTotalRowTotal = 0;
     int colTotalDocVisits = 0;
     int colTotalChemVisits = 0;
+    double colTotalOther = 0;
 
     final List<List<String>> tableData = [];
     for (int day = 1; day <= daysInMonth; day++) {
       final exp = expenseByDay[day];
       double fare = 0;
       double hqAllow = 0;
+      double meetingAllow = 0;
       double exHqAllow = 0;
       double osAllow = 0;
       double exOsAllow = 0;
@@ -1103,6 +1190,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       String fromTown = '';
       String toTown = '';
       String remarks = '';
+      double otherAmt = 0;
 
       if (exp != null) {
         remarks = (exp['remarks'] ?? '').toString();
@@ -1124,9 +1212,9 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             if (toTown.isNotEmpty) toTown,
           ].join(' -> ');
         }
-
+        otherAmt = _toDouble(exp['other_amount']);
         final isOsRet = exp['is_os_return'] == 1 || exp['is_os_return'] == '1' || daType == 'OS_RETURN';
-
+    
         if (isOsRet) {
           osReturnAllow = daAmt;
         } else if (daType == 'HQ') {
@@ -1139,6 +1227,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         } else if (daType == 'OS') {
           osAllow = pocket > 0 ? pocket : (daAmt - hotel - meal);
           if (osAllow < 0) osAllow = 0;
+        } else if (daType == 'MEETING') {
+          meetingAllow = daAmt;
         } else {
           if (daType == 'TRANSIT') {
             // Transit mode
@@ -1147,13 +1237,13 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               osAllow = daAmt;
             } else if (daType.contains('EX')) {
               exHqAllow = daAmt;
-            } else {
+            }else {
               hqAllow = daAmt;
             }
           }
         }
 
-        rowTotal = fare + hqAllow + exHqAllow + osAllow + exOsAllow + osReturnAllow + pocket + hotel + meal;
+        rowTotal = fare + hqAllow + exHqAllow + osAllow + exOsAllow + osReturnAllow + pocket + hotel + meal + meetingAllow + otherAmt;
 
         colTotalFare       += fare;
         colTotalHq         += hqAllow;
@@ -1161,14 +1251,16 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         colTotalOs         += osAllow;
         colTotalExOs       += exOsAllow;
         colTotalOsReturn   += osReturnAllow;
+        colTotalMeeting    += meetingAllow;
         colTotalPocket     += pocket;
         colTotalHotel      += hotel;
         colTotalMeal       += meal;
         colTotalRowTotal   += rowTotal;
         colTotalDocVisits  += docVisits;
         colTotalChemVisits += chemVisits;
+        colTotalOther      += otherAmt;
 
-        final otherAmt = _toDouble(exp['other_amount']);
+        
         if (otherAmt > 0) {
           remarks = remarks.isEmpty ? "Other: Rs. ${_fmt(otherAmt)}" : "Other: Rs. ${_fmt(otherAmt)}. $remarks";
         }
@@ -1195,6 +1287,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         osAllow > 0 ? _fmt(osAllow) : "",
         exOsAllow > 0 ? _fmt(exOsAllow) : "",
         osReturnAllow > 0 ? _fmt(osReturnAllow) : "",
+        meetingAllow > 0 ? _fmt(meetingAllow) : "",
+        otherAmt > 0 ? _fmt(otherAmt) : "",
         pocket > 0 ? _fmt(pocket) : "",
         hotel > 0 ? _fmt(hotel) : "",
         meal > 0 ? _fmt(meal) : "",
@@ -1232,7 +1326,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       }
     }
     final double claimsTotal = claimsStationery + claimsCourier + claimsMobileInternet + claimsSample + claimsStationary + claimsAward + claimsMisc;
-    final double totalDailyWithOther = _toDouble(_summary['grand_total']);
+    final double totalDailyWithOther = _computeDailyExpenseTotal();
     final double overallReimbursementTotal = totalDailyWithOther + claimsTotal;
 
     final tableHeaders = [
@@ -1248,6 +1342,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'OS Rs.',
       'EX-OS Rs.',
       'OS Ret Rs.',
+      'Meeting Allow',
+      'Other Rs.',
       'Pocket Allow',
       'Hotel Stay',
       'Meal Rs.',
@@ -1352,11 +1448,13 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 9: const pw.FixedColumnWidth(35), // OS Rs.
                 10: const pw.FixedColumnWidth(35), // EX-OS Rs.
                 11: const pw.FixedColumnWidth(40), // OS Ret Rs.
-                12: const pw.FixedColumnWidth(35), // Pocket Allow
-                13: const pw.FixedColumnWidth(40), // Hotel Stay
-                14: const pw.FixedColumnWidth(35), // Meal
-                15: const pw.FixedColumnWidth(50), // Total Rs
-                16: const pw.FixedColumnWidth(85), // Remarks
+                12: const pw.FixedColumnWidth(35), // Meeting Allow
+                13: const pw.FixedColumnWidth(35), // Other Rs.
+                14: const pw.FixedColumnWidth(35), // Pocket Allow
+                15: const pw.FixedColumnWidth(40), // Hotel Stay
+                16: const pw.FixedColumnWidth(35), // Meal
+                17: const pw.FixedColumnWidth(50), // Total Rs
+                18: const pw.FixedColumnWidth(85), // Remarks
               },
               children: [
                 pw.TableRow(
@@ -1390,8 +1488,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       cell(row[12], isNumber: true, fontSize: 7.0),
                       cell(row[13], isNumber: true, fontSize: 7.0),
                       cell(row[14], isNumber: true, fontSize: 7.0),
-                      cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
-                      cell(row[16], fontSize: 4.5, maxLines: 4),
+                      cell(row[15], isNumber: true, fontSize: 7.0),
+                      cell(row[16], isNumber: true, fontSize: 7.0),
+                      cell(row[17], isNumber: true, bold: true, fontSize: 7.0),
+                      cell(row[18], fontSize: 4.5, maxLines: 4),
                     ],
                   );
                 }),
@@ -1410,6 +1510,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                     cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalMeeting > 0 ? _fmt(colTotalMeeting) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalOther > 0 ? _fmt(colTotalOther) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
@@ -1426,7 +1528,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               children: [
                 // Left Column: Signatures
                 pw.Expanded(
-                  flex: 10,
+                  flex: 7,
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -1582,6 +1684,24 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+  // Sums the daily expenses' actual amount fields (da + ta + other +
+  // pocket + hotel + meal) instead of trusting _summary['grand_total'],
+  // which omits pocket_allowance/hotel_amount/meal_amount for entries
+  // where an admin override split the DA into those components.
+  double _computeDailyExpenseTotal() {
+    double total = 0;
+    for (final e in _expenses) {
+      final item = e as Map<String, dynamic>;
+      total += _toDouble(item['da_amount']) +
+          _toDouble(item['ta_amount']) +
+          _toDouble(item['other_amount']) +
+          _toDouble(item['pocket_allowance']) +
+          _toDouble(item['hotel_amount']) +
+          _toDouble(item['meal_amount']);
+    }
+    return total;
+  }
 
   double _toDouble(dynamic v) => double.tryParse(v?.toString() ?? '0') ?? 0.0;
 
