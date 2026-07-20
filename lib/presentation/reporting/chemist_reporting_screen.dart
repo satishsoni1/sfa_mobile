@@ -28,6 +28,7 @@ class ChemistReportingScreen extends StatefulWidget {
 class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
   List<Map<String, dynamic>> _uiProducts = [];
   List<Map<String, dynamic>> _uiColleagues = [];
+  List<Map<String, String>> _addedDoctors = [];
   bool _isLoading = true;
   String _productSearchQuery = '';
 
@@ -36,6 +37,8 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
 
   // NEW: Only one text controller for typing remarks
   final TextEditingController _remarkController = TextEditingController();
+  final FocusNode _productSearchFocus = FocusNode();
+  final FocusNode _remarkFocusNode = FocusNode();
 
   final Color _primaryColor = const Color(0xFF4A148C);
 
@@ -54,6 +57,12 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
   @override
   void initState() {
     super.initState();
+    _productSearchFocus.addListener(() {
+      setState(() {});
+    });
+    _remarkFocusNode.addListener(() {
+      setState(() {});
+    });
     // Load chemist reports for today just in case we need to check duplicates
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Provider.of<ReportProvider>(
@@ -67,6 +76,8 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
   @override
   void dispose() {
     _remarkController.dispose();
+    _productSearchFocus.dispose();
+    _remarkFocusNode.dispose();
     super.dispose();
   }
 
@@ -159,6 +170,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
           );
 
           _remarkController.text = widget.existingReport!.remarks;
+          _addedDoctors = List.from(widget.existingReport!.doctors);
         }
         _isLoading = false;
       });
@@ -265,28 +277,28 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
   void _submitReport() async {
     final provider = Provider.of<ReportProvider>(context, listen: false);
 
-    bool isDuplicate = provider.chemistReports.any((report) {
-      bool sameChemist =
-          report.chemistId ==
-          widget.chemistId; // Reusing doctorId for chemistId
-      bool sameDate = _isSameDay(report.visitTime, _selectedDate);
-      if (widget.existingReport != null &&
-          report.id == widget.existingReport!.id)
-        return false;
-      return sameChemist && sameDate;
-    });
+    //     bool isDuplicate = provider.chemistReports.any((report) {
+    //       bool sameChemist =
+    //           report.chemistId ==
+    //           widget.chemistId; // Reusing doctorId for chemistId
+    //       bool sameDate = _isSameDay(report.visitTime, _selectedDate);
+    //       if (widget.existingReport != null &&
+    //           report.id == widget.existingReport!.id)
+    //         return false;
+    //       return sameChemist && sameDate;
+    //     });
 
-    if (isDuplicate) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Report for this chemist on selected date already exists!",
-          ),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
+    //     if (isDuplicate) {
+    //       ScaffoldMessenger.of(context).showSnackBar(
+    //         const SnackBar(
+    //           content: Text(
+    //             "Report for this chemist on selected date already exists!",
+    //           ),
+    //           backgroundColor: Colors.red,
+    //         ),
+    //       );
+    //       return;
+    //     }
 
     final selectedProducts = _uiProducts.where((p) => p['isSelected'] == true).toList();
     if (selectedProducts.isEmpty) {
@@ -376,6 +388,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
       products: finalProductList,
       //workedWith: selectedColleagueNames,
       workedWith: selectedColleagueIds,
+      doctors: _addedDoctors,
       isSubmitted: false,
     );
 
@@ -415,11 +428,12 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
         backgroundColor: const Color(0xFFF8F9FD),
         resizeToAvoidBottomInset: true,
         appBar: AppBar(
+          toolbarHeight: 45,
           title: Text(
             widget.existingReport != null
                 ? "Edit Chemist Report"
                 : "Personal Order Booked & Supplied",
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 16),
           ),
           backgroundColor: _primaryColor,
           elevation: 0,
@@ -430,7 +444,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                 children: [
                   // === TOP CARD ===
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     decoration: BoxDecoration(
                       color: _primaryColor,
                       borderRadius: const BorderRadius.vertical(
@@ -450,7 +464,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                                   Text(
                                     widget.chemistName,
                                     style: GoogleFonts.poppins(
-                                      fontSize: 20,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white,
                                     ),
@@ -540,17 +554,24 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        _buildJointWorkSelectorButton(),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(child: _buildJointWorkSelectorButton()),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildAddDoctorButton()),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
                         Container(
-                          height: 44,
+                          height: 40,
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: Colors.white24),
                           ),
                           child: TextField(
+                            focusNode: _productSearchFocus,
                             onChanged: (value) {
                               setState(() {
                                 _productSearchQuery = value;
@@ -660,6 +681,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                           child: Center(
                             child: Text(
                               "Supplied Through (Stockist)",
+                              textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
@@ -708,13 +730,14 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                   ),
 
                   // === BOTTOM SHEET (ONLY TYPED REMARKS & SUBMIT) ===
-                  Container(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      isKeyboardOpen ? 12 : 20,
-                      20,
-                      isKeyboardOpen ? 12 : 20,
-                    ),
+                  if (!(isKeyboardOpen && !_remarkFocusNode.hasFocus))
+                    Container(
+                      padding: EdgeInsets.fromLTRB(
+                        12,
+                        isKeyboardOpen ? 8 : 12,
+                        12,
+                        isKeyboardOpen ? 8 : 12,
+                      ),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       boxShadow: [
@@ -766,21 +789,17 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                        Text(
-                          "Visit Remark",
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
                         TextField(
+                          focusNode: _remarkFocusNode,
                           controller: _remarkController,
                           textCapitalization: TextCapitalization.sentences,
-                          maxLines: 2,
+                          minLines: 1,
+                          maxLines: _remarkFocusNode.hasFocus ? null : 1,
                           decoration: InputDecoration(
-                            hintText:
-                                "Type your observation or order details here...",
+                            labelText: "Remarks",
+                            hintText: "Type your observation here...",
+                            floatingLabelBehavior: FloatingLabelBehavior.always,
+                            alignLabelWithHint: true,
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -792,12 +811,12 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 10),
                         ElevatedButton(
                           onPressed: _submitReport,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _primaryColor,
-                            padding: const EdgeInsets.symmetric(vertical: 15),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -830,7 +849,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
       onTap: _showJointWorkPicker,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.1),
           borderRadius: BorderRadius.circular(12),
@@ -838,22 +857,79 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.group_add, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
+            const Icon(Icons.group_add, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                count > 0
-                    ? "Joint Work: $count Selected"
-                    : "Tap to select Joint Work...",
+                count > 0 ? "$count Selected" : "Joint Work...",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontWeight: count > 0 ? FontWeight.bold : FontWeight.w500,
-                  fontSize: 14,
+                  fontSize: 12,
                 ),
               ),
             ),
             const Icon(Icons.search, color: Colors.white70, size: 18),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAddDoctorButton() {
+    int count = _addedDoctors.length;
+    return InkWell(
+      onTap: _showAddDoctorPicker,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.person_add, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                count > 0 ? "$count Added" : "Add Doctors...",
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: count > 0 ? FontWeight.bold : FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+            const Icon(Icons.add, color: Colors.white70, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddDoctorPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: _AddDoctorSheet(
+          addedDoctors: _addedDoctors,
+          primaryColor: _primaryColor,
+          onApply: (doctors) {
+            setState(() {
+              _addedDoctors = doctors;
+            });
+          },
         ),
       ),
     );
@@ -1254,6 +1330,214 @@ class _JointWorkSearchSheetState extends State<_JointWorkSearchSheet> {
                         value: isSelected,
                         onChanged: (bool? val) =>
                             setState(() => person['isSelected'] = val ?? false),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AddDoctorSheet extends StatefulWidget {
+  final List<Map<String, String>> addedDoctors;
+  final Color primaryColor;
+  final Function(List<Map<String, String>>) onApply;
+
+  const _AddDoctorSheet({
+    required this.addedDoctors,
+    required this.primaryColor,
+    required this.onApply,
+    super.key,
+  });
+
+  @override
+  State<_AddDoctorSheet> createState() => _AddDoctorSheetState();
+}
+
+class _AddDoctorSheetState extends State<_AddDoctorSheet> {
+  late List<Map<String, String>> _currentDoctors;
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _specialityController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _currentDoctors = List.from(widget.addedDoctors);
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _specialityController.dispose();
+    super.dispose();
+  }
+
+  void _addDoctor() {
+    String name = _nameController.text.trim();
+    final spec = _specialityController.text.trim();
+    if (name.isEmpty) return;
+
+    if (!name.toLowerCase().startsWith("dr.") && !name.toLowerCase().startsWith("dr ")) {
+      name = "Dr. $name";
+    }
+
+    setState(() {
+      _currentDoctors.add({
+        'doctor_name': name,
+        'specialty_practice_type': spec,
+      });
+      _nameController.clear();
+      _specialityController.clear();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Add Doctors",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        widget.onApply(_currentDoctors);
+                        Navigator.pop(context);
+                      },
+                      child: Text(
+                        "Done",
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: widget.primaryColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: "Doctor's Name",
+                          prefixText: "Dr. ",
+                          prefixStyle: GoogleFonts.poppins(
+                            color: Colors.black87,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: _specialityController,
+                        decoration: InputDecoration(
+                          hintText: "Speciality",
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: _addDoctor,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.primaryColor,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                  ),
+                  child: const Text("Add", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _currentDoctors.isEmpty
+                ? Center(
+                    child: Text(
+                      "No doctors added yet.",
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _currentDoctors.length,
+                    itemBuilder: (context, index) {
+                      final doc = _currentDoctors[index];
+                      return Card(
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        elevation: 1,
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: widget.primaryColor.withOpacity(0.1),
+                            child: Icon(Icons.person, color: widget.primaryColor),
+                          ),
+                          title: Text(
+                            doc['doctor_name'] ?? '',
+                            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Text(
+                            doc['specialty_practice_type'] ?? '',
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {
+                              setState(() {
+                                _currentDoctors.removeAt(index);
+                              });
+                            },
+                          ),
+                        ),
                       );
                     },
                   ),

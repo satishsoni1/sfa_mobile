@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 class ChemistProductEntry {
   final String productName;
   final int saleQty;
@@ -64,6 +66,7 @@ class ChemistReport {
   final String remarks;
   final List<ChemistProductEntry> products;
   final List<String> workedWith;
+  final List<Map<String, String>> doctors;
   final bool isSubmitted;
 
   ChemistReport({
@@ -74,12 +77,25 @@ class ChemistReport {
     required this.remarks,
     required this.products,
     required this.workedWith,
+    this.doctors = const [],
     this.isSubmitted = false,
   });
 
   factory ChemistReport.fromJson(Map<String, dynamic> json) {
-    var prodList = json['products'] as List? ?? [];
-    var colleaguesList = json['worked_with'] as List? ?? [];
+    List _parseList(dynamic field) {
+      if (field is List) return field;
+      if (field is String && field.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(field);
+          if (decoded is List) return decoded;
+        } catch (_) {}
+      }
+      return [];
+    }
+
+    var prodList = _parseList(json['products']);
+    var colleaguesList = _parseList(json['worked_with']);
+    var docsList = _parseList(json['doctors']);
 
     return ChemistReport(
       id: json['id']?.toString() ?? "",
@@ -91,6 +107,7 @@ class ChemistReport {
       remarks: json['remarks'] ?? "",
       products: prodList.map((p) => ChemistProductEntry.fromJson(p)).toList(),
       workedWith: colleaguesList.map((c) => c.toString()).toList(),
+      doctors: docsList.map((d) => Map<String, String>.from(d)).toList(),
       isSubmitted: json['is_submitted'] == 1 || json['is_submitted'] == true,
     );
   }

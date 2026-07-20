@@ -377,14 +377,15 @@ class ReportProvider with ChangeNotifier {
     ChemistReport report, {
     DateTime? selectedDate,
   }) async {
-    if (hasChemistVisitForSelectedDate(report.chemistId)) {
-      throw Exception("Report already exists for this chemist on this date.");
-    }
+    // if (hasChemistVisitForSelectedDate(report.chemistId)) {
+    //   throw Exception("Report already exists for this chemist on this date.");
+    // }
 
     try {
       Map<String, dynamic> data = {
         'chemist_id': report.chemistId,
         'chemist_name': report.chemistName,
+        'doctors': report.doctors,
         'date': selectedDate != null
             ? selectedDate.toIso8601String()
             : report.visitTime.toIso8601String(),

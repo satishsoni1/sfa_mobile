@@ -23,6 +23,7 @@ import 'package:zforce/presentation/route_wise_plan/tour_plan_screen.dart';
 import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
+import 'package:zforce/presentation/login/login_screen.dart';
 import '../campaign/campaign_list_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
@@ -66,7 +67,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.59";
+  static const String CURRENT_APP_VERSION = "1.0.60";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -313,6 +314,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _handleLogout() {
     Provider.of<AuthProvider>(context, listen: false).logout();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+      (Route<dynamic> route) => false,
+    );
   }
 
   void _openTabJointWork() async {
