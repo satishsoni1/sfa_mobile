@@ -146,7 +146,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                       // Logo
                   SizedBox(
-                    height: 45,
+                    height: 40,
                     child: Image.asset(
                       'assets/images/vodo_clm_new_logo.png',
                       fit: BoxFit.contain,
