@@ -1157,6 +1157,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
     double colTotalFare = 0;
     double colTotalHq = 0;
+    double colTotalMeeting = 0;
     double colTotalExHq = 0;
     double colTotalOs = 0;
     double colTotalExOs = 0;
@@ -1167,12 +1168,14 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     double colTotalRowTotal = 0;
     int colTotalDocVisits = 0;
     int colTotalChemVisits = 0;
+    double colTotalOther = 0;
 
     final List<List<String>> tableData = [];
     for (int day = 1; day <= daysInMonth; day++) {
       final exp = expenseByDay[day];
       double fare = 0;
       double hqAllow = 0;
+      double meetingAllow = 0;
       double exHqAllow = 0;
       double osAllow = 0;
       double exOsAllow = 0;
@@ -1187,6 +1190,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       String fromTown = '';
       String toTown = '';
       String remarks = '';
+      double otherAmt = 0;
 
       if (exp != null) {
         remarks = (exp['remarks'] ?? '').toString();
@@ -1208,9 +1212,9 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             if (toTown.isNotEmpty) toTown,
           ].join(' -> ');
         }
-
+        otherAmt = _toDouble(exp['other_amount']);
         final isOsRet = exp['is_os_return'] == 1 || exp['is_os_return'] == '1' || daType == 'OS_RETURN';
-
+    
         if (isOsRet) {
           osReturnAllow = daAmt;
         } else if (daType == 'HQ') {
@@ -1223,6 +1227,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         } else if (daType == 'OS') {
           osAllow = pocket > 0 ? pocket : (daAmt - hotel - meal);
           if (osAllow < 0) osAllow = 0;
+        } else if (daType == 'MEETING') {
+          meetingAllow = daAmt;
         } else {
           if (daType == 'TRANSIT') {
             // Transit mode
@@ -1231,13 +1237,13 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               osAllow = daAmt;
             } else if (daType.contains('EX')) {
               exHqAllow = daAmt;
-            } else {
+            }else {
               hqAllow = daAmt;
             }
           }
         }
 
-        rowTotal = fare + hqAllow + exHqAllow + osAllow + exOsAllow + osReturnAllow + pocket + hotel + meal;
+        rowTotal = fare + hqAllow + exHqAllow + osAllow + exOsAllow + osReturnAllow + pocket + hotel + meal + meetingAllow + otherAmt;
 
         colTotalFare       += fare;
         colTotalHq         += hqAllow;
@@ -1245,14 +1251,16 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         colTotalOs         += osAllow;
         colTotalExOs       += exOsAllow;
         colTotalOsReturn   += osReturnAllow;
+        colTotalMeeting    += meetingAllow;
         colTotalPocket     += pocket;
         colTotalHotel      += hotel;
         colTotalMeal       += meal;
         colTotalRowTotal   += rowTotal;
         colTotalDocVisits  += docVisits;
         colTotalChemVisits += chemVisits;
+        colTotalOther      += otherAmt;
 
-        final otherAmt = _toDouble(exp['other_amount']);
+        
         if (otherAmt > 0) {
           remarks = remarks.isEmpty ? "Other: Rs. ${_fmt(otherAmt)}" : "Other: Rs. ${_fmt(otherAmt)}. $remarks";
         }
@@ -1279,6 +1287,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         osAllow > 0 ? _fmt(osAllow) : "",
         exOsAllow > 0 ? _fmt(exOsAllow) : "",
         osReturnAllow > 0 ? _fmt(osReturnAllow) : "",
+        meetingAllow > 0 ? _fmt(meetingAllow) : "",
+        otherAmt > 0 ? _fmt(otherAmt) : "",
         pocket > 0 ? _fmt(pocket) : "",
         hotel > 0 ? _fmt(hotel) : "",
         meal > 0 ? _fmt(meal) : "",
@@ -1332,6 +1342,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'OS Rs.',
       'EX-OS Rs.',
       'OS Ret Rs.',
+      'Meeting Allow',
+      'Other Rs.',
       'Pocket Allow',
       'Hotel Stay',
       'Meal Rs.',
@@ -1436,11 +1448,13 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 9: const pw.FixedColumnWidth(35), // OS Rs.
                 10: const pw.FixedColumnWidth(35), // EX-OS Rs.
                 11: const pw.FixedColumnWidth(40), // OS Ret Rs.
-                12: const pw.FixedColumnWidth(35), // Pocket Allow
-                13: const pw.FixedColumnWidth(40), // Hotel Stay
-                14: const pw.FixedColumnWidth(35), // Meal
-                15: const pw.FixedColumnWidth(50), // Total Rs
-                16: const pw.FixedColumnWidth(85), // Remarks
+                12: const pw.FixedColumnWidth(35), // Meeting Allow
+                13: const pw.FixedColumnWidth(35), // Other Rs.
+                14: const pw.FixedColumnWidth(35), // Pocket Allow
+                15: const pw.FixedColumnWidth(40), // Hotel Stay
+                16: const pw.FixedColumnWidth(35), // Meal
+                17: const pw.FixedColumnWidth(50), // Total Rs
+                18: const pw.FixedColumnWidth(85), // Remarks
               },
               children: [
                 pw.TableRow(
@@ -1474,8 +1488,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       cell(row[12], isNumber: true, fontSize: 7.0),
                       cell(row[13], isNumber: true, fontSize: 7.0),
                       cell(row[14], isNumber: true, fontSize: 7.0),
-                      cell(row[15], isNumber: true, bold: true, fontSize: 7.0),
-                      cell(row[16], fontSize: 4.5, maxLines: 4),
+                      cell(row[15], isNumber: true, fontSize: 7.0),
+                      cell(row[16], isNumber: true, fontSize: 7.0),
+                      cell(row[17], isNumber: true, bold: true, fontSize: 7.0),
+                      cell(row[18], fontSize: 4.5, maxLines: 4),
                     ],
                   );
                 }),
@@ -1494,6 +1510,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                     cell(colTotalOs > 0 ? _fmt(colTotalOs) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalExOs > 0 ? _fmt(colTotalExOs) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalOsReturn > 0 ? _fmt(colTotalOsReturn) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalMeeting > 0 ? _fmt(colTotalMeeting) : "", bold: true, isNumber: true, fontSize: 7.0),
+                    cell(colTotalOther > 0 ? _fmt(colTotalOther) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalPocket > 0 ? _fmt(colTotalPocket) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
@@ -1510,7 +1528,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               children: [
                 // Left Column: Signatures
                 pw.Expanded(
-                  flex: 10,
+                  flex: 7,
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
