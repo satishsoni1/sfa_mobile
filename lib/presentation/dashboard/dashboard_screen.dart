@@ -24,6 +24,7 @@ import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
 import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
 import 'package:zforce/presentation/login/login_screen.dart';
+import '../bba/bba_main_screen.dart';
 import '../campaign/campaign_list_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
@@ -256,8 +257,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user == null) return;
-      final requests = await api.fetchDcrRequests(employeeId: user.employeeId);
+
+      // ── Use the enriched endpoint that now bundles version + dcr_access ──
+      final enriched = await api.fetchDcrRequestsEnriched(employeeId: user.employeeId);
       if (!mounted) return;
+
+      // 1. Extract the requests list for the notification badge (unchanged behaviour)
+      final data = enriched['data'];
+      List<Map<String, dynamic>> requests = [];
+      if (data is Map<String, dynamic>) {
+        final raw = data['requests'];
+        if (raw is List) {
+          requests = raw
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList();
+        }
+
+        // 2. Extract dcr_access permission flags merged by the server ──────────
+        final dcrAccess = data['dcr_access'];
+        if (dcrAccess is Map<String, dynamic>) {
+          final webAllowed = _flagEnabled(dcrAccess['is_web_dcr_allowed']);
+          if (mounted) {
+            setState(() => _attendanceWebDcrAllowed = webAllowed);
+          }
+        }
+
+        // 3. Extract version bundled into this response and check for update ──
+        final serverVersion = data['vesion']?.toString() // server typo kept intentionally
+            ?? data['version']?.toString();              // also handle if server fixes typo
+        if (kIsWeb && serverVersion != null && serverVersion != CURRENT_APP_VERSION) {
+          if (mounted) _showUpdatePopup();
+        }
+      }
+
       setState(() => _dcrRequests = requests);
     } catch (_) {
       // Silently ignore — notification badge simply stays at 0
@@ -392,8 +425,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
-    const double headerHeight = 340;
-    const double cardOverlap = 60;
+    // Attendance card removed — header now shows welcome text + logo only
+    const double headerHeight = 260;
+    // const double cardOverlap = 60; // unused while attendance card is hidden
 
     return Scaffold(
       key: _scaffoldKey,
@@ -411,14 +445,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 alignment: Alignment.topCenter,
                 children: [
                   _buildHeaderBackground(user, headerHeight),
-                  Container(
-                    margin: EdgeInsets.only(
-                      top: headerHeight - cardOverlap,
-                      left: 20,
-                      right: 20,
-                    ),
-                    child: _buildAttendanceCard(),
-                  ),
+                  // ── Check-In Card hidden (commented out) ────────────────────
+                  // Container(
+                  //   margin: EdgeInsets.only(
+                  //     top: headerHeight - cardOverlap,
+                  //     left: 20,
+                  //     right: 20,
+                  //   ),
+                  //   child: _buildAttendanceCard(),
+                  // ),
                 ],
               ),
               const SizedBox(height: 20),
@@ -461,6 +496,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -502,8 +538,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 20),
               Container(
                 width: double.infinity,
-                height: 80,
-                padding: const EdgeInsets.all(10),
+                height: 70,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -642,10 +678,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final notifCount = _dcrRequests.length;
     return Row(
       children: [
-        // ── Visits + Notification card (split 50/50 inside one card) ─────────
+        // ── Visits card (full width, standalone) ─────────────────────────────
         Expanded(
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(vertical: 16),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -658,119 +694,116 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
-            child: IntrinsicHeight(
-              child: Row(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.people_outline, color: Colors.blue, size: 22),
+                const SizedBox(height: 6),
+                Text(
+                  '$visitCount',
+                  style: GoogleFonts.poppins(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'Visits',
+                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        // ── Notification bell card (replaces Online timer) ────────────────────
+        Expanded(
+          child: GestureDetector(
+            onTap: _showDcrRequestsSheet,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.shade100,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // ── Left half: Visit count ─────────────────────────────────
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.people_outline, color: Colors.blue, size: 22),
-                        const SizedBox(height: 6),
-                        Text(
-                          '$visitCount',
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'Visits',
-                          style: GoogleFonts.poppins(
-                              fontSize: 11, color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // ── Divider ────────────────────────────────────────────────
-                  VerticalDivider(
-                    width: 1,
-                    thickness: 1,
-                    color: Colors.grey.shade200,
-                    indent: 8,
-                    endIndent: 8,
-                  ),
-                  // ── Right half: Notification bell ──────────────────────────
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _showDcrRequestsSheet,
-                      behavior: HitTestBehavior.opaque,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Bell with red count badge on top-right
-                          Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Icon(
-                                Icons.notifications_outlined,
-                                color: primaryColor,
-                                size: 26,
-                              ),
-                              if (notifCount > 0)
-                                Positioned(
-                                  top: -6,
-                                  right: -8,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(3),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 16,
-                                      minHeight: 16,
-                                    ),
-                                    child: Text(
-                                      '$notifCount',
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'DCR\nRequests',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(
-                                fontSize: 11, color: Colors.grey),
-                          ),
-                          const SizedBox(height: 4),
-                          if (_isFetchingDcrSheet)
-                            SizedBox(
-                              width: 40,
-                              height: 2,
-                              child: LinearProgressIndicator(
-                                backgroundColor: primaryColor.withOpacity(0.2),
-                                valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                              ),
-                            )
-                          else
-                            const SizedBox(height: 2),
-                        ],
+                  // Bell with red count badge on top-right
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Icon(
+                        Icons.notifications_outlined,
+                        color: primaryColor,
+                        size: 26,
                       ),
-                    ),
+                      if (notifCount > 0)
+                        Positioned(
+                          top: -6,
+                          right: -8,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: Text(
+                              '$notifCount',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'DCR\nRequests',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 4),
+                  if (_isFetchingDcrSheet)
+                    SizedBox(
+                      width: 40,
+                      height: 2,
+                      child: LinearProgressIndicator(
+                        backgroundColor: primaryColor.withOpacity(0.2),
+                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                      ),
+                    )
+                  else
+                    const SizedBox(height: 2),
                 ],
               ),
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        // ── Online card ──────────────────────────────────────────────────────
-        _buildSummaryItem(
-          'Online',
-          _elapsedTime,
-          Icons.timer_outlined,
-          Colors.orange,
-        ),
+        // ── Online timer card commented out (check-in removed) ────────────────
+        // const SizedBox(width: 12),
+        // _buildSummaryItem(
+        //   'Online',
+        //   _elapsedTime,
+        //   Icons.timer_outlined,
+        //   Colors.orange,
+        // ),
       ],
     );
   }
@@ -881,11 +914,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // ),
           if (canUseWebDcr)
             _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
-              if (_isCheckedIn) {
+              // ── Check-In guard removed — navigates directly ──────────────
+              // if (_isCheckedIn) {
                 _navigateTo(const DoctorListScreen());
-              } else {
-                _showSnack("Please Check In first!");
-              }
+              // } else {
+              //   _showSnack("Please Check In first!");
+              // }
             }),
           _MenuAction(Icons.medical_services, "Expense", Colors.purple, () {
             _navigateTo(ExpenseSummaryScreen());
@@ -893,14 +927,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // --- NEW ACTION FOR CHEMIST CALL ---
           _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
-            if (_isCheckedIn) {
-              // Usually navigates to a ChemistListScreen first, but for now
-              // we can mock passing a direct chemist or you can create the list screen next.
-              // For demonstration purposes:
+            // ── Check-In guard removed — navigates directly ──────────────
+            // if (_isCheckedIn) {
               _navigateTo(const ChemistListScreen());
-            } else {
-              _showSnack("Please Check In first!");
-            }
+            // } else {
+            //   _showSnack("Please Check In first!");
+            // }
           }),
 
           if (canUseWebDcr)
@@ -1020,6 +1052,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Brand Pathfinder",
             Colors.pink,
             () => _navigateTo(const DoctorBrandScreen()),
+          ),
+          _MenuAction(
+            Icons.medication_outlined,
+            "BBA",
+            Colors.purple,
+            () => _navigateTo(const BbaMainScreen()),
           ),
           // _MenuAction(
           //   Icons.business_center,

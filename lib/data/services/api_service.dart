@@ -758,6 +758,31 @@ class ApiService {
   }
 
   // --- DCR REQUESTS (manager inbox) ---
+  // Fetches DCR requests AND extracts the merged version + dcr_access data
+  // that the server now bundles into this single response.
+  // Returns the full decoded response body so callers can pull whatever they need.
+  Future<Map<String, dynamic>> fetchDcrRequestsEnriched({required int employeeId}) async {
+    final token = await getToken();
+    final uri = Uri.parse('$baseUrl/dcr/requests?employee_id=$employeeId');
+    final response = await http.get(uri, headers: {
+      'Authorization': 'Bearer $token',
+      'Accept': 'application/json',
+    });
+    final decoded = jsonDecode(response.body);
+    if (decoded is Map<String, dynamic>) {
+      return decoded;
+    }
+    // If the server returns a List (legacy), wrap it so callers have a consistent shape
+    if (decoded is List) {
+      final first = decoded.isNotEmpty && decoded[0] is Map<String, dynamic>
+          ? decoded[0] as Map<String, dynamic>
+          : <String, dynamic>{};
+      return first;
+    }
+    return <String, dynamic>{};
+  }
+
+  // Original list-only helper kept intact so nothing else breaks.
   Future<List<Map<String, dynamic>>> fetchDcrRequests({required int employeeId}) async {
     final token = await getToken();
     final uri = Uri.parse(
