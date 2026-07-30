@@ -68,7 +68,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.60";
+  static const String CURRENT_APP_VERSION = "1.0.61";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -1055,7 +1055,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           _MenuAction(
             Icons.medication_outlined,
-            "BBA",
+            "Campaign Doctor Selection",
             Colors.purple,
             () => _navigateTo(const BbaMainScreen()),
           ),
@@ -1171,8 +1171,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: BoxDecoration(
               gradient: LinearGradient(colors: [primaryColor, accentColor]),
             ),
+            child: SizedBox(
+              width: double.infinity,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 CircleAvatar(
                   radius: 26,
@@ -1189,6 +1191,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 10),
                 Text(
                   user?.firstName ?? "User",
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
@@ -1199,6 +1202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 3),
                 Text(
                   "${user?.employeeCode ?? '-'} · ${(user?.division ?? '-').toUpperCase()}",
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.normal,
@@ -1209,6 +1213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 3),
                 Text(
                   user?.designation ?? '-',
+                  textAlign: TextAlign.center,
                   style: GoogleFonts.poppins(
                     fontSize: 13,
                     fontWeight: FontWeight.normal,
@@ -1219,27 +1224,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          ListTile(
-            leading: const Icon(Icons.install_mobile),
-            title: const Text("Install App"),
-            onTap: _showInstallInstructions,
           ),
-          ListTile(
-            leading: const Icon(Icons.support_agent),
-            title: const Text("Help & Support"),
-            onTap: () => _navigateTo(const SupportScreen()),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Material(
+              elevation: 4,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(8),
+              child: ListTile(
+              leading: const Icon(Icons.install_mobile),
+              title: const Text("Install App"),
+              onTap: _showInstallInstructions,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
           ),
-          ListTile(
-            leading: const Icon(Icons.lock_reset),
-            title: const Text("Change Password"),
-            onTap: () =>
-                _navigateTo(const ChangePasswordScreen(isForced: false)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Material(
+              elevation: 4,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(8),
+              child: ListTile(
+                leading: const Icon(Icons.support_agent),
+                title: const Text("Help & Support"),
+                onTap: () => _navigateTo(const SupportScreen()),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
           ),
-          const Divider(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Colors.red),
-            title: const Text("Logout", style: TextStyle(color: Colors.red)),
-            onTap: _handleLogout,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Material(
+              elevation: 4,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(8),
+              child: ListTile(
+                leading: const Icon(Icons.lock_reset),
+                title: const Text("Change Password"),
+                onTap: () => _navigateTo(const ChangePasswordScreen(isForced: false)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Material(
+              elevation: 4,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(8),
+              child: ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: const Text("Logout", style: TextStyle(color: Colors.red)),
+                onTap: _handleLogout,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
           ),
         ],
       ),

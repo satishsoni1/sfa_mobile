@@ -455,6 +455,7 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
   bool _isLoading = true;
   bool _isSaving = false;
   final _searchCtrl = TextEditingController();
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
   @override
   void initState() {
@@ -505,7 +506,7 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
   Future<void> _save() async {
     if (_selected.isEmpty) return;
     if (widget.quotaRemaining != null && _selected.length > widget.quotaRemaining!) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      _scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
         content: Text('You can add only ${widget.quotaRemaining} more doctor(s) to this brand.'),
         backgroundColor: Colors.orange,
       ));
@@ -517,8 +518,10 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        _scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -527,8 +530,12 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: DraggableScrollableSheet(
+          initialChildSize: 0.85,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (_, scrollCtrl) => Container(
@@ -701,6 +708,8 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
               ),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );

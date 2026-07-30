@@ -104,7 +104,7 @@ class _BbaMainScreenState extends State<BbaMainScreen>
     setState(() => _isLoadingBrands = true);
     try {
       final user = await ApiService().getUser();
-      final brands = await ApiService().getBrands(userId: user?.employeeId);
+      final brands = await ApiService().getBbaBrands(userId: user?.employeeId);
       if (mounted) {
         setState(() {
           _brands = brands;
@@ -119,7 +119,7 @@ class _BbaMainScreenState extends State<BbaMainScreen>
   Future<void> _loadDoctorSummary() async {
     setState(() => _isLoadingSummary = true);
     try {
-      final data = await ApiService().getDoctorBrandSummary();
+      final data = await ApiService().getDoctorBbaBrandSummary();
       if (mounted) setState(() => _doctorSummary = data);
     } catch (_) {}
     if (mounted) setState(() => _isLoadingSummary = false);
@@ -139,7 +139,7 @@ class _BbaMainScreenState extends State<BbaMainScreen>
       _subRejectionReason = null;
     });
     try {
-      final brands = await ApiService().getBrands(userId: userId);
+      final brands = await ApiService().getBbaBrands(userId: userId);
       if (mounted) {
         setState(() {
           _teamBrands = brands;
@@ -189,7 +189,7 @@ class _BbaMainScreenState extends State<BbaMainScreen>
 
     setState(() => _isSubmitting = true);
     try {
-      await ApiService().submitBrandsForApproval();
+      await ApiService().submitBbaBrandsForApproval();
       if (mounted) {
         setState(() => _myApprovalStatus = 'pending');
         await _loadBrands();
@@ -213,7 +213,7 @@ class _BbaMainScreenState extends State<BbaMainScreen>
     if (_selectedSubId == null) return;
     setState(() => _isApproving = true);
     try {
-      await ApiService().approveBrandList(_selectedSubId!);
+      await ApiService().approveBbaBrandList(_selectedSubId!);
       if (mounted) {
         setState(() => _subApprovalStatus = 'approved');
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -287,7 +287,7 @@ class _BbaMainScreenState extends State<BbaMainScreen>
     if (_selectedSubId == null) return;
     setState(() => _isRejecting = true);
     try {
-      await ApiService().rejectBrandList(_selectedSubId!, reason);
+      await ApiService().rejectBbaBrandList(_selectedSubId!, reason);
       if (mounted) {
         setState(() {
           _subApprovalStatus = 'rejected';
@@ -603,6 +603,35 @@ class _BbaMainScreenState extends State<BbaMainScreen>
                   ),
                 ),
               ],
+              // Restriction criteria
+              if (brand['restriction_criteria'] != null && brand['restriction_criteria'].toString().trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+                  decoration: BoxDecoration(
+                    color: Colors.purple.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.purple.shade200),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline, size: 13, color: Colors.purple.shade700),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          brand['restriction_criteria'].toString().trim(),
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.purple.shade900,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -816,12 +845,25 @@ class _BbaMainScreenState extends State<BbaMainScreen>
                   ),
                 ],
                 if (brands.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    brands.join(' · '),
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: brands.map((brand) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        brand,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    )).toList(),
                   ),
                 ],
               ],

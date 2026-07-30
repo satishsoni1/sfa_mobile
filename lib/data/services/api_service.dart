@@ -2629,18 +2629,24 @@ Future<void> submitFullMonth(int month, int year) async {
   }
 
   // 2. USER SUBMITS ENTIRE MONTH
-  Future<bool> submitMonthPlan(DateTime month) async {
-    try {
+  Future<void> submitMonthPlan(DateTime month) async {
       String monthStr = DateFormat('yyyy-MM').format(month);
       final response = await http.post(
         Uri.parse('$baseUrl/tour-plan/submit-month'),
         headers: await _getHeaders(),
         body: json.encode({'month': monthStr}),
       );
-      return response.statusCode == 200;
+    
+    try {
+      final decoded = json.decode(response.body);
+      if (response.statusCode != 200 || decoded['success'] == false) {
+        throw Exception(decoded['message'] ?? 'Failed to submit month plan.');
+      }
     } catch (e) {
-      debugPrint("Error submitting month: $e");
-      return false;
+      if (e is FormatException) {
+        throw Exception('Server error: ${response.statusCode}');
+      }
+      rethrow;
     }
   }
 
@@ -2687,6 +2693,151 @@ Future<void> submitFullMonth(int month, int year) async {
       }
     } catch (e) {
       debugPrint("Error fetching areas: $e");
+    }
+    return [];
+  }
+
+  // ==========================================
+  // Campaign doctor selection Module Specific APIs (Duplicate of Brand Pathfinder APIs)
+  // ==========================================
+
+  Future<List<Map<String, dynamic>>> getBbaBrands({int? userId}) async {
+    final token = await getToken();
+    final uri = userId != null
+        ? Uri.parse('$baseUrl/app/bba/brands?user_id=$userId')
+        : Uri.parse('$baseUrl/app/bba/brands');
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(json.decode(response.body)['data'] ?? []);
+    }
+    throw Exception('Failed to load BBA brands');
+  }
+
+  Future<Map<String, dynamic>> getBbaBrandDoctors(int brandId, {int? userId}) async {
+    final token = await getToken();
+    final uri = userId != null
+        ? Uri.parse('$baseUrl/app/bba/brands/$brandId/doctors?user_id=$userId')
+        : Uri.parse('$baseUrl/app/bba/brands/$brandId/doctors');
+    final response = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) return json.decode(response.body);
+    throw Exception('Failed to load BBA brand doctors');
+  }
+
+  Future<void> addDoctorsToBbaBrand(int brandId, List<int> doctorIds) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/bba/brands/$brandId/doctors'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json', 'Content-Type': 'application/json'},
+      body: jsonEncode({'doctor_ids': doctorIds}),
+    );
+    if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to add doctors to BBA brand');
+  }
+
+  Future<void> removeDoctorFromBbaBrand(int brandId, int doctorId) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/app/bba/brands/$brandId/doctors/$doctorId'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode != 200) throw Exception(json.decode(response.body)['message'] ?? 'Failed to remove doctor from BBA brand');
+  }
+
+  Future<void> submitBbaBrandsForApproval() async {
+    final token = await getToken();
+    final user = await getUser();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/bba/brands/submit'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'user_id': user?.employeeId}),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to submit BBA brands for approval');
+    }
+  }
+
+  Future<void> approveBbaBrandList(int userId) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/bba/brands/$userId/approve'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to approve BBA brand list');
+    }
+  }
+
+  Future<void> rejectBbaBrandList(int userId, String reason) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/bba/brands/$userId/reject'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'reason': reason}),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to reject BBA brand list');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getMyBbaDoctorList({int? brandId, int? isCampaign}) async {
+    final token = await getToken();
+    
+    List<String> queryParams = [];
+    if (brandId != null) queryParams.add('brand_id=$brandId');
+    if (isCampaign != null) queryParams.add('is_campaign=$isCampaign');
+    
+    String url = '$baseUrl/app/bba/doctors/my-list';
+    if (queryParams.isNotEmpty) {
+      url += '?' + queryParams.join('&');
+    }
+    
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(json.decode(response.body)['data'] ?? []);
+    }
+    throw Exception('Failed to load BBA doctor list');
+  }
+
+  Future<List<Map<String, dynamic>>> getDoctorBbaBrandSummary({int? userId}) async {
+    try {
+      final token = await getToken();
+      final uri = userId != null
+          ? Uri.parse('$baseUrl/app/bba/brands/doctor-summary?user_id=$userId')
+          : Uri.parse('$baseUrl/app/bba/brands/doctor-summary');
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        final body = json.decode(response.body);
+        final raw = body['data'] ?? body;
+        if (raw is List) return List<Map<String, dynamic>>.from(raw);
+      }
+    } catch (e) {
+      debugPrint('Error fetching BBA doctor brand summary: $e');
     }
     return [];
   }

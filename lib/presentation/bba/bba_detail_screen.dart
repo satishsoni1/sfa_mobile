@@ -36,7 +36,7 @@ class _BbaDetailScreenState extends State<BbaDetailScreen> {
   Future<void> _load() async {
     setState(() => _isLoading = true);
     try {
-      final data = await ApiService().getBrandDoctors(_brandId, userId: widget.targetUserId);
+      final data = await ApiService().getBbaBrandDoctors(_brandId, userId: widget.targetUserId);
       if (mounted) {
         setState(() {
           _doctors = List<Map<String, dynamic>>.from(data['data'] ?? []);
@@ -77,7 +77,7 @@ class _BbaDetailScreenState extends State<BbaDetailScreen> {
   Future<void> _removeDoctor(int doctorId) async {
     if (widget.readOnly) return;
     try {
-      await ApiService().removeDoctorFromBrand(_brandId, doctorId);
+      await ApiService().removeDoctorFromBbaBrand(_brandId, doctorId);
       setState(() => _doctors.removeWhere(
           (d) => int.tryParse(d['id']?.toString() ?? '0') == doctorId));
     } catch (e) {
@@ -103,6 +103,7 @@ class _BbaDetailScreenState extends State<BbaDetailScreen> {
       backgroundColor: Colors.transparent,
       builder: (_) => _AddDoctorSheet(
         brandId: _brandId,
+        isCampaign: int.tryParse(widget.brand['is_campaign']?.toString() ?? '0') ?? 0,
         quotaRemaining: _quota > 0 ? (_quota - _doctors.length) : null,
         alreadyAdded: _doctors
             .map((d) => int.tryParse(d['id']?.toString() ?? '0') ?? 0)
@@ -185,6 +186,34 @@ class _BbaDetailScreenState extends State<BbaDetailScreen> {
                         ),
                       ),
                     ]),
+                  ),
+                // Restriction Criteria banner
+                if (widget.brand['restriction_criteria'] != null && widget.brand['restriction_criteria'].toString().trim().isNotEmpty)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.purple.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.purple.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.purple.shade700, size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            widget.brand['restriction_criteria'].toString().trim(),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.purple.shade900,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 // Speciality filter chips
                 if (_specialities.length > 1)
@@ -436,10 +465,12 @@ class _BbaDetailScreenState extends State<BbaDetailScreen> {
 
 class _AddDoctorSheet extends StatefulWidget {
   final int brandId;
+  final int isCampaign;
   final int? quotaRemaining;
   final Set<int> alreadyAdded;
   const _AddDoctorSheet({
     required this.brandId,
+    required this.isCampaign,
     required this.alreadyAdded,
     required this.quotaRemaining,
   });
@@ -455,6 +486,7 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
   bool _isLoading = true;
   bool _isSaving = false;
   final _searchCtrl = TextEditingController();
+  final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
   @override
   void initState() {
@@ -471,7 +503,7 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
 
   Future<void> _load() async {
     try {
-      final docs = await ApiService().getMyDoctorList();
+      final docs = await ApiService().getMyBbaDoctorList(brandId: widget.brandId, isCampaign: widget.isCampaign);
       if (mounted) {
         setState(() {
           _allDoctors = docs
@@ -505,7 +537,7 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
   Future<void> _save() async {
     if (_selected.isEmpty) return;
     if (widget.quotaRemaining != null && _selected.length > widget.quotaRemaining!) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      _scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
         content: Text('You can add only ${widget.quotaRemaining} more doctor(s) to this brand.'),
         backgroundColor: Colors.orange,
       ));
@@ -513,12 +545,14 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
     }
     setState(() => _isSaving = true);
     try {
-      await ApiService().addDoctorsToBrand(widget.brandId, _selected.toList());
+      await ApiService().addDoctorsToBbaBrand(widget.brandId, _selected.toList());
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$e')));
+        _scaffoldMessengerKey.currentState?.showSnackBar(SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -527,8 +561,12 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.85,
+    return ScaffoldMessenger(
+      key: _scaffoldMessengerKey,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: DraggableScrollableSheet(
+          initialChildSize: 0.85,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       builder: (_, scrollCtrl) => Container(
@@ -701,6 +739,8 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
               ),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );

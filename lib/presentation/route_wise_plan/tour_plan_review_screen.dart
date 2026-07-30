@@ -29,8 +29,8 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
   Future<void> _submitPlan() async {
     setState(() => _isSubmitting = true);
     try {
-      bool success = await _api.submitMonthPlan(widget.currentMonth);
-      if (success) {
+      await _api.submitMonthPlan(widget.currentMonth);
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Month Plan Submitted for Approval!"),
@@ -38,17 +38,20 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
           ),
         );
         Navigator.pop(context, true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to submit plan."), backgroundColor: Colors.red),
-        );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
+      if (mounted) {
       setState(() => _isSubmitting = false);
+      }
     }
   }
 

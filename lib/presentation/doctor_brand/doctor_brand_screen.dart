@@ -816,12 +816,25 @@ class _DoctorBrandScreenState extends State<DoctorBrandScreen>
                   ),
                 ],
                 if (brands.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    brands.join(' · '),
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: brands.map((brand) => Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        brand,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    )).toList(),
                   ),
                 ],
               ],
