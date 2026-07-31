@@ -3738,7 +3738,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 children: [
                   Icon(Icons.add_circle_outline, color: Colors.grey.shade400, size: 16),
                   const SizedBox(width: 8),
-                  Text('Toll, Parking, Courier, Food Bill…',
+                  Text('Food Bill…',
                       style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
                 ],
               ),
@@ -4423,8 +4423,9 @@ class _AddOtherExpenseSheet extends StatefulWidget {
 }
 
 class _AddOtherExpenseSheetState extends State<_AddOtherExpenseSheet> {
-  static const _types = ['Toll', 'Courier', 'Parking', 'Food Bill', 'Others'];
-  String _selectedType = 'Toll';
+  //static const _types = ['Toll', 'Courier', 'Parking', 'Food Bill', 'Others'];
+  static const _types = ['Food Bill'];
+  String _selectedType = 'Food Bill';
   final _amtController = TextEditingController();
   final _customTypeController = TextEditingController();
   PlatformFile? _bill;
