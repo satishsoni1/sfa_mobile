@@ -2496,16 +2496,16 @@ Future<void> submitFullMonth(int month, int year) async {
   }
 
   Future<bool> saveChemistVisit(Map<String, dynamic> payload) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/app/chemist-reports/save'),
-        headers: await _getHeaders(),
-        body: json.encode(payload),
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint("Error saving chemist report: $e");
-      return false;
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/chemist-reports/save'),
+      headers: await _getHeaders(),
+      body: json.encode(payload),
+    );
+    if (response.statusCode == 200) {
+      return true;
+    } else {
+      final body = json.decode(response.body);
+      throw Exception(body['message'] ?? 'Failed to save chemist visit');
     }
   }
 

@@ -406,8 +406,7 @@ class ReportProvider with ChangeNotifier {
       };
   
      // print(const JsonEncoder.withIndent('  ').convert(data));  
-      bool success = await _apiService.saveChemistVisit(data);
-      if (!success) throw Exception("API returned false.");
+      await _apiService.saveChemistVisit(data);
 
       // Refresh the list automatically
       if (selectedDate != null) {
@@ -416,7 +415,7 @@ class ReportProvider with ChangeNotifier {
         await fetchTodayChemistData();
       }
     } catch (e) {
-      throw Exception("Failed to save chemist report.");
+      rethrow;
     }
   }
 }
