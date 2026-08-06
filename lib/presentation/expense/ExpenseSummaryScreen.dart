@@ -712,10 +712,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             children: [
               Expanded(
                   child: _quickAddButton(
-                      'Mobile', Icons.phone_android, Colors.blue)),
+                      'Communication Allowance', Icons.contact_phone_outlined, Colors.indigo)),
               const SizedBox(width: 10),
               Expanded(
-                  child: _quickAddButton('Internet', Icons.wifi, Colors.teal)),
+                  child: _quickAddButton('Petrol', Icons.local_gas_station_outlined, Colors.deepOrange)),
             ],
           ),
         ],
@@ -761,10 +761,16 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
   Widget _buildClaimCard(Map<String, dynamic> claim) {
     final icons = {
+      'Communication Allowance': Icons.contact_phone_outlined,
+      'Petrol'                 : Icons.local_gas_station_outlined,
+      'Laundry & Hygiene'      : Icons.local_laundry_service_outlined,
+      'Misc'                   : Icons.more_horiz,
+      // Legacy options kept for card display compatibility
       'Mobile'         : Icons.phone_android,
       'Internet'       : Icons.wifi,
       'Hotel'          : Icons.hotel_outlined,
       'Postage'        : Icons.local_post_office_outlined,
+      'Refreshment'    : Icons.free_breakfast_outlined,
       'Toll'           : Icons.toll_outlined,
       'Courier'        : Icons.local_shipping_outlined,
       'Parking'        : Icons.local_parking,
@@ -772,13 +778,18 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Stationary'     : Icons.edit_note_outlined,
       'Award'          : Icons.emoji_events_outlined,
       'Patrol Charges' : Icons.local_police_outlined,
-      'Misc'           : Icons.more_horiz,
     };
     final claimColors = {
+      'Communication Allowance': Colors.indigo,
+      'Petrol'                 : Colors.deepOrange,
+      'Laundry & Hygiene'      : Colors.teal,
+      'Misc'                   : Colors.grey,
+      // Legacy options
       'Mobile'         : Colors.blue,
       'Internet'       : Colors.teal,
       'Hotel'          : Colors.indigo,
       'Postage'        : Colors.brown,
+      'Refreshment'    : Colors.amber,
       'Toll'           : Colors.deepOrange,
       'Courier'        : Colors.cyan,
       'Parking'        : Colors.purple,
@@ -786,7 +797,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Stationary'     : Colors.teal,
       'Award'          : Colors.amber,
       'Patrol Charges' : Colors.deepPurple,
-      'Misc'           : Colors.grey,
     };
     final type  = claim['claim_type'] ?? 'Misc';
     final icon  = icons[type]  ?? Icons.receipt;
@@ -1725,42 +1735,90 @@ class _AddClaimSheet extends StatefulWidget {
 }
 
 class _AddClaimSheetState extends State<_AddClaimSheet> {
-  String _selectedType = 'Mobile';
+  String _selectedType = 'Communication Allowance';
   final _amtController = TextEditingController();
   PlatformFile? _billFile;
   bool _isSubmitting = false;
-  double? _mobileRate;
-  double? _internetRate;
-  bool _mobileLimitFlag = false; // true → user enters amount, capped at _mobileRate
+  
+  // Backend claim rates
+  double? _communicationRate;
+  double? _petrolRate;
+  double? _laundryRate;
+  bool _communicationLimitFlag = false;
+  bool _petrolLimitFlag = false;
+  bool _laundryLimitFlag = false;
   bool _isLoadingRate = false;
 
   static const _claimTypes = [
-    'Mobile', 'Internet', 'Hotel', 'Postage',
-    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Patrol Charges', 'Misc',
+    'Communication Allowance',
+    'Petrol',
+    'Laundry & Hygiene',
+    'Misc',
+    // Commented remaining options:
+    // 'Mobile',
+    // 'Internet',
+    // 'Hotel',
+    // 'Postage',
+    // 'Refreshment',
+    // 'Toll',
+    // 'Courier',
+    // 'Parking',
+    // 'Food Bill',
+    // 'Stationary',
+    // 'Award',
+    // 'Patrol Charges',
   ];
 
   final _claimIcons = {
-    'Mobile': Icons.phone_android,
-    'Internet': Icons.wifi,
-    'Hotel': Icons.hotel_outlined,
-    'Postage': Icons.local_post_office_outlined,
-    'Toll': Icons.toll_outlined,
-    'Courier': Icons.local_shipping_outlined,
-    'Parking': Icons.local_parking,
-    'Food Bill': Icons.restaurant_outlined,
-    'Stationary': Icons.edit_note_outlined,
-    'Award': Icons.emoji_events_outlined,
-    'Patrol Charges': Icons.local_police_outlined,
-    'Misc': Icons.more_horiz,
+    'Communication Allowance': Icons.contact_phone_outlined,
+    'Petrol'                 : Icons.local_gas_station_outlined,
+    'Laundry & Hygiene'      : Icons.local_laundry_service_outlined,
+    'Misc'                   : Icons.more_horiz,
+    // 'Mobile'               : Icons.phone_android,
+    // 'Internet'             : Icons.wifi,
+    // 'Hotel'                : Icons.hotel_outlined,
+    // 'Postage'              : Icons.local_post_office_outlined,
+    // 'Refreshment'          : Icons.free_breakfast_outlined,
+    // 'Toll'                 : Icons.toll_outlined,
+    // 'Courier'              : Icons.local_shipping_outlined,
+    // 'Parking'              : Icons.local_parking,
+    // 'Food Bill'            : Icons.restaurant_outlined,
+    // 'Stationary'           : Icons.edit_note_outlined,
+    // 'Award'                : Icons.emoji_events_outlined,
+    // 'Patrol Charges'       : Icons.local_police_outlined,
   };
 
-  // Mobile is auto-rated only when mobile_limit_flag=0 (server sets the amount)
-  bool get _isAutoRated =>
-      (_selectedType == 'Mobile' && !_mobileLimitFlag) ||
-      (_selectedType == 'Internet');
+  double get _currentRate {
+    switch (_selectedType) {
+      case 'Communication Allowance':
+        return _communicationRate ?? 0;
+      case 'Petrol':
+        return _petrolRate ?? 0;
+      case 'Laundry & Hygiene':
+        return _laundryRate ?? 0;
+      default:
+        return 0;
+    }
+  }
 
-  double get _autoRate =>
-      _selectedType == 'Mobile' ? (_mobileRate ?? 0) : (_internetRate ?? 0);
+  bool get _currentLimitFlag {
+    switch (_selectedType) {
+      case 'Communication Allowance':
+        return _communicationLimitFlag;
+      case 'Petrol':
+        return _petrolLimitFlag;
+      case 'Laundry & Hygiene':
+        return _laundryLimitFlag;
+      default:
+        return false;
+    }
+  }
+
+  // Auto-rated when backend provides a rate > 0 and it's not a limit flag (server sets amount)
+  bool get _isAutoRated =>
+      _selectedType != 'Misc' && _currentRate > 0 && !_currentLimitFlag;
+
+  double get _autoRate => _currentRate;
 
   @override
   void initState() {
@@ -1777,17 +1835,44 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
       final data = await ApiService().getMonthlyClaimRates();
       if (mounted) {
         setState(() {
-          _mobileRate      = (data['mobile']   as num?)?.toDouble() ?? 0;
-          _internetRate    = (data['internet'] as num?)?.toDouble() ?? 0;
-          _mobileLimitFlag = (data['mobile_limit_flag'] == 1 || data['mobile_limit_flag'] == true);
-          // Pre-fill amount field with the limit for convenience
-          if (_mobileLimitFlag && _selectedType == 'Mobile' && _amtController.text.isEmpty) {
-            _amtController.text = (_mobileRate ?? 0).toStringAsFixed(0);
+          // Parse rates dynamically from backend response
+          _communicationRate = (data['communication_allowance'] ??
+                  data['communication'] ??
+                  data['mobile'] ??
+                  data['mobile_rate'] as num?)
+              ?.toDouble() ??
+              0;
+          _petrolRate = (data['petrol_allowance'] ??
+                  data['petrol_rate'] ??
+                  data['petrol'] ??
+                  data['fuel_rate'] ??
+                  data['patrol_charges'] as num?)
+              ?.toDouble() ??
+              0;
+          _laundryRate = (data['laundry_hygiene'] ??
+                  data['laundry_allowance'] ??
+                  data['laundry_rate'] ??
+                  data['laundry'] as num?)
+              ?.toDouble() ??
+              0;
+
+          _communicationLimitFlag = (data['communication_limit_flag'] == 1 ||
+              data['communication_limit_flag'] == true ||
+              data['mobile_limit_flag'] == 1 ||
+              data['mobile_limit_flag'] == true);
+          _petrolLimitFlag = (data['petrol_limit_flag'] == 1 ||
+              data['petrol_limit_flag'] == true);
+          _laundryLimitFlag = (data['laundry_limit_flag'] == 1 ||
+              data['laundry_limit_flag'] == true);
+
+          // Pre-fill amount field if current type is in limit mode
+          if (_currentLimitFlag && _currentRate > 0 && _amtController.text.isEmpty) {
+            _amtController.text = _currentRate.toStringAsFixed(0);
           }
         });
       }
     } catch (_) {
-      // rates remain null; user will see 0
+      // rates remain 0
     } finally {
       if (mounted) setState(() => _isLoadingRate = false);
     }
@@ -1841,13 +1926,22 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
               final selected = _selectedType == t;
               return ChoiceChip(
                 label: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(_claimIcons[t]!, size: 14,
+                  Icon(_claimIcons[t] ?? Icons.receipt, size: 14,
                       color: selected ? Colors.white : const Color(0xFF4A148C)),
                   const SizedBox(width: 4),
                   Text(t),
                 ]),
                 selected: selected,
-                onSelected: (_) => setState(() => _selectedType = t),
+                onSelected: (_) {
+                  setState(() {
+                    _selectedType = t;
+                    if (_currentLimitFlag && _currentRate > 0) {
+                      _amtController.text = _currentRate.toStringAsFixed(0);
+                    } else {
+                      _amtController.clear();
+                    }
+                  });
+                },
                 selectedColor: const Color(0xFF4A148C),
                 labelStyle: TextStyle(
                     color: selected ? Colors.white : const Color(0xFF4A148C),
@@ -1894,17 +1988,18 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
                     ),
                   )
           else ...[
-            // Mobile with limit flag: user enters amount, capped at designation rate
-            if (_selectedType == 'Mobile' && _mobileLimitFlag && (_mobileRate ?? 0) > 0)
+            if (_currentLimitFlag && _currentRate > 0)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
                   children: [
                     Icon(Icons.info_outline, size: 14, color: Colors.orange.shade700),
                     const SizedBox(width: 6),
-                    Text(
-                      'Limit: ₹${_mobileRate!.toStringAsFixed(0)} / month — enter your actual bill',
-                      style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                    Expanded(
+                      child: Text(
+                        'Limit: ₹${_currentRate.toStringAsFixed(0)} / month — enter your actual bill',
+                        style: TextStyle(fontSize: 12, color: Colors.orange.shade800),
+                      ),
                     ),
                   ],
                 ),
@@ -1916,8 +2011,8 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
                 labelText: 'Amount',
                 prefixText: '₹ ',
                 hintText: '0.00',
-                helperText: (_selectedType == 'Mobile' && _mobileLimitFlag && (_mobileRate ?? 0) > 0)
-                    ? 'Max ₹${_mobileRate!.toStringAsFixed(0)}'
+                helperText: (_currentLimitFlag && _currentRate > 0)
+                    ? 'Max ₹${_currentRate.toStringAsFixed(0)}'
                     : null,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 focusedBorder: OutlineInputBorder(
@@ -2050,11 +2145,11 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
             .showSnackBar(const SnackBar(content: Text('Enter a valid amount')));
         return;
       }
-      // Enforce mobile limit on the client side before the API call
-      if (_selectedType == 'Mobile' && _mobileLimitFlag && (_mobileRate ?? 0) > 0) {
-        if (amount > _mobileRate!) {
+      // Enforce limit on client side if limit flag is enabled
+      if (_currentLimitFlag && _currentRate > 0) {
+        if (amount > _currentRate) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Mobile bill cannot exceed ₹${_mobileRate!.toStringAsFixed(0)}'),
+            content: Text('$_selectedType cannot exceed ₹${_currentRate.toStringAsFixed(0)}'),
             backgroundColor: Colors.red.shade600,
           ));
           return;
@@ -2068,7 +2163,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
         month: widget.month,
         year: widget.year,
         claimType: _selectedType,
-        amount: amount, // null for Mobile/Internet — server fetches from expense_rates
+        amount: amount, // null for auto-rated — server fetches from expense_rates
         bill: _billFile,
       );
       widget.onSuccess();

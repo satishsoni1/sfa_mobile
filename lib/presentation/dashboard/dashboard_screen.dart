@@ -70,7 +70,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.64";
+  static const String CURRENT_APP_VERSION = "1.0.66";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -1285,7 +1285,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           //     ),
           //   ),
           // ),
-      if (canUseWebDcr)
         _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
           if (_isCheckedIn) {
             _navigateTo(const DoctorListScreen());
@@ -1306,7 +1305,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showSnack("Please Check In first!");
         }
       }),
-      if (canUseWebDcr)
         _MenuAction(
           Icons.assignment_turned_in,
           "Daily Report",
@@ -1365,6 +1363,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Colors.green,
         () => _navigateTo(const ReportsDashboardScreen()),
       ),
+     // _MenuAction(
+      //   Icons.approval,
+      //   "DCR Approvals (web)",
+      //   Colors.green,
+      //   () => _navigateTo(const ManagerJointWorkScreen()),
+      // ),
       _MenuAction(
         Icons.handshake_outlined,
         "DCR Approvals",

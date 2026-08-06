@@ -424,6 +424,20 @@ class _ClmPlayerScreenState extends State<ClmPlayerScreen>
     if (!_webControllers.containsKey(index)) {
       final ctrl = WebViewController()
         ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onNavigationRequest: (NavigationRequest request) {
+              if (request.url.startsWith('mailto:') ||
+                  request.url.startsWith('tel:') ||
+                  request.url.startsWith('sms:') ||
+                  request.url.startsWith('whatsapp:')) {
+                launchUrl(Uri.parse(request.url), mode: LaunchMode.externalApplication);
+                return NavigationDecision.prevent;
+              }
+              return NavigationDecision.navigate;
+            },
+          ),
+        )
         ..loadFile(slide.localPath!);
       _webControllers[index] = ctrl;
     }

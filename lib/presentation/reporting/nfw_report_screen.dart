@@ -246,6 +246,7 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
     "Transit / Traveling",
     "Conference",
     "Meeting",
+    "Leave",
     "Closing",
   ];
 

@@ -1810,7 +1810,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           nfwType: nfwTypeParam,
           taDirection: capturedDir);
       if (!mounted) return;
-
+      print('Recalculation result: $result');
       final daType   = (result['da_type']?.toString() ?? 'HQ').toUpperCase();
       final daAmount = (result['da_amount'] as num?)?.toDouble() ?? 0;
       final taKm     = (result['total_km']  as num?)?.toDouble() ?? 0;
@@ -1956,10 +1956,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       if (!mounted || myToken != _recalcToken) return;
 
       setState(() {
-        if (!_isDaTypeManual) {
+        //if (!_isDaTypeManual) {
           _serverDaType   = (result['da_type']?.toString() ?? _serverDaType).toUpperCase();
           _serverDaAmount = (result['da_amount'] as num?)?.toDouble() ?? _serverDaAmount;
-        }
+        //}
         _serverTaKm     = (result['total_km']  as num?)?.toDouble() ?? 0;
         _serverTaAmount = (result['ta_amount']  as num?)?.toDouble() ?? 0;
         if (!_taOverrideByUser) {
