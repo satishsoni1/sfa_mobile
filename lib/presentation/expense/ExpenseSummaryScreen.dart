@@ -2155,6 +2155,10 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
           return;
         }
       }
+    } else {
+      // Explicitly send the auto-fetched designation rate in the API payload
+      // instead of relying on the backend to deduce it from the claim type name.
+      amount = _autoRate;
     }
 
     setState(() => _isSubmitting = true);
@@ -2163,7 +2167,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
         month: widget.month,
         year: widget.year,
         claimType: _selectedType,
-        amount: amount, // null for auto-rated — server fetches from expense_rates
+        amount: amount, 
         bill: _billFile,
       );
       widget.onSuccess();

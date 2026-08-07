@@ -70,7 +70,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.66";
+  static const String CURRENT_APP_VERSION = "1.0.67";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -484,36 +484,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       child: Column(
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // Left side (Check-in + Graph)
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                                  children: [
-                                    _buildAttendanceCard(),
-                                    const SizedBox(height: 24),
-                                    _buildVisitsOverview(),
-                                    const SizedBox(height: 24),
-                                    _buildExecutionReportCard(),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 32),
-                              // Right side (Menu cards)
-                              Expanded(
-                                flex: 7,
-                                child: Padding(
-                                  // Add top padding so menu cards align nicely with Check-in card
-                                  padding: const EdgeInsets.only(top: 0),
-                                  child: _buildQuickActions(
-                                    true,
-                                  ), // pass true for desktop
-                                ),
-                              ),
-                            ],
+                          _buildQuickActions(
+                            true,
+                            col1Top: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildAttendanceCard(),
+                                const SizedBox(height: 24),
+                                _buildVisitsOverview(),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                            col2Top: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _buildExecutionReportCard(),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
                           ),
                           _buildFooter(),
                         ],
@@ -554,8 +542,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _buildVisitsOverview(),
                         const SizedBox(height: 24),
                         _buildExecutionReportCard(),
-                        const SizedBox(height: 24),
-                        _buildProductivityCard(),
                         const SizedBox(height: 24),
                         _buildQuickActions(false), // pass false for mobile
                       ],
@@ -744,55 +730,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildProductivityCard() {
-    final summary = _executionData['summary'] ?? {};
-    final int planned = summary['total_planned'] ?? 0;
-    final int totalVisited = summary['total_visited'] ?? 0;
-    final double productivity = (summary['productivity'] ?? 0).toDouble();
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Performance Metrics",
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildStatCircle(productivity, "Productivity", Colors.green),
-              Container(height: 50, width: 1, color: Colors.grey.shade200),
-              _buildSimpleStat(
-                "$totalVisited / $planned",
-                "Executed / Planned",
-                Icons.checklist,
-                Colors.blue,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildStatCircle(double value, String label, Color color) {
     return Column(
       children: [
@@ -887,8 +824,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final int unplannedVisited = summary['unplanned_visited'] ?? 0;
     final int frdMet = summary['frd_met'] ?? 0;
     final int kblMet = summary['kbl_met'] ?? 0;
+    final int planned = summary['total_planned'] ?? 0;
+    final int totalVisited = summary['total_visited'] ?? 0;
+    final double productivity = (summary['productivity'] ?? 0).toDouble();
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -949,7 +889,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
           if (_isFetchingExecution)
             const Center(
               child: Padding(
@@ -993,20 +933,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _buildExecBadge("KBL Met", kblMet, Colors.purple),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 8),
                           _buildExecBadge("FRD Met", frdMet, Colors.indigo),
+                          const SizedBox(height: 8),
+                          _buildExecBadge("Planned", plannedVisited, Colors.teal),
+                          const SizedBox(height: 8),
+                          _buildExecBadge("Unplanned", unplannedVisited, Colors.orange),
                         ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                // PLANNED & UNPLANNED (Bottom)
+                const SizedBox(height: 12),
+                Divider(height: 1, color: Colors.grey.shade200),
+                const SizedBox(height: 12),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
-                    _buildExecBadge("Planned", plannedVisited, Colors.teal),
-                    _buildExecBadge("Unplanned", unplannedVisited, Colors.orange),
+                    _buildStatCircle(productivity, "Productivity", Colors.green),
+                    Container(height: 50, width: 1, color: Colors.grey.shade200),
+                    _buildSimpleStat(
+                      "$totalVisited / $planned",
+                      "Executed / Planned",
+                      Icons.checklist,
+                      Colors.blue,
+                    ),
                   ],
                 ),
               ],
@@ -1020,7 +971,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
             shape: BoxShape.circle,
@@ -1028,13 +979,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Text(
             count.toString(),
             style: GoogleFonts.poppins(
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
               color: color,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         Text(
           title,
           style: GoogleFonts.poppins(
@@ -1260,7 +1211,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildQuickActions(bool isDesktop) {
+  Widget _buildQuickActions(bool isDesktop, {Widget? col1Top, Widget? col2Top}) {
     final user = Provider.of<AuthProvider>(context).user;
     final canUseWebDcr =
         _attendanceWebDcrAllowed ?? user?.isWebDcrAllowed ?? false;
@@ -1453,20 +1404,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildProductivityCard(),
-                const SizedBox(height: 24),
+                if (col1Top != null) col1Top,
                 _buildMenuCategoryCard("Field Operations", fieldOps),
                 const SizedBox(height: 24),
-                _buildMenuCategoryCard("AI Intelligence", aiIntel),
+                _buildMenuCategoryCard("Manager Reporting", managerOps),
               ],
             ),
           ),
-          const SizedBox(width: 24),
+          const SizedBox(width: 32),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildMenuCategoryCard("Manager Reporting", managerOps),
+                if (col2Top != null) col2Top,
+                _buildMenuCategoryCard("AI Intelligence", aiIntel),
                 const SizedBox(height: 24),
                 _buildMenuCategoryCard("Utilities", utilities),
               ],
