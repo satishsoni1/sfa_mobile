@@ -104,6 +104,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   double _hotelBillBLimit = 0;  // hotel_b_bill from rates (B-class city)
   String _hotelCityClass = '';  // 'A', 'B', 'metro', ''
   double _mealBillLimit = 0;
+  double _refreshmentAllowance = 0;  // refreshment_allowance from expense_rates
+  double _foodAllowance = 0;          // food_allowance (ZBM EX/OS only) from backend
+  double _accommodation = 0;          // accommodation allowance from backend (e.g. 75)
+  bool _accommodationClaimed = false; // whether employee has toggled on accommodation
   double _hotelAmount = 0;
   double _mealAmount = 0;
   final TextEditingController _hotelAmountController = TextEditingController();
@@ -286,17 +290,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   void _recalculateTotal() {
     double da = 0, ta = 0;
+    double pa = 0;
+    double refreshment = 0;
+    double food = 0;
+    
     if (_expenseMode == 'FIELD' && _calcData != null) {
       if (_isOsReturn) {
         // OS Return replaces the regular OS/EX_OS DA entirely
         da = _osReturnAmount;
       } else if (_hotelBillClaimed && _hotelBillFlag) {
-        // DA = pocket_allowance (fixed) + user hotel bill + user meal bill
-        da = _pocketAllowance + _hotelAmount + _mealAmount;
+        // DA = hotel bill + meal bill (pocket allowance added separately)
+        da = _hotelAmount + _mealAmount;
       } else {
         da = _serverDaAmount;
       }
       ta = _serverTaAmount;
+      
+      // Pocket allowance applies on OS 
+      if (_serverDaType == 'OS' && !_isOsReturn) {
+        pa = _pocketAllowance;
+      }
+
+      refreshment = _refreshmentAllowance;
+      if (_serverDaType == 'EX' || _serverDaType == 'OS' || _serverDaType == 'EX_OS') {
+        food = _foodAllowance;
+      }
     } else if (_expenseMode == 'NFW') {
       da = double.tryParse(_manualDaController.text) ?? _nfwDaAmount;
       ta = _serverTaAmount;
@@ -305,7 +323,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ? _serverTaAmount
           : (double.tryParse(_manualTaController.text) ?? 0);
     }
-    setState(() => _displayTotal = da + ta + _totalOtherAmount);
+    // Accommodation: added to total only when employee explicitly toggles it on
+    final accommodation = _accommodationClaimed ? _accommodation : 0;
+    setState(() => _displayTotal = da + ta + pa + refreshment + food + accommodation + _totalOtherAmount);
   }
 
   Future<void> _fetchCalculation() async {
@@ -333,6 +353,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _hotelCityClass  = data['hotel_city_class']?.toString() ?? '';
         _hotelBillLimit  = (data['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
         _mealBillLimit   = (data['meal_bill_limit']  as num?)?.toDouble() ?? 0;
+        // Dynamic allowances — sourced from backend, never hardcoded
+        _refreshmentAllowance = (data['refreshment_allowance'] as num?)?.toDouble() ?? 0;
+        _foodAllowance        = (data['food_allowance']        as num?)?.toDouble() ?? 0;
+        _accommodation        = (data['accommodation']         as num?)?.toDouble() ?? 0;
+        _accommodationClaimed = false; // reset on fresh load
 
         if (widget.editData != null) {
           // Edit mode: route timeline comes from DCR (above), but financial
@@ -1300,7 +1325,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         color: Colors.blue.shade600,
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: const Text('₹3.5/km',
+                      child: const Text('₹2.4/km',
                           style: TextStyle(
                               color: Colors.white,
                               fontSize: 9,
@@ -1561,7 +1586,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                                   borderRadius:
                                       BorderRadius.circular(4),
                                 ),
-                                child: const Text('₹3.5/km',
+                                child: const Text('₹2.4/km',
                                     style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 9,
@@ -1862,7 +1887,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         } else {
           _hotelBillLimit = (result['hotel_bill_limit'] as num?)?.toDouble() ?? 0;
         }
-        _mealBillLimit   = (result['meal_bill_limit']   as num?)?.toDouble() ?? 0;
+        _mealBillLimit        = (result['meal_bill_limit']        as num?)?.toDouble() ?? 0;
+        _refreshmentAllowance = (result['refreshment_allowance'] as num?)?.toDouble() ?? _refreshmentAllowance;
+        _foodAllowance        = (result['food_allowance']        as num?)?.toDouble() ?? _foodAllowance;
+        _accommodation        = (result['accommodation']         as num?)?.toDouble() ?? _accommodation;
         // Reset hotel/meal claims when route changes
         if (!flag) {
           _hotelBillClaimed = false;
@@ -2051,6 +2079,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         ReorderableListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
+          buildDefaultDragHandles: false, // Prevents default trailing '=' from overlapping our '-' button
           itemCount: _fieldWaypoints.length,
           onReorder: _isLocked
               ? (_, __) {}
@@ -2762,14 +2791,87 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   Widget _buildAllowanceCards() {
     return Column(
       children: [
-        if ((_serverDaType == 'OS' || _serverDaType == 'EX_OS') && !_isLocked) ...[
-          _buildOsReturnToggle(),
-          const SizedBox(height: 10),
-        ],
+        // OS Return toggle — commented out (not in use for current policy)
+        // if ((_serverDaType == 'OS' || _serverDaType == 'EX_OS') && !_isLocked) ...[
+        //   _buildOsReturnToggle(),
+        //   const SizedBox(height: 10),
+        // ],
         _buildDaCard(),
         const SizedBox(height: 10),
         _buildTaCard(),
+        if (_expenseMode == 'FIELD' && _calcData != null && _refreshmentAllowance > 0) ...[
+          const SizedBox(height: 10),
+          _buildRefreshmentCard(),
+        ],
+
+        if (_expenseMode == 'FIELD' && _calcData != null && _foodAllowance > 0 &&
+            (_serverDaType == 'EX' || _serverDaType == 'OS' || _serverDaType == 'EX_OS')) ...[
+          const SizedBox(height: 10),
+          _buildFoodAllowanceCard(),
+        ],
       ],
+    );
+  }
+
+  Widget _buildRefreshmentCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.local_cafe, color: Colors.green.shade700, size: 20),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text('Refreshment Allowance',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          ),
+          Text('₹${_fmt(_refreshmentAllowance)}',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800,
+                  fontSize: 14)),
+        ],
+      ),
+    );
+  }
+
+  /// Shown only for ZBM designation on EX / OS trips.
+  Widget _buildFoodAllowanceCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.restaurant, color: Colors.orange.shade700, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Food Allowance',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                Text(
+                  _serverDaType == 'EX' ? 'Applicable on EX trips' : 'Applicable on OS trips',
+                  style: TextStyle(fontSize: 10, color: Colors.orange.shade700),
+                ),
+              ],
+            ),
+          ),
+          Text('₹${_fmt(_foodAllowance)}',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade800,
+                  fontSize: 14)),
+        ],
+      ),
     );
   }
 
@@ -2850,22 +2952,22 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _buildDaCard() {
     final daType = _serverDaType;
-    final isOsType = daType == 'OS' || daType == 'EX_OS';
-    // Hotel bill section only shown when OS return is NOT active
-    final showHotelBill = isOsType && _hotelBillFlag && !_isLocked && !_isOsReturn;
+    // Show pocket allowance combined with DA on OS trips (not part of TA card)
+    final showPaInDa = (daType == 'OS' || daType == 'EX_OS') && !_isOsReturn && _pocketAllowance > 0;
+    // Hotel bill section — commented out (not in use for current policy)
+    // final isOsType = daType == 'OS' || daType == 'EX_OS';
+    // final showHotelBill = isOsType && _hotelBillFlag && !_isLocked && !_isOsReturn;
 
-    // Effective DA shown in header — OS return takes priority over everything
-    final effectiveDa = _isOsReturn
-        ? _osReturnAmount
-        : (_hotelBillClaimed && showHotelBill)
-            ? _pocketAllowance + _hotelAmount + _mealAmount
-            : _serverDaAmount;
+    // Effective DA shown in header — PA is added on top for OS days
+    // OS return and hotel bill modes are commented out
+    final effectiveDa = _serverDaAmount;
 
+    // Label changes based on whether PA is being shown alongside DA
     final Map<String, String> labels = {
       'HQ':    'HQ Daily Allowance',
       'EX':    'Ex-HQ Daily Allowance',
-      'OS':    _isOsReturn ? 'OS Return Allowance' : (_hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Outstation Daily Allowance'),
-      'EX_OS': _isOsReturn ? 'OS Return Allowance' : (_hotelBillClaimed ? 'Claimed DA (Hotel + Meal + Pocket)' : 'Ex-Outstation Daily Allowance'),
+      'OS':    showPaInDa ? 'Daily Allowance + Personal Allowance' : 'Outstation Daily Allowance',
+      'EX_OS': showPaInDa ? 'Daily Allowance + Personal Allowance' : 'Ex-Outstation Daily Allowance',
     };
     final Map<String, Color> colors = {
       'OS':    Colors.red,
@@ -2902,6 +3004,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     Text(label,
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                     const SizedBox(height: 4),
+                    // When PA applies, show breakdown: DA + PA amount
+                    if (showPaInDa)
+                      Text('₹${_fmt(effectiveDa)} + ₹${_fmt(_pocketAllowance)}',
+                          style: GoogleFonts.poppins(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF4A148C)))
+                    else
                     Text('₹${_fmt(effectiveDa)}',
                         style: GoogleFonts.poppins(
                             fontSize: 24,
@@ -2928,7 +3038,64 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             ],
           ),
 
-          // ── Hotel bill toggle (OS / EX_OS only when flag=1) ─────────
+          // Applies for OS / EX / EX_OS trips based on employee designation from backend
+          if (_accommodation > 0 &&
+              (daType == 'OS' || daType == 'EX' || daType == 'EX_OS') &&
+              !_isLocked) ...[
+            const Divider(height: 24),
+            Row(
+              children: [
+                Icon(Icons.hotel, size: 18,
+                    color: _accommodationClaimed ? Colors.indigo.shade600 : Colors.grey.shade500),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Accommodation Allowance',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: _accommodationClaimed
+                                  ? Colors.indigo.shade800
+                                  : Colors.grey.shade800)),
+                      Text(
+                        _accommodationClaimed
+                            ? 'Accommodation claimed — ₹${_fmt(_accommodation)} added to total'
+                            : 'Entitled: ₹${_fmt(_accommodation)} — toggle to claim',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: _accommodationClaimed
+                                ? Colors.indigo.shade600
+                                : Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _accommodationClaimed,
+               // value: _hotelBillClaimed,
+                  onChanged: (v) {
+                    setState(() => _accommodationClaimed = v);
+                    /*setState(() {
+                      _hotelBillClaimed = v;
+                      if (!v) {
+                        _hotelAmount = 0;
+                        _mealAmount = 0;
+                        _hotelAmountController.clear();
+                        _mealAmountController.clear();
+                      }
+                    }); */
+                    _recalculateTotal();
+                  },
+                  activeThumbColor: Colors.indigo.shade600,
+                ),
+              ],
+            ),
+          ],
+
+       /* //   ── Hotel / Meal Bill toggle — commented out (not in use for current policy) ─────────
+         // Uncomment this block to re-enable hotel and meal bill claiming for OS/EX_OS trips.
           if (showHotelBill) ...[
             const Divider(height: 24),
             Row(
@@ -2939,44 +3106,23 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Claim Hotel / Meal Bill',
-                          style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade800)),
-                      Text(
-                        _hotelBillClaimed
-                            ? 'Flat DA ₹${_fmt(_serverDaAmount)} removed — enter actual bills below'
-                            : 'Flat OS DA ₹${_fmt(_serverDaAmount)} applies. Toggle to claim bills.',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: _hotelBillClaimed
-                                ? Colors.teal.shade700
-                                : Colors.grey.shade500),
-                      ),
+                      Text('Claim Hotel / Meal Bill', ...),
+                      Text('Flat OS DA applies. Toggle to claim bills.', ...),
                     ],
                   ),
                 ),
-                Switch(
-                  value: _hotelBillClaimed,
-                  onChanged: (v) {
-                    setState(() {
-                      _hotelBillClaimed = v;
-                      if (!v) {
-                        _hotelAmount = 0;
-                        _mealAmount = 0;
-                        _hotelAmountController.clear();
-                        _mealAmountController.clear();
-                      }
-                    });
-                    _recalculateTotal();
-                  },
-                  activeThumbColor: Colors.teal.shade600,
-                ),
+                Switch(value: _hotelBillClaimed, onChanged: ...),
               ],
             ),
+            // Bill entry fields, pocket allowance chip, DA breakdown summary...
+          ],   */
 
-            // ── Bill entry fields (visible only when claimed) ─────────
+
+
+
+
+
+          /* // ── Bill entry fields (visible only when claimed) ─────────
             if (_hotelBillClaimed) ...[
               const SizedBox(height: 14),
               // Pocket allowance chip
@@ -3108,7 +3254,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                 ),
               ),
             ],
-          ],
+          ], */
         ],
       ),
     );
@@ -3135,11 +3281,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     final isTrain   = _serverTaMode == 'train';
     final hasRoute  = _endLocation != null && _serverTaKm > 0;
     final taColor   = isTrain ? Colors.indigo : (hasRoute ? Colors.teal : Colors.green);
-    final taLabel   = isTrain
+    
+    // PA is now shown in the DA card — not in the TA card
+    // final showPa = _expenseMode == 'FIELD' && _serverDaType == 'OS' && !_isOsReturn && _pocketAllowance > 0;
+    
+    final taLabel = isTrain
         ? 'Travel Allowance (Train)'
         : hasRoute
             ? 'Travel Allowance (Route)'
             : 'Travel Allowance (DCR)';
+
     final taIcon    = isTrain ? Icons.train : Icons.directions_car_outlined;
     // Derive station type badge from server DA type
     print('Server DA Type: $_serverDaType');
@@ -3228,6 +3379,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                         ],
                       ]),
                       const SizedBox(height: 4),
+                      // PA is now in the DA card — TA shows only the route amount
                       Text('₹${_fmt(_serverTaAmount)}',
                           style: GoogleFonts.poppins(
                               fontSize: 24,

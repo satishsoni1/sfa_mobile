@@ -199,8 +199,8 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
               icon: const Icon(Icons.arrow_drop_down, color: Colors.black87),
               isDense: true,
               items: [
-                // Generate a list of months: 3 months ago up to the current month
-                for (int i = -3; i <= 0; i++)
+                // Generate a list of months: 3 months ago up to 1 month in advance
+                for (int i = -3; i <= 1; i++)
                   DateTime(DateTime.now().year, DateTime.now().month + i, 1)
               ].map((date) {
                 return DropdownMenuItem<DateTime>(
