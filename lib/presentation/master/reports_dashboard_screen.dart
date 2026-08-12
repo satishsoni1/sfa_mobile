@@ -85,6 +85,11 @@ class ReportsDashboardScreen extends StatelessWidget {
         'icon': Icons.list_alt_outlined,
         'external_path': 'mcl-updation',
       },
+      {
+        'title': 'Expense Deduction',
+        'icon': Icons.money_off_csred_outlined,
+        'external_path': 'expense-deduction-report',
+      },
     ];
 
     return Scaffold(
