@@ -66,6 +66,9 @@ class ApiService {
         throw Exception(responseData['message'] ?? 'Login Failed');
       }
     } catch (e) {
+      if (e.toString().startsWith('Exception:')) {
+        rethrow;
+      }
       throw Exception('Network Error: $e');
     }
   }
@@ -94,6 +97,9 @@ class ApiService {
         throw Exception(responseData['message'] ?? 'Login Failed');
       }
     } catch (e) {
+      if (e.toString().startsWith('Exception:')) {
+        rethrow;
+      }
       throw Exception('Network Error: $e');
     }
   }

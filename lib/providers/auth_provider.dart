@@ -57,7 +57,11 @@ class AuthProvider with ChangeNotifier {
       return "FAILED";
     } catch (e) {
       print("Login Error: $e");
-      return "ERROR";
+      String msg = e.toString();
+      if (msg.startsWith("Exception: ")) {
+        msg = msg.substring(11);
+      }
+      return msg;
     }
   }
 

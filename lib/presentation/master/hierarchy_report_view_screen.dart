@@ -1076,6 +1076,7 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
         final String totalValue = row['total_value']?.toString() ?? '0';
         final String brandNames = row['brand_names']?.toString() ?? '';
         final String stockist = row['stockist']?.toString() ?? '';
+        final String doctorNames = row['doctor_names']?.toString() ?? '';
 
         return Card(
           elevation: 3,
@@ -1178,6 +1179,17 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
                 ),
                 const SizedBox(height: 6),
                 _buildPobTagWrap(_splitCommaValues(stockist), emptyLabel: "-"),
+                const SizedBox(height: 6),
+                const Text(
+                  "Doctors:",
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _buildPobTagWrap(_splitCommaValues(doctorNames), emptyLabel: "-"),
               ],
             ),
           ),

@@ -452,13 +452,13 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                 style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.grey.shade700)
               ),
               // Only allow adding new areas if working in own territory
-              if (_selectedWorkingWithId == null)
-                TextButton.icon(
-                  onPressed: _showAddAreaDialog,
-                  icon: const Icon(Icons.add_circle_outline, size: 18),
-                  label: const Text("Add Area"),
-                  style: TextButton.styleFrom(foregroundColor: _primaryColor),
-                ),
+              // if (_selectedWorkingWithId == null)
+              //   TextButton.icon(
+              //     onPressed: _showAddAreaDialog,
+              //     icon: const Icon(Icons.add_circle_outline, size: 18),
+              //     label: const Text("Add Area"),
+              //     style: TextButton.styleFrom(foregroundColor: _primaryColor),
+              //   ),
             ],
           ),
         ),

@@ -68,7 +68,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.63";
+  static const String CURRENT_APP_VERSION = "1.0.64";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -126,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       // 1. Parallel Data Fetching
       await Future.wait([
-        _checkAppVersion(apiService),
+        // _checkAppVersion(apiService), // Version check is now bundled into _fetchDcrRequests
         reportProvider.fetchTodayData(),
         _fetchAttendance(apiService),
         _fetchExpenseSummary(apiService),

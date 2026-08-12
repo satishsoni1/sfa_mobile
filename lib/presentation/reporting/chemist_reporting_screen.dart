@@ -311,6 +311,16 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
       return;
     }
 
+    if (_addedDoctors.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please add at least one doctor"),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     for (final p in selectedProducts) {
       final int saleQty = (p['sale'] as int?) ?? 0;
       final int invoiceValue = (p['value_pob'] as int?) ?? 0;
@@ -612,7 +622,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                         Expanded(
                           flex: 5,
                           child: Text(
-                            "PRODUCT",
+                            "PRODUCT *",
                             style: GoogleFonts.poppins(
                               fontWeight: FontWeight.bold,
                               color: Colors.grey[700],
@@ -637,7 +647,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      "Sales",
+                                      "Sales *",
                                       textAlign: TextAlign.center,
                                       style: GoogleFonts.poppins(
                                         fontWeight: FontWeight.w600,
@@ -666,7 +676,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                           flex: 3,
                           child: Center(
                             child: Text(
-                              "POBS At Invoice Value",
+                              "POBS At Invoice Value *",
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
                                 color: Colors.grey[700],
@@ -680,7 +690,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
                           flex: 4,
                           child: Center(
                             child: Text(
-                              "Supplied Through (Stockist)",
+                              "Supplied Through (Stockist) *",
                               textAlign: TextAlign.center,
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.bold,
@@ -896,7 +906,7 @@ class _ChemistReportingScreenState extends State<ChemistReportingScreen> {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                count > 0 ? "$count Added" : "Add Doctors...",
+                count > 0 ? "$count Added" : "Add Doctors *...",
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.poppins(

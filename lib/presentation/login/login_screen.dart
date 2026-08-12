@@ -97,9 +97,8 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text("Invalid Credentials or Network Error"),
+          SnackBar(
+            content: Text(success),
             backgroundColor: Colors.red,
           ),
         );
