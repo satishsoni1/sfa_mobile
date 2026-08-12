@@ -407,6 +407,20 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _startLocation = (dt == 'HQ' || dt == 'EX')
               ? 'HQ'
               : (data['start_location']?.toString() ?? 'HQ');
+              
+          // Auto-fill from/to locations from backend if provided
+          final apiFrom = data['from_location']?.toString();
+          if (apiFrom != null && apiFrom.isNotEmpty) {
+            _selectedFrom = apiFrom;
+            _fromLocation = apiFrom;
+            if (_fieldWaypoints.isNotEmpty) _fieldWaypoints[0] = apiFrom;
+          }
+          
+          final apiTo = data['to_location']?.toString();
+          if (apiTo != null && apiTo.isNotEmpty) {
+            _endLocation = apiTo;
+            if (_fieldWaypoints.length >= 2) _fieldWaypoints.last = apiTo;
+          }
         }
         _manualKmController.text = _serverTaKm.toStringAsFixed(1);
         _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
@@ -542,30 +556,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _buildDatePicker() {
     return InkWell(
-      onTap: _isLocked
-          ? null
-          : () async {
-              final d = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2024),
-                lastDate: DateTime.now(),
-                builder: (ctx, child) => Theme(
-                  data: Theme.of(ctx).copyWith(
-                    colorScheme: const ColorScheme.light(
-                        primary: Color(0xFF4A148C)),
-                  ),
-                  child: child!,
-                ),
-              );
-              if (d != null) {
-                setState(() {
-                  _selectedDate = d;
-                  _expenseMode = null; // reset on date change
-                });
-                _fetchCalculation();
-              }
-            },
+      // onTap: _isLocked
+      //     ? null
+      //     : () async {
+      //         final d = await showDatePicker(
+      //           context: context,
+      //           initialDate: _selectedDate,
+      //           firstDate: DateTime(2024),
+      //           lastDate: DateTime.now(),
+      //           builder: (ctx, child) => Theme(
+      //             data: Theme.of(ctx).copyWith(
+      //               colorScheme: const ColorScheme.light(
+      //                   primary: Color(0xFF4A148C)),
+      //             ),
+      //             child: child!,
+      //           ),
+      //         );
+      //         if (d != null) {
+      //           setState(() {
+      //             _selectedDate = d;
+      //             _expenseMode = null; // reset on date change
+      //           });
+      //           _fetchCalculation();
+      //         }
+      //       },
+      onTap: null, // Date is non-editable in daily claim and edit expense
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -600,9 +615,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ],
             ),
             const Spacer(),
-            if (!_isLocked)
-              Icon(Icons.arrow_forward_ios,
-                  size: 14, color: Colors.grey.shade400),
+            // Arrow is commented out because the date is no longer editable
+            // if (!_isLocked)
+            //   Icon(Icons.arrow_forward_ios,
+            //       size: 14, color: Colors.grey.shade400),
           ],
         ),
       ),
@@ -2127,6 +2143,13 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       onChanged: (v) => _onWaypointChanged(index, v),
                     ),
                   ),
+                  if (!_isLocked) ...[
+                    const SizedBox(width: 8),
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Icon(Icons.drag_handle, color: Colors.grey.shade400, size: 20),
+                    ),
+                  ],
                   if (!isFirst && !isLast && !_isLocked) ...[
                     const SizedBox(width: 4),
                     IconButton(
@@ -2138,8 +2161,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     ),
-                  ] else
-                    const SizedBox(width: 36),
+                  ] else if (!_isLocked) ...[
+                    const SizedBox(width: 36), // Align non-removable items
+                  ] else ...[
+                    const SizedBox(width: 20),
+                  ],
                 ],
               ),
             );

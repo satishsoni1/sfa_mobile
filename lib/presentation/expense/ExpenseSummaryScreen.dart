@@ -745,11 +745,19 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             Icon(icon,
                 color: _isSubmitted ? Colors.grey.shade400 : color, size: 18),
             const SizedBox(width: 6),
-            Text(type,
+            Flexible(
+              child: Text(
+                type,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                     color: _isSubmitted ? Colors.grey.shade400 : color,
                     fontWeight: FontWeight.w600,
-                    fontSize: 13)),
+                    height: 1.2,
+                    fontSize: 12),
+              ),
+            ),
             const SizedBox(width: 4),
             Icon(Icons.add_circle_outline,
                 color: _isSubmitted ? Colors.grey.shade400 : color, size: 15),
