@@ -517,30 +517,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
 
   Widget _buildDatePicker() {
     return InkWell(
-      onTap: _isLocked
-          ? null
-          : () async {
-              final d = await showDatePicker(
-                context: context,
-                initialDate: _selectedDate,
-                firstDate: DateTime(2024),
-                lastDate: DateTime.now(),
-                builder: (ctx, child) => Theme(
-                  data: Theme.of(ctx).copyWith(
-                    colorScheme: const ColorScheme.light(
-                        primary: Color(0xFF4A148C)),
-                  ),
-                  child: child!,
-                ),
-              );
-              if (d != null) {
-                setState(() {
-                  _selectedDate = d;
-                  _expenseMode = null; // reset on date change
-                });
-                _fetchCalculation();
-              }
-            },
+      // onTap: _isLocked
+      //     ? null
+      //     : () async {
+      //         final d = await showDatePicker(
+      //           context: context,
+      //           initialDate: _selectedDate,
+      //           firstDate: DateTime(2024),
+      //           lastDate: DateTime.now(),
+      //           builder: (ctx, child) => Theme(
+      //             data: Theme.of(ctx).copyWith(
+      //               colorScheme: const ColorScheme.light(
+      //                   primary: Color(0xFF4A148C)),
+      //             ),
+      //             child: child!,
+      //           ),
+      //         );
+      //         if (d != null) {
+      //           setState(() {
+      //             _selectedDate = d;
+      //             _expenseMode = null; // reset on date change
+      //           });
+      //           _fetchCalculation();
+      //         }
+      //       },
+      onTap: null, 
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -575,9 +576,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ],
             ),
             const Spacer(),
-            if (!_isLocked)
-              Icon(Icons.arrow_forward_ios,
-                  size: 14, color: Colors.grey.shade400),
+            // if (!_isLocked)
+            //   Icon(Icons.arrow_forward_ios,
+            //       size: 14, color: Colors.grey.shade400),
           ],
         ),
       ),
@@ -2049,6 +2050,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         ),
         const SizedBox(height: 8),
         ReorderableListView.builder(
+          buildDefaultDragHandles: false,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: _fieldWaypoints.length,
@@ -2098,6 +2100,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       onChanged: (v) => _onWaypointChanged(index, v),
                     ),
                   ),
+                  const SizedBox(width: 4),
+                  if (!_isLocked)
+                    ReorderableDragStartListener(
+                      index: index,
+                      child: Icon(Icons.drag_handle, color: Colors.grey.shade400, size: 20),
+                    )
+                  else
+                    const SizedBox(width: 20),
                   if (!isFirst && !isLast && !_isLocked) ...[
                     const SizedBox(width: 4),
                     IconButton(
