@@ -2665,4 +2665,42 @@ Future<void> submitFullMonth(int month, int year) async {
     }
     return [];
   }
+
+  // --- TP Deviation Request APIs ---
+
+  Future<List<dynamic>> getTpDeviationHistory(String month) async {
+    final url = '$baseUrl/tour-plan/deviation/history?month=$month';
+    try {
+      final response = await http.get(Uri.parse(url), headers: await _getHeaders());
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        if (decoded['success'] == true && decoded['data'] is List) {
+          return decoded['data'];
+        }
+      }
+      return [];
+    } catch (e) {
+      debugPrint('Error getting TP deviation history: $e');
+      return [];
+    }
+  }
+
+  Future<bool> submitTpDeviationRequest(Map<String, dynamic> payload) async {
+    final url = '$baseUrl/tour-plan/deviation/request';
+    try {
+      final response = await http.post(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+        body: json.encode(payload),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final decoded = json.decode(response.body);
+        return decoded['success'] == true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('Error submitting TP deviation request: $e');
+      return false;
+    }
+  }
 }

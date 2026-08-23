@@ -1,3 +1,4 @@
+import '../tp_deviation/tp_deviation_history_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -70,7 +71,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.71";
+  static const String CURRENT_APP_VERSION = "1.0.72";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -1104,7 +1105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            'DCR\nRequests',
+                            'Notifications',
                             textAlign: TextAlign.center,
                             style: GoogleFonts.poppins(
                               fontSize: 11,
@@ -1270,9 +1271,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       _MenuAction(
         Icons.lock_open,
-        "DCR Unlock Request",
+        "Requests",
         Colors.redAccent,
         () => _navigateTo(const DcrUnlockRequestScreen()),
+      ),
+      _MenuAction(
+        Icons.edit_road,
+        "TP Deviation Request",
+        Colors.amber.shade700,
+        () => _navigateTo(const TpDeviationHistoryScreen()),
       ),
     ];
     final aiIntel = [
@@ -1820,7 +1827,7 @@ class _DcrRequestsSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'DCR Unlock Requests',
+                      'Notifications',
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -1920,15 +1927,27 @@ class _DcrRequestCard extends StatelessWidget {
         ? rawName.trim()
         : (rawId.trim().isNotEmpty ? rawId.trim() : 'Unknown');
     final requestType = _str('request_type', 'TAB').toUpperCase();
-    final isWeb = requestType == 'WEB';
-    final typeLabel = isWeb
-        ? 'Web DCR Unlock Request'
-        : 'Tab DCR Unlock Request';
-    final typeColor = isWeb ? Colors.orange.shade700 : Colors.blue.shade700;
-    final typeBg = isWeb ? Colors.orange.shade50 : Colors.blue.shade50;
-    final typeIcon = isWeb
-        ? Icons.language_outlined
-        : Icons.tablet_android_outlined;
+    String typeLabel;
+    Color typeColor;
+    Color typeBg;
+    IconData typeIcon;
+    
+    if (requestType == 'TP_DEVIATION') {
+      typeLabel = 'TP DEVIATION APPROVAL REQUEST';
+      typeColor = Colors.teal.shade700;
+      typeBg = Colors.teal.shade50;
+      typeIcon = Icons.alt_route;
+    } else if (requestType == 'WEB') {
+      typeLabel = 'Web DCR Unlock Request';
+      typeColor = Colors.orange.shade700;
+      typeBg = Colors.orange.shade50;
+      typeIcon = Icons.language_outlined;
+    } else {
+      typeLabel = 'Tab DCR Unlock Request';
+      typeColor = Colors.blue.shade700;
+      typeBg = Colors.blue.shade50;
+      typeIcon = Icons.tablet_android_outlined;
+    }
     final reason = _str('request_reason', '—');
     final requestedAt = formatDateTime(
       _str('requested_at').isEmpty ? null : _str('requested_at'),
