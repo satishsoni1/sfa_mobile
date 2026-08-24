@@ -112,8 +112,8 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
     }
   }
 
-  void _showMultiSelectSheet() {
-    List<dynamic> tempSelected = List.from(_selectedNewRoutes);
+  void _showSingleSelectSheet() {
+    dynamic tempSelected = _selectedNewRoutes.isNotEmpty ? _selectedNewRoutes.first : null;
     String searchQuery = '';
     
     showModalBottomSheet(
@@ -143,7 +143,7 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Select New Routes', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                        Text('Select Requested Route', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
                         IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                       ],
                     ),
@@ -152,7 +152,7 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: TextField(
                       decoration: InputDecoration(
-                        hintText: 'Search...',
+                        hintText: 'Search route...',
                         prefixIcon: const Icon(Icons.search),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
@@ -162,34 +162,41 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                   ),
                   const Divider(height: 1),
                   Expanded(
-                    child: ListView.builder(
-                      controller: scrollController,
-                      itemCount: filteredItems.length,
-                      itemBuilder: (_, index) {
-                        final item = filteredItems[index];
-                        final rawName = item['name']?.toString() ?? 'Unknown';
-                        final drCount = item['dr_count'];
-                        final displayName = drCount != null
-                            ? '$rawName (Tagged doctor\'s: $drCount)'
-                            : rawName;
-                            
-                        final isChecked = tempSelected.any((s) => s['id']?.toString() == item['id']?.toString());
-                        return CheckboxListTile(
-                          value: isChecked,
-                          activeColor: AppColors.primary,
-                          title: Text(displayName, style: GoogleFonts.poppins(fontSize: 13)),
-                          onChanged: (val) {
-                            setSheet(() {
-                              if (val == true) {
-                                tempSelected.add(item);
-                              } else {
-                                tempSelected.removeWhere((s) => s['id']?.toString() == item['id']?.toString());
-                              }
-                            });
-                          },
-                        );
-                      },
-                    ),
+                    child: filteredItems.isEmpty
+                        ? Center(child: Text('No routes found', style: GoogleFonts.poppins(color: Colors.grey.shade500)))
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: filteredItems.length,
+                            itemBuilder: (_, index) {
+                              final item = filteredItems[index];
+                              final rawName = item['name']?.toString() ?? 'Unknown';
+                              final drCount = item['dr_count'];
+                              final displayName = drCount != null
+                                  ? '$rawName (Tagged doctor\'s: $drCount)'
+                                  : rawName;
+                                  
+                              final isSelected = tempSelected != null && 
+                                  tempSelected['id']?.toString() == item['id']?.toString();
+
+                              return RadioListTile<String>(
+                                value: item['id']?.toString() ?? '',
+                                groupValue: tempSelected?['id']?.toString(),
+                                activeColor: AppColors.primary,
+                                title: Text(
+                                  displayName, 
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                ),
+                                onChanged: (val) {
+                                  setSheet(() {
+                                    tempSelected = item;
+                                  });
+                                },
+                              );
+                            },
+                          ),
                   ),
                   Padding(
                     padding: const EdgeInsets.all(16),
@@ -201,13 +208,15 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                        onPressed: () {
-                          setState(() {
-                            _selectedNewRoutes = tempSelected;
-                          });
-                          Navigator.pop(ctx);
-                        },
-                        child: Text(tempSelected.isEmpty ? 'Confirm' : 'Confirm (${tempSelected.length})', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                        onPressed: tempSelected == null
+                            ? null
+                            : () {
+                                setState(() {
+                                  _selectedNewRoutes = [tempSelected];
+                                });
+                                Navigator.pop(ctx);
+                              },
+                        child: Text('Confirm', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ),
@@ -226,7 +235,7 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
       return;
     }
     if (_selectedNewRoutes.isEmpty) {
-      _showSnack('Please select at least one new route.');
+      _showSnack('Please select a new route.');
       return;
     }
     if (_remarkController.text.trim().isEmpty) {
@@ -331,9 +340,9 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                   const SizedBox(height: 24),
 
                   // 3. New Route Selection
-                  _buildSectionTitle('Requested New Route(s)'),
+                  _buildSectionTitle('Requested New Route'),
                   InkWell(
-                    onTap: _showMultiSelectSheet,
+                    onTap: _showSingleSelectSheet,
                     child: Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(16),
@@ -347,11 +356,23 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                           const Icon(Icons.alt_route, color: AppColors.primary, size: 20),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Text(
-                              _selectedNewRoutes.isEmpty 
-                                  ? 'Tap to select requested routes' 
-                                  : '${_selectedNewRoutes.length} route(s) selected',
-                              style: GoogleFonts.poppins(fontSize: 14, color: _selectedNewRoutes.isEmpty ? Colors.grey : Colors.black87),
+                            child: Builder(
+                              builder: (_) {
+                                if (_selectedNewRoutes.isEmpty) {
+                                  return Text(
+                                    'Tap to select requested route',
+                                    style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+                                  );
+                                }
+                                final r = _selectedNewRoutes.first;
+                                final name = r['name']?.toString() ?? '';
+                                final drCount = r['dr_count'];
+                                final display = drCount != null ? '$name (Tagged doctor\'s: $drCount)' : name;
+                                return Text(
+                                  display,
+                                  style: GoogleFonts.poppins(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+                                );
+                              },
                             ),
                           ),
                           const Icon(Icons.arrow_drop_down, color: Colors.grey),
@@ -359,32 +380,6 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                       ),
                     ),
                   ),
-                  if (_selectedNewRoutes.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: _selectedNewRoutes.map((r) {
-                          final name = r['name']?.toString() ?? '';
-                          final drCount = r['dr_count'];
-                          final display = drCount != null ? '$name (Tagged doctor\'s: $drCount)' : name;
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Icon(Icons.check_circle, size: 14, color: Colors.green),
-                                const SizedBox(width: 6),
-                                Expanded(child: Text(display, style: GoogleFonts.poppins(fontSize: 12))),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                  ],
                   const SizedBox(height: 24),
 
                   // 4. Remark
