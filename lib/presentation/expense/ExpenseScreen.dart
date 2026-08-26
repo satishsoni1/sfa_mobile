@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/services/api_service.dart';
 
 // Per-attachment GST metadata
@@ -27,8 +30,9 @@ class OtherExpenseItem {
   String type;
   final TextEditingController amountController;
   PlatformFile? bill;
+  String? remoteBillPath;
 
-  OtherExpenseItem({required this.type, String amount = '', this.bill})
+  OtherExpenseItem({required this.type, String amount = '', this.bill, this.remoteBillPath})
       : amountController = TextEditingController(text: amount);
 
   void dispose() => amountController.dispose();
@@ -58,6 +62,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   bool _isLoading = false;
   bool _isSubmitting = false;
   List<PlatformFile> _attachments = [];
+  List<String> _remoteAttachments = [];
   double _displayTotal = 0.0;
   bool _isLocked = false;
 
@@ -254,14 +259,51 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
     }
 
-    // Restore legacy other_amount as one item (only on first call from initState)
+    // Restore other_items (itemized breakdown from backend)
     if (_otherExpenses.isEmpty) {
-      final legacyOther = _toDouble(d['other_amount']);
-      if (legacyOther > 0) {
-        final item = OtherExpenseItem(
-            type: 'Other', amount: legacyOther.toStringAsFixed(2));
-        item.amountController.addListener(_recalculateTotal);
-        _otherExpenses.add(item);
+      final rawItems = d['other_items'];
+      if (rawItems is List && rawItems.isNotEmpty) {
+        // Backend sends the proper itemized list — restore each row individually
+        for (final row in rawItems) {
+          final type   = row['type']?.toString() ?? 'Other';
+          final amount = (row['amount'] ?? '0').toString();
+          final billPath = row['bill_path']?.toString();
+          String? cleanPath;
+          if (billPath != null && billPath.isNotEmpty) {
+            cleanPath = billPath.replaceAll('\\/', '/').replaceAll('"', '').trim();
+          }
+          final item = OtherExpenseItem(type: type, amount: amount, remoteBillPath: cleanPath);
+          item.amountController.addListener(_recalculateTotal);
+          _otherExpenses.add(item);
+        }
+      } else {
+        // Fallback: backend doesn't send other_items yet — show total as one row
+        final legacyOther = _toDouble(d['other_amount']);
+        if (legacyOther > 0) {
+          final item = OtherExpenseItem(
+              type: 'Other', amount: legacyOther.toStringAsFixed(2));
+          item.amountController.addListener(_recalculateTotal);
+          _otherExpenses.add(item);
+        }
+      }
+    }
+
+    // Restore remote attachments
+    if (_remoteAttachments.isEmpty && d['attachment_path'] != null) {
+      try {
+        final val = d['attachment_path'];
+        if (val is List) {
+          _remoteAttachments = val.map((e) => e.toString()).toList();
+        } else if (val is String) {
+          if (val.startsWith('[')) {
+            final decoded = jsonDecode(val) as List;
+            _remoteAttachments = decoded.map((e) => e.toString()).toList();
+          } else if (val.isNotEmpty && val != 'null') {
+            _remoteAttachments = [val];
+          }
+        }
+      } catch (e) {
+        print('Failed to parse remote attachments: $e');
       }
     }
   }
@@ -1885,7 +1927,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         });
       }
       _recalculateTotal();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           if (previousEndLocation != null) _endLocation = previousEndLocation;
@@ -1894,10 +1936,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _manualKmController.text = prevKm.toStringAsFixed(1);
           _manualTaController.text = prevTaAmt.toStringAsFixed(2);
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Check your internet connection'),
+        // Extract the real backend message (thrown as Exception("message"))
+        final raw = e.toString();
+        final msg = raw.startsWith('Exception: ')
+            ? raw.substring('Exception: '.length)
+            : (raw.isNotEmpty ? raw : 'Failed to calculate route. Try again.');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 4),
+          duration: const Duration(seconds: 5),
         ));
       }
     } finally {
@@ -2007,8 +2054,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
       });
       _recalculateTotal();
-    } catch (_) {
-      // Server unreachable — values stay at zero until next successful call
+    } catch (e) {
+      // Show actual backend error (e.g. "Cannot add expenses on leave days.")
+      if (mounted) {
+        final raw = e.toString();
+        final msg = raw.startsWith('Exception: ')
+            ? raw.substring('Exception: '.length)
+            : (raw.isNotEmpty ? raw : 'Failed to calculate route. Try again.');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ));
+      }
     } finally {
       if (mounted && myToken == _recalcToken) {
         setState(() => _isRecalculating = false);
@@ -3479,6 +3537,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Widget _buildAttachmentsSection() {
+    final totalAttachments = _attachments.length + _remoteAttachments.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -3490,14 +3549,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     fontWeight: FontWeight.w500,
                     color: Colors.grey.shade600)),
             const Spacer(),
-            if (_attachments.isNotEmpty)
+            if (totalAttachments > 0)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                     color: Colors.green.shade50,
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(color: Colors.green.shade200)),
-                child: Text('${_attachments.length} attached',
+                child: Text('$totalAttachments attached',
                     style: TextStyle(
                         fontSize: 11,
                         color: Colors.green.shade700,
@@ -3505,6 +3564,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
           ],
         ),
+        if (_remoteAttachments.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ...List.generate(_remoteAttachments.length, (i) => _buildRemoteAttachmentRow(i)),
+        ],
         if (_attachments.isNotEmpty) ...[
           const SizedBox(height: 8),
           ...List.generate(_attachments.length, (i) => _buildAttachmentRow(i)),
@@ -3536,6 +3599,126 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
+  void _showImagePreview({Uint8List? localBytes, String? remoteUrl}) {
+    // On Web, remote images from a different domain (CORS) cannot be loaded
+    // by Image.network under CanvasKit. Open in a new browser tab instead.
+    if (kIsWeb && remoteUrl != null && localBytes == null) {
+      launchUrl(Uri.parse(remoteUrl), mode: LaunchMode.externalApplication);
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(10),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              child: localBytes != null
+                  ? Image.memory(localBytes, fit: BoxFit.contain)
+                  : Image.network(remoteUrl!, fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(Icons.broken_image, color: Colors.white, size: 50),
+                          )),
+            ),
+            Positioned(
+              top: 10,
+              right: 10,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRemoteAttachmentRow(int i) {
+    final rawPath = _remoteAttachments[i];
+    final path = rawPath.replaceAll('\\/', '/').replaceAll('"', '').trim();
+    final name = path.split('/').last.split('\\').last.split('?').first;
+    final ext = name.split('.').last.toLowerCase();
+    final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            GestureDetector(
+              onTap: () {
+                if (isImage) _showImagePreview(remoteUrl: path);
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: isImage
+                    ? (kIsWeb
+                        // On Web, Image.network causes CORS errors for remote storage URLs.
+                        // Show a tappable photo icon instead — tapping opens the image in a new tab.
+                        ? Container(
+                            width: 48, height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Icon(Icons.photo, color: Colors.blue.shade400, size: 24),
+                          )
+                        : Image.network(path, width: 48, height: 48, fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(width: 48, height: 48, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, size: 20))))
+                    : Container(
+                        width: 48,
+                        height: 48,
+                        color: Colors.grey.shade100,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.picture_as_pdf,
+                                color: Colors.red.shade400, size: 22),
+                            Text(ext.toUpperCase(),
+                                style: TextStyle(
+                                    fontSize: 8, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(name,
+                  style: const TextStyle(fontSize: 12),
+                  overflow: TextOverflow.ellipsis),
+            ),
+            if (!_isLocked) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: () => setState(() {
+                  _remoteAttachments.removeAt(i);
+                }),
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: const BoxDecoration(
+                      color: Colors.red, shape: BoxShape.circle),
+                  child: const Icon(Icons.close, size: 12, color: Colors.white),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAttachmentRow(int i) {
     final file = _attachments[i];
     final meta = _attachmentsMeta[i];
@@ -3556,10 +3739,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             padding: const EdgeInsets.all(10),
             child: Row(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: isImage && file.bytes != null
-                      ? Image.memory(file.bytes!, width: 48, height: 48, fit: BoxFit.cover)
+                GestureDetector(
+                  onTap: () {
+                    if (isImage && file.bytes != null) {
+                      _showImagePreview(localBytes: file.bytes);
+                    }
+                  },
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: isImage && file.bytes != null
+                        ? Image.memory(file.bytes!, width: 48, height: 48, fit: BoxFit.cover)
                       : Container(
                           width: 48,
                           height: 48,
@@ -3575,6 +3764,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                             ],
                           ),
                         ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -3820,9 +4010,46 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           ),
           if (item.bill != null && item.bill!.bytes != null) ...[
             const SizedBox(width: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: Image.memory(item.bill!.bytes!, width: 30, height: 30, fit: BoxFit.cover),
+            GestureDetector(
+              onTap: () {
+                final ext = item.bill!.extension?.toLowerCase() ?? '';
+                final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+                if (isImage) {
+                  _showImagePreview(localBytes: item.bill!.bytes);
+                }
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Image.memory(item.bill!.bytes!, width: 30, height: 30, fit: BoxFit.cover),
+              ),
+            ),
+          ] else if (item.remoteBillPath != null && item.remoteBillPath!.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            GestureDetector(
+              onTap: () {
+                final ext = item.remoteBillPath!.split('.').last.split('?').first.toLowerCase();
+                final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
+                if (isImage) {
+                  _showImagePreview(remoteUrl: item.remoteBillPath);
+                }
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: kIsWeb
+                    // On Web, Image.network causes CORS errors for remote storage URLs.
+                    // Show a tappable photo icon instead — tapping opens the image in a new tab.
+                    ? Container(
+                        width: 30, height: 30,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(Icons.photo, color: Colors.blue.shade400, size: 16),
+                      )
+                    : Image.network(item.remoteBillPath!, width: 30, height: 30, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(width: 30, height: 30, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, size: 15)),
+                      ),
+              ),
             ),
           ],
           if (!_isLocked) ...[
@@ -4198,6 +4425,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         'from_location': _selectedFrom ?? _transitFromTown ?? _userHq ?? '',
         'to_location': _endLocation ?? '',
         'nfw_travel_by': _nfwTravelBy,
+        'attachment_path': jsonEncode(_remoteAttachments),
         'attachments_meta':
             jsonEncode(_attachmentsMeta.map((m) => m.toJson()).toList()),
       });
@@ -4219,7 +4447,12 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         payload,
         submitAttachments,
         otherItems: _otherExpenses
-            .map((e) => {'type': e.type, 'amount': e.amount.toStringAsFixed(2), 'bill': e.bill})
+            .map((e) => {
+                  'type': e.type,
+                  'amount': e.amount.toStringAsFixed(2),
+                  'bill': e.bill,
+                  'bill_path': e.remoteBillPath
+                })
             .toList(),
       );
 

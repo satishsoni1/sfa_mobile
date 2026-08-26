@@ -38,6 +38,24 @@
 
 <body>
 
+  <!-- Firebase Messaging Service Worker Registration
+       Registered BEFORE Flutter bootstrap so it is active when FirebaseMessaging
+       initializes inside the Dart/Flutter app.
+       This does NOT replace flutter_service_worker.js — they coexist independently. -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/firebase-messaging-sw.js')
+          .then(function (registration) {
+            console.log('[FCM SW] Registered successfully. Scope:', registration.scope);
+          })
+          .catch(function (err) {
+            console.warn('[FCM SW] Registration failed (non-fatal):', err);
+          });
+      });
+    }
+  </script>
+
   <script src="flutter_bootstrap.js" async></script>
 
   <script>

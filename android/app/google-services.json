@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "281117677106",
+    "project_id": "zorvia-cc840",
+    "storage_bucket": "zorvia-cc840.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:281117677106:android:5c5846c9e8178e9b280e2b",
+        "android_client_info": {
+          "package_name": "com.globalspace.patgpt_v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmXcYQ21dFsb0fheZ8leRu04N6mTjPsXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:281117677106:android:f628f737ec38b5a3280e2b",
+        "android_client_info": {
+          "package_name": "com.globalspace.zorvia"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAmXcYQ21dFsb0fheZ8leRu04N6mTjPsXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -4,7 +4,14 @@ import 'package:intl/intl.dart';
 import '../../data/services/api_service.dart';
 
 class ExpenseManagerScreen extends StatefulWidget {
-  const ExpenseManagerScreen({super.key});
+  final int? initialEmployeeId;
+  final String? initialMonth; // e.g., '2026-07'
+
+  const ExpenseManagerScreen({
+    super.key,
+    this.initialEmployeeId,
+    this.initialMonth,
+  });
 
   @override
   State<ExpenseManagerScreen> createState() => _ExpenseManagerScreenState();
@@ -34,6 +41,16 @@ class _ExpenseManagerScreenState extends State<ExpenseManagerScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
+    if (widget.initialMonth != null) {
+      try {
+        final parts = widget.initialMonth!.split('-');
+        if (parts.length == 2) {
+          _selectedMonth = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+        }
+      } catch (_) {}
+    }
+    
     _loadSubordinates();
   }
 
@@ -46,7 +63,23 @@ class _ExpenseManagerScreenState extends State<ExpenseManagerScreen>
   Future<void> _loadSubordinates() async {
     try {
       final subs = await ApiService().getSubordinatesUpload();
-      if (mounted) setState(() { _subordinates = subs; _isLoadingSubs = false; });
+      
+      if (widget.initialEmployeeId != null) {
+        try {
+          _selectedSub = subs.firstWhere((sub) => sub['id'] == widget.initialEmployeeId.toString());
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _subordinates = subs;
+          _isLoadingSubs = false;
+        });
+        
+        if (_selectedSub != null) {
+          _loadExpenses();
+        }
+      }
     } catch (_) {
       if (mounted) setState(() => _isLoadingSubs = false);
     }

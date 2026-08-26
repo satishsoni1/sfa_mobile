@@ -938,7 +938,12 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       request.fields['other_items[$i][type]'] = item['type']?.toString() ?? 'Other';
       request.fields['other_items[$i][amount]'] = item['amount']?.toString() ?? '0';
       
-      // CHANGED: Ensure the UI passes a PlatformFile here instead of dart:io File
+      final billPath = item['bill_path']?.toString();
+      if (billPath != null && billPath.isNotEmpty) {
+        request.fields['other_items[$i][bill_path]'] = billPath;
+      }
+      
+      // Ensure the UI passes a PlatformFile here instead of dart:io File
       final bill = item['bill'] as PlatformFile?; 
       if (bill != null && bill.bytes != null) {
         request.files.add(

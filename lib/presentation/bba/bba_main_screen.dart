@@ -4,7 +4,8 @@ import '../../data/services/api_service.dart';
 import 'bba_detail_screen.dart';
 
 class BbaMainScreen extends StatefulWidget {
-  const BbaMainScreen({super.key});
+  final int? initialEmployeeId;
+  const BbaMainScreen({super.key, this.initialEmployeeId});
 
   @override
   State<BbaMainScreen> createState() => _BbaMainScreenState();
@@ -88,6 +89,11 @@ class _BbaMainScreenState extends State<BbaMainScreen>
       setState(() {});
     });
     _searchCtrl.addListener(() => setState(() {}));
+    
+    if (widget.initialEmployeeId != null) {
+      _tabController.index = 2; // Team tab is index 2
+    }
+    
     _loadBrands();
     _loadDoctorSummary();
     _loadSubordinates();
@@ -128,7 +134,20 @@ class _BbaMainScreenState extends State<BbaMainScreen>
   Future<void> _loadSubordinates() async {
     try {
       final list = await ApiService().getSubordinates();
-      if (mounted) setState(() => _subordinates = list);
+      
+      if (widget.initialEmployeeId != null) {
+        try {
+          final matched = list.firstWhere((sub) => sub['id'] == widget.initialEmployeeId);
+          _selectedSubId = matched['id'];
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() => _subordinates = list);
+        if (_selectedSubId != null) {
+          _loadTeamBrands(_selectedSubId!);
+        }
+      }
     } catch (_) {}
   }
 

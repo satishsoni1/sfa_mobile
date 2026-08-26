@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1265,13 +1266,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
           remarks = remarks.isEmpty ? "Other: Rs. ${_fmt(otherAmt)}" : "Other: Rs. ${_fmt(otherAmt)}. $remarks";
         }
 
-        // Remarks can accumulate unbounded across multiple admin overrides;
-        // an overlong string here makes a single PDF table row taller than
-        // one page, which MultiPage can never satisfy (TooManyPagesException).
-        const maxRemarksLen = 100;
-        if (remarks.length > maxRemarksLen) {
-          remarks = '${remarks.substring(0, maxRemarksLen)}…';
-        }
       }
 
       tableData.add([
@@ -1293,7 +1287,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
         hotel > 0 ? _fmt(hotel) : "",
         meal > 0 ? _fmt(meal) : "",
         rowTotal > 0 ? _fmt(rowTotal) : "",
-        remarks,
+        remarks, 
       ]);
     }
 
@@ -1348,7 +1342,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Hotel Stay',
       'Meal Rs.',
       'Total Rs.',
-      'REMARKS',
     ];
 
     pw.Widget cell(String text, {
@@ -1378,7 +1371,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     pdf.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        margin: const pw.EdgeInsets.symmetric(horizontal: 40.0, vertical: 8),
         build: (ctx) => [
             // Header Title
             pw.Center(
@@ -1436,7 +1429,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             pw.Table(
               border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
               columnWidths: {
-                0: const pw.FixedColumnWidth(20), // Date
+                0: const pw.FixedColumnWidth(27), // Date
                 1: const pw.FixedColumnWidth(90), // Town Worked
                 2: const pw.FixedColumnWidth(30), // Visits Doc
                 3: const pw.FixedColumnWidth(30), // Visits Chem
@@ -1454,7 +1447,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 15: const pw.FixedColumnWidth(40), // Hotel Stay
                 16: const pw.FixedColumnWidth(35), // Meal
                 17: const pw.FixedColumnWidth(50), // Total Rs
-                18: const pw.FixedColumnWidth(85), // Remarks
               },
               children: [
                 pw.TableRow(
@@ -1491,7 +1483,6 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       cell(row[15], isNumber: true, fontSize: 7.0),
                       cell(row[16], isNumber: true, fontSize: 7.0),
                       cell(row[17], isNumber: true, bold: true, fontSize: 7.0),
-                      cell(row[18], fontSize: 4.5, maxLines: 4),
                     ],
                   );
                 }),
@@ -1516,12 +1507,11 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                     cell(colTotalHotel > 0 ? _fmt(colTotalHotel) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalMeal > 0 ? _fmt(colTotalMeal) : "", bold: true, isNumber: true, fontSize: 7.0),
                     cell(colTotalRowTotal > 0 ? _fmt(colTotalRowTotal) : "", bold: true, isNumber: true, fontSize: 7.0),
-                    cell("", fontSize: 7.0),
                   ],
                 ),
               ],
             ),
-            pw.SizedBox(height: 5),
+            pw.SizedBox(height: 6),
             // Footer Section
             pw.Row(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1572,6 +1562,10 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                       pw.SizedBox(height: 3),
                       pw.Table(
                         border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                        columnWidths: {
+                          0: const pw.FlexColumnWidth(3),      // Claim Category — flexible
+                          1: const pw.FixedColumnWidth(55),    // Amount — fixed so it never clips
+                        },
                         children: [
                           pw.TableRow(
                             decoration: const pw.BoxDecoration(color: PdfColors.grey100),
@@ -1673,6 +1667,97 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 ),
               ],
             ),
+            // ── Remarks Table — full width, below Monthly Claims Summary ──
+            ...() {
+              final remarksRows = tableData
+                  .where((row) => row[18].trim().isNotEmpty)
+                  .toList();
+              if (remarksRows.isEmpty) return <pw.Widget>[];
+              return [
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  'REMARKS',
+                  style: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 7.5,
+                    color: const PdfColor.fromInt(0xFF4A148C),
+                  ),
+                ),
+                pw.SizedBox(height: 3),
+                pw.Table(
+                  border: pw.TableBorder.all(color: PdfColors.grey300, width: 0.5),
+                  columnWidths: {
+                    0: const pw.FixedColumnWidth(40), // Date
+                    1: const pw.FlexColumnWidth(1),   // Remarks — full remaining width
+                  },
+                  children: [
+                    pw.TableRow(
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColor.fromInt(0xFF4A148C),
+                      ),
+                      children: [
+                        pw.Container(
+                          alignment: pw.Alignment.center,
+                          padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+                          child: pw.Text('DATE',
+                              style: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 7.5,
+                              )),
+                        ),
+                        pw.Container(
+                          alignment: pw.Alignment.centerLeft,
+                          padding: const pw.EdgeInsets.symmetric(vertical: 3, horizontal: 4),
+                          child: pw.Text('REMARKS',
+                              style: pw.TextStyle(
+                                color: PdfColors.white,
+                                fontWeight: pw.FontWeight.bold,
+                                fontSize: 7.5,
+                              )),
+                        ),
+                      ],
+                    ),
+                    ...remarksRows.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final row = entry.value;
+                      final isEven = i % 2 == 0;
+                      final dayNum = int.tryParse(row[0]) ?? 0;
+                      const months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May',
+                          'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                      final dateLabel = dayNum > 0
+                          ? '$dayNum ${months[_selectedMonth.month]}'
+                          : row[0];
+                      return pw.TableRow(
+                        decoration: pw.BoxDecoration(
+                          color: isEven ? PdfColors.grey50 : PdfColors.white,
+                        ),
+                        children: [
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 3),
+                            child: pw.Text(
+                              dateLabel,
+                              style: pw.TextStyle(
+                                  fontSize: 7.5,
+                                  fontWeight: pw.FontWeight.bold),
+                            ),
+                          ),
+                          pw.Padding(
+                            padding: const pw.EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 3),
+                            child: pw.Text(
+                              row[18],
+                              style: const pw.TextStyle(fontSize: 7.5),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ],
+                ),
+              ];
+            }(),
       ],
     ),
   );
@@ -2074,8 +2159,30 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
       widget.onSuccess();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
+        String errorMsg = e.toString();
+        if (errorMsg.startsWith('Exception: ')) {
+          errorMsg = errorMsg.substring('Exception: '.length);
+        }
+        try {
+          final decoded = jsonDecode(errorMsg);
+          if (decoded is Map && decoded.containsKey('message')) {
+            errorMsg = decoded['message'];
+          }
+        } catch (_) {}
+
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Claim Failed'),
+            content: Text(errorMsg),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK', style: TextStyle(color: Colors.red)),
+              )
+            ],
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);

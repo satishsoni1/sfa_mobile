@@ -1860,83 +1860,124 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
                   separatorBuilder: (_, __) => const Divider(height: 24),
                   itemBuilder: (ctx, index) {
                     final item = details[index];
+                    final dateRaw = item['date']?.toString();
+                    final hasDate = dateRaw != null && dateRaw.isNotEmpty && dateRaw != '-';
+                    String day = '';
+                    String monthYear = '';
+                    if (hasDate) {
+                      final parts = dateRaw!.split(' ');
+                      if (parts.isNotEmpty) day = parts[0];
+                      if (dateRaw.length > 3) monthYear = dateRaw.substring(day.length).trim().toUpperCase();
+                    }
+
+                    var name = item['doctor_name']?.toString();
+                    if (name != null && name.isNotEmpty) {
+                      name = name.replaceFirst(RegExp(r'^(dr\.?|doctor)\s+', caseSensitive: false), '').trim();
+                    }
+                    final code = item['pharmaclient_code']?.toString();
+                    final qual = item['qualification']?.toString();
+                    final spec = item['specialty']?.toString();
+                    final area = item['area']?.toString();
 
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Date Column
-                        SizedBox(
-                          width: 80,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item['date']?.toString().split(' ')[0] ??
-                                    '', // "14"
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.alertRed,
+                        // Date Column (Only render if date exists)
+                        if (hasDate)
+                          SizedBox(
+                            width: 80,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  day,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.alertRed,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                (item['date']?.toString().substring(3) ?? '')
-                                    .toUpperCase(), // "OCT 2023"
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.grey,
+                                Text(
+                                  monthYear,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.grey,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
+                        
                         // Details Column
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                "Dr. ${item['doctor_name']}",
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Code: ${item['pharmaclient_code']}",
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              Text(
-                                "Qual: ${item['qualification']}  |  Spec: ${item['specialty']}",
-                                style: const TextStyle(
-                                  color: Colors.black87,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.location_on_outlined,
-                                    size: 14,
-                                    color: Colors.grey,
+                              if (name != null && name.isNotEmpty && name != '-')
+                                Text(
+                                  "Dr. $name",
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
                                   ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    item['area'] ?? 'N/A',
+                                ),
+                              if (code != null && code.isNotEmpty && code != '-')
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    "Code: $code",
                                     style: const TextStyle(
                                       color: Colors.grey,
                                       fontSize: 12,
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                              if ((qual != null && qual.isNotEmpty && qual != '-') || 
+                                  (spec != null && spec.isNotEmpty && spec != '-'))
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    [
+                                      if (qual != null && qual.isNotEmpty && qual != '-') "Qual: $qual",
+                                      if (spec != null && spec.isNotEmpty && spec != '-') "Spec: $spec",
+                                    ].join('  |  '),
+                                    style: const TextStyle(
+                                      color: Colors.black87,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+                              if (area != null && area.isNotEmpty && area != '-')
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Padding(
+                                        padding: EdgeInsets.only(top: 2),
+                                        child: Icon(
+                                          Icons.location_on_outlined,
+                                          size: 14,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          area,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(
+                                            color: Colors.grey,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                             ],
                           ),
                         ),

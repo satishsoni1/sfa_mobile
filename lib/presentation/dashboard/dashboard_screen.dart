@@ -36,7 +36,6 @@ import 'external_links_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../dcr/dcr_unlock_request_screen.dart';
-import '../tour_plan/tour_plan_screen.dart';
 
 // NEW IMPORT FOR CHEMIST REPORTING
 import '../reporting/chemist_reporting_screen.dart';
@@ -58,6 +57,8 @@ import '../../providers/auth_provider.dart';
 import '../../data/services/api_service.dart';
 import '../../data/models/user_model.dart';
 import '../webview/internal_webview_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -101,11 +102,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
+      _checkInitialDeepLink();
+      if (kIsWeb) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        authProvider.onForegroundMessage = _showFcmForegroundSnackbar;
+      }
     });
     _timer = Timer.periodic(
       const Duration(minutes: 1),
       (timer) => _updateElapsed(),
     );
+  }
+
+  void _checkInitialDeepLink() {
+    if (kIsWeb) {
+      final uri = Uri.base;
+      if (uri.queryParameters.containsKey('request_type')) {
+        final reqType = uri.queryParameters['request_type']?.toUpperCase();
+        final empIdStr = uri.queryParameters['employee_id'];
+        
+        if (reqType != null && empIdStr != null) {
+          int? empId = int.tryParse(empIdStr);
+          if (empId != null) {
+            // Re-construct a mock request map to reuse our handler
+            final mockRequest = {
+              'request_type': reqType,
+              'employee_id': empId,
+            };
+            _handleRequestClick(mockRequest);
+          }
+        }
+      }
+    }
   }
 
   @override
@@ -114,7 +142,152 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  // --- LOGIC ---
+  /// Shows an in-app SnackBar when an FCM push message arrives while the
+  /// Flutter Web tab is open and focused (foreground message).
+  /// Background messages are handled by the Firebase Messaging Service Worker.
+  void _showFcmForegroundSnackbar(RemoteMessage message) {
+    if (!mounted) return;
+    final title = message.notification?.title ?? 'New Notification';
+    final body = message.notification?.body ?? '';
+    
+    final String? imageUrl = message.notification?.android?.imageUrl ??
+        message.notification?.apple?.imageUrl ??
+        message.notification?.web?.image ??
+        message.data['image'] ??
+        message.data['image_url'];
+
+    final String? actionUrl = message.data['url'] ?? message.data['link'];
+
+    final overlay = Overlay.of(context);
+    late OverlayEntry overlayEntry;
+    bool isDismissed = false;
+
+    void dismiss() {
+      if (!isDismissed) {
+        isDismissed = true;
+        overlayEntry.remove();
+      }
+    }
+
+    overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        top: MediaQuery.of(context).padding.top + 10,
+        left: 16,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: -100.0, end: 0.0),
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutBack,
+            builder: (context, value, child) {
+              return Transform.translate(
+                offset: Offset(0, value),
+                child: child,
+              );
+            },
+            child: GestureDetector(
+              onTap: () async {
+                dismiss();
+                if (actionUrl != null && actionUrl.isNotEmpty) {
+                  final uri = Uri.parse(actionUrl);
+                  if (await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                }
+              },
+              onVerticalDragUpdate: (details) {
+                if (details.primaryDelta! < -5) dismiss();
+              },
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(color: const Color(0xFF4A148C).withOpacity(0.2)),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          width: 4,
+                          color: const Color(0xFF4A148C),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.notifications_active, color: Color(0xFF4A148C), size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        title,
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: dismiss,
+                                      child: const Icon(Icons.close, size: 18, color: Colors.grey),
+                                    ),
+                                  ],
+                                ),
+                                if (body.isNotEmpty) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    body,
+                                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                                if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      imageUrl,
+                                      height: 120,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(overlayEntry);
+    Future.delayed(const Duration(seconds: 6), dismiss);
+  }
+
 
   Future<void> _loadInitialData() async {
     if (!mounted) return;
@@ -345,12 +518,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  void _handleLogout() {
-    Provider.of<AuthProvider>(context, listen: false).logout();
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const LoginScreen()),
-      (Route<dynamic> route) => false,
-    );
+  Future<void> _handleLogout() async {
+    await Provider.of<AuthProvider>(context, listen: false).logout();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        (Route<dynamic> route) => false,
+      );
+    }
   }
 
   void _openTabJointWork() async {
@@ -775,7 +950,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'DCR\nRequests',
+                    'Notifications',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
                   ),
@@ -869,12 +1044,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (_) => _DcrRequestsSheet(
         requests: _dcrRequests,
         primaryColor: primaryColor,
-        onActionTap: () {
+        onActionTap: (request) {
           Navigator.pop(context); 
-          _openActionCenter();    
+          _handleRequestClick(request);    
         },
       ),
     );
+  }
+
+  void _handleRequestClick(Map<String, dynamic> request) {
+    final reqType = request['request_type']?.toString().toUpperCase() ?? '';
+    final empId = request['employee_id'];
+    
+    // Convert to int properly if it came back as a string from API
+    int? parsedEmpId;
+    if (empId is int) {
+      parsedEmpId = empId;
+    } else if (empId != null) {
+      parsedEmpId = int.tryParse(empId.toString());
+    }
+
+    if (reqType == 'TP' || reqType == 'TOUR_PLAN') {
+      final planMonth = request['plan_month']?.toString();
+      _navigateTo(RouteTourPlanScreen(
+        initialSubordinateId: parsedEmpId,
+        autoOpenReviewMonth: true,
+        initialMonth: planMonth,
+      ));
+    } else if (reqType == 'EXP' || reqType == 'EXPENSE') {
+      final planMonth = request['plan_month']?.toString();
+      _navigateTo(ExpenseManagerScreen(
+        initialEmployeeId: parsedEmpId,
+        initialMonth: planMonth,
+      ));
+    } else if (reqType == 'MCL') {
+      _navigateTo(NewDrMasterScreen(initialEmployeeId: parsedEmpId));
+    } else if (reqType == 'BRAND') {
+      _navigateTo(DoctorBrandScreen(initialEmployeeId: parsedEmpId));
+    } else if (reqType == 'DOC_SEL') {
+      _navigateTo(BbaMainScreen(initialEmployeeId: parsedEmpId));
+    } else if (reqType == 'ACTION' || reqType == 'WEB' || reqType == 'TAB') {
+      _openActionCenter();
+    } else {
+    }
   }
 
   Widget _buildQuickActions() {
@@ -1352,7 +1564,7 @@ class _MenuAction {
 class _DcrRequestsSheet extends StatelessWidget {
   final List<Map<String, dynamic>> requests;
   final Color primaryColor;
-  final VoidCallback onActionTap;
+  final void Function(Map<String, dynamic>) onActionTap;
 
   const _DcrRequestsSheet({
     required this.requests,
@@ -1372,6 +1584,101 @@ class _DcrRequestsSheet extends StatelessWidget {
     } catch (_) {
       return iso;
     }
+  }
+
+  Widget _buildGroupedList(BuildContext context) {
+    final dcrReqs = <Map<String, dynamic>>[];
+    final tpReqs = <Map<String, dynamic>>[];
+    final expReqs = <Map<String, dynamic>>[];
+    final mclReqs = <Map<String, dynamic>>[];
+    final brandReqs = <Map<String, dynamic>>[];
+    final generalReqs = <Map<String, dynamic>>[];
+
+    for (final req in requests) {
+      final cat = req['category']?.toString().toUpperCase() ?? '';
+      final reqType = req['request_type']?.toString().toUpperCase() ?? '';
+      
+      if (cat == 'DCR' || ['ACTION', 'WEB', 'TAB'].contains(reqType)) {
+        dcrReqs.add(req);
+      } else if (cat == 'TP' || ['TP', 'TOUR_PLAN'].contains(reqType)) {
+        tpReqs.add(req);
+      } else if (cat == 'EXP' || ['EXP', 'EXPENSE'].contains(reqType)) {
+        expReqs.add(req);
+      } else if (cat == 'MCL' || reqType == 'MCL') {
+        mclReqs.add(req);
+      } else if (cat == 'BRAND' || ['BRAND', 'DOC_SEL'].contains(reqType)) {
+        brandReqs.add(req);
+      } else {
+        generalReqs.add(req);
+      }
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        if (dcrReqs.isNotEmpty) _buildSection('DCR Unlocks', dcrReqs),
+        if (tpReqs.isNotEmpty) _buildSection('Tour Plans', tpReqs),
+        if (expReqs.isNotEmpty) _buildSection('Expenses', expReqs),
+        if (mclReqs.isNotEmpty) _buildSection('MCL Updation', mclReqs),
+        if (brandReqs.isNotEmpty) _buildSection('Brand & Campaign', brandReqs),
+        if (generalReqs.isNotEmpty) _buildSection('General', generalReqs),
+      ],
+    );
+  }
+
+  Widget _buildSection(String title, List<Map<String, dynamic>> sectionRequests) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+          child: Row(
+            children: [
+              Text(
+                title,
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: primaryColor,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: primaryColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${sectionRequests.length} user${sectionRequests.length == 1 ? '' : 's'}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        ListView.separated(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          itemCount: sectionRequests.length,
+          separatorBuilder: (_, __) => const SizedBox(height: 10),
+          itemBuilder: (context, index) {
+            final req = sectionRequests[index];
+            return _DcrRequestCard(
+              request: req,
+              primaryColor: primaryColor,
+              formatDateTime: _formatDateTime,
+              onTap: () => onActionTap(req),
+            );
+          },
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
   }
 
   @override
@@ -1421,7 +1728,7 @@ class _DcrRequestsSheet extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'DCR Unlock Requests',
+                      'Notifications',
                       style: GoogleFonts.poppins(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -1429,7 +1736,7 @@ class _DcrRequestsSheet extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      '${requests.length} pending ${requests.length == 1 ? 'request' : 'requests'}',
+                      '${requests.length} total ${requests.length == 1 ? 'notification' : 'notifications'}',
                       style: GoogleFonts.poppins(
                         fontSize: 11,
                         color: Colors.grey.shade600,
@@ -1457,7 +1764,7 @@ class _DcrRequestsSheet extends StatelessWidget {
                             size: 52, color: Colors.grey.shade300),
                         const SizedBox(height: 12),
                         Text(
-                          'No pending requests',
+                          'No pending notifications',
                           style: GoogleFonts.poppins(
                             color: Colors.grey.shade500,
                             fontSize: 14,
@@ -1466,21 +1773,7 @@ class _DcrRequestsSheet extends StatelessWidget {
                       ],
                     ),
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                    shrinkWrap: true,
-                    itemCount: requests.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final req = requests[index];
-                      return _DcrRequestCard(
-                        request: req,
-                        primaryColor: primaryColor,
-                        formatDateTime: _formatDateTime,
-                        onTap: onActionTap,
-                      );
-                    },
-                  ),
+                : _buildGroupedList(context),
           ),
         ],
       ),
@@ -1517,12 +1810,43 @@ class _DcrRequestCard extends StatelessWidget {
     final rawId   = _str('employee_id');
     final employeeName = rawName.trim().isNotEmpty ? rawName.trim() : (rawId.trim().isNotEmpty ? rawId.trim() : 'Unknown');
 
-    final requestType = _str('request_type', 'TAB').toUpperCase();
-    final isWeb = requestType == 'WEB';
-    final typeLabel = isWeb ? 'Web DCR Unlock Request' : 'Tab DCR Unlock Request';
-    final typeColor = isWeb ? Colors.orange.shade700 : Colors.blue.shade700;
-    final typeBg    = isWeb ? Colors.orange.shade50  : Colors.blue.shade50;
-    final typeIcon  = isWeb ? Icons.language_outlined : Icons.tablet_android_outlined;
+    final requestType = _str('request_type', 'UNKNOWN').toUpperCase();
+    final cat = _str('category').toUpperCase();
+    
+    String typeLabel = 'Notification';
+    Color typeColor = Colors.grey.shade700;
+    Color typeBg = Colors.grey.shade50;
+    IconData typeIcon = Icons.notifications_outlined;
+
+    if (cat == 'DCR' || ['ACTION', 'WEB', 'TAB'].contains(requestType)) {
+      final isWeb = requestType == 'WEB';
+      typeLabel = isWeb ? 'Web DCR Unlock' : 'Tab DCR Unlock';
+      typeColor = isWeb ? Colors.orange.shade700 : Colors.blue.shade700;
+      typeBg = isWeb ? Colors.orange.shade50 : Colors.blue.shade50;
+      typeIcon = isWeb ? Icons.language_outlined : Icons.tablet_android_outlined;
+    } else if (cat == 'TP' || ['TP', 'TOUR_PLAN'].contains(requestType)) {
+      typeLabel = 'Tour Plan Approval';
+      typeColor = Colors.teal.shade700;
+      typeBg = Colors.teal.shade50;
+      typeIcon = Icons.map_outlined;
+    } else if (cat == 'EXP' || ['EXP', 'EXPENSE'].contains(requestType)) {
+      typeLabel = 'Expense Claim';
+      typeColor = Colors.green.shade700;
+      typeBg = Colors.green.shade50;
+      typeIcon = Icons.attach_money;
+    } else if (cat == 'MCL' || requestType == 'MCL') {
+      typeLabel = 'MCL Updation';
+      typeColor = Colors.purple.shade700;
+      typeBg = Colors.purple.shade50;
+      typeIcon = Icons.medical_services_outlined;
+    } else if (cat == 'BRAND' || ['BRAND', 'DOC_SEL'].contains(requestType)) {
+      typeLabel = requestType == 'DOC_SEL' ? 'Campaign Selection' : 'Brand Pathfinder';
+      typeColor = Colors.red.shade700;
+      typeBg = Colors.red.shade50;
+      typeIcon = Icons.campaign_outlined;
+    } else {
+      typeLabel = 'General Info';
+    }
 
     final reason      = _str('request_reason', '—');
     final requestedAt = formatDateTime(_str('requested_at').isEmpty ? null : _str('requested_at'));

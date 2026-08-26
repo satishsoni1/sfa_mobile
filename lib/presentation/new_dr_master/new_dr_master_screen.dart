@@ -9,7 +9,8 @@ import '../../providers/auth_provider.dart';
 import 'add_edit_new_doctor_screen.dart';
 
 class NewDrMasterScreen extends StatefulWidget {
-  const NewDrMasterScreen({super.key});
+  final int? initialEmployeeId;
+  const NewDrMasterScreen({super.key, this.initialEmployeeId});
 
   @override
   State<NewDrMasterScreen> createState() => _NewDrMasterScreenState();
@@ -152,6 +153,11 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(() => setState(() {}));
     _searchCtrl.addListener(() => setState(() {}));
+    
+    if (widget.initialEmployeeId != null) {
+      _tabController.index = 1; // Team tab
+    }
+    
     _loadMyDoctors();
     _loadSubordinates();
     _loadSpecialityTargets();
@@ -183,7 +189,20 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
   Future<void> _loadSubordinates() async {
     try {
       final list = await ApiService().getSubordinates();
-      if (mounted) setState(() => _subordinates = list);
+      
+      if (widget.initialEmployeeId != null) {
+        try {
+          final matched = list.firstWhere((sub) => sub['id'] == widget.initialEmployeeId);
+          _selectedSubId = matched['id'];
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() => _subordinates = list);
+        if (_selectedSubId != null) {
+          _loadSubDoctors(_selectedSubId!);
+        }
+      }
     } catch (_) {}
   }
 

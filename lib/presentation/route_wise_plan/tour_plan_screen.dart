@@ -6,7 +6,16 @@ import 'create_tour_plan_screen.dart';
 import 'tour_plan_review_screen.dart';
 
 class RouteTourPlanScreen extends StatefulWidget {
-  const RouteTourPlanScreen({super.key});
+  final int? initialSubordinateId;
+  final bool autoOpenReviewMonth;
+  final String? initialMonth; // e.g., '2026-04'
+
+  const RouteTourPlanScreen({
+    super.key, 
+    this.initialSubordinateId, 
+    this.autoOpenReviewMonth = false,
+    this.initialMonth,
+  });
 
   @override
   State<RouteTourPlanScreen> createState() => _RouteTourPlanScreenState();
@@ -32,6 +41,14 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialMonth != null) {
+      try {
+        final parts = widget.initialMonth!.split('-');
+        if (parts.length >= 2) {
+          _selectedDate = DateTime(int.parse(parts[0]), int.parse(parts[1]));
+        }
+      } catch (_) {}
+    }
     _loadInitialData();
   }
 
@@ -39,12 +56,38 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     setState(() => _isLoading = true);
     try {
       _subordinates = await _api.getSubordinates();
+      
+      if (widget.initialSubordinateId != null) {
+        try {
+          _selectedSubordinate = _subordinates.firstWhere((sub) => sub['id'] == widget.initialSubordinateId);
+        } catch (_) {}
+      }
+
       await _fetchMonthlyPlans();
+      
+      if (widget.autoOpenReviewMonth && mounted) {
+        _openReviewMonth();
+      }
     } catch (e) {
       debugPrint("Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _openReviewMonth() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TourPlanReviewScreen(
+          currentMonth: _selectedDate,
+          monthlyPlans: _monthlyPlans,
+          monthStatus: _monthStatus, 
+          userId: _selectedSubordinate?['id'],
+        ),
+      ),
+    );
+    if (result == true) _fetchMonthlyPlans();
   }
 
   // --- API CALL ---
@@ -227,20 +270,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             ),
           ),
           ElevatedButton.icon(
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => TourPlanReviewScreen(
-                    currentMonth: _selectedDate,
-                    monthlyPlans: _monthlyPlans,
-                    monthStatus: _monthStatus, // Pass status to review screen
-                    userId: _selectedSubordinate?['id'],
-                  ),
-                ),
-              );
-              if (result == true) _fetchMonthlyPlans(); // Refresh if status changed
-            },
+            onPressed: _openReviewMonth,
             icon: const Icon(Icons.fact_check_outlined, size: 20),
             label: Text(
               "Review Month",

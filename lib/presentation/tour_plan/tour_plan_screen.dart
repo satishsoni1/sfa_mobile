@@ -9,7 +9,8 @@ import '../../data/models/doctor.dart';
 import 'create_tour_plan_screen.dart';
 
 class TourPlanScreen extends StatefulWidget {
-  const TourPlanScreen({super.key});
+  final int? initialSubordinateId;
+  const TourPlanScreen({super.key, this.initialSubordinateId});
 
   @override
   State<TourPlanScreen> createState() => _TourPlanScreenState();
@@ -48,8 +49,19 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
     try {
       // 1. Fetch Hierarchy (Team Members)
       final subs = await _api.getSubordinates();
+      
+      // Auto-select initial subordinate if provided
+      if (widget.initialSubordinateId != null) {
+        try {
+          _selectedSubordinate = subs.firstWhere((sub) => sub['id'] == widget.initialSubordinateId);
+        } catch (_) {
+          // Keep null if not found
+        }
+      }
 
-      // 2. Fetch Plans
+      if (mounted) setState(() => _subordinates = subs);
+
+      // 2. Fetch Plans (will use _selectedSubordinate)
       await _fetchPlans();
 
       // 3. Fetch Master Doctor List (for stats)
@@ -59,8 +71,6 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
           listen: false,
         ).fetchDoctors();
       }
-
-      if (mounted) setState(() => _subordinates = subs);
     } catch (e) {
       debugPrint("Error loading data: $e");
     } finally {
