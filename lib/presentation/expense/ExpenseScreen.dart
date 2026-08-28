@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../data/services/api_service.dart';
+import '../../utils/cors_image.dart';
 
 // Per-attachment GST metadata
 class _AttachmentMeta {
@@ -3600,13 +3601,6 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   void _showImagePreview({Uint8List? localBytes, String? remoteUrl}) {
-    // On Web, remote images from a different domain (CORS) cannot be loaded
-    // by Image.network under CanvasKit. Open in a new browser tab instead.
-    if (kIsWeb && remoteUrl != null && localBytes == null) {
-      launchUrl(Uri.parse(remoteUrl), mode: LaunchMode.externalApplication);
-      return;
-    }
-
     showDialog(
       context: context,
       builder: (_) => Dialog(
@@ -3618,10 +3612,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             InteractiveViewer(
               child: localBytes != null
                   ? Image.memory(localBytes, fit: BoxFit.contain)
-                  : Image.network(remoteUrl!, fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Center(
-                            child: Icon(Icons.broken_image, color: Colors.white, size: 50),
-                          )),
+                  : getCorsImage(remoteUrl!, fit: BoxFit.contain),
             ),
             Positioned(
               top: 10,
@@ -3662,20 +3653,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
                 child: isImage
-                    ? (kIsWeb
-                        // On Web, Image.network causes CORS errors for remote storage URLs.
-                        // Show a tappable photo icon instead — tapping opens the image in a new tab.
-                        ? Container(
-                            width: 48, height: 48,
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Icon(Icons.photo, color: Colors.blue.shade400, size: 24),
-                          )
-                        : Image.network(path, width: 48, height: 48, fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(width: 48, height: 48, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, size: 20))))
+                    ? getCorsImage(path, width: 48, height: 48, fit: BoxFit.cover)
                     : Container(
                         width: 48,
                         height: 48,
@@ -4035,20 +4013,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               },
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6),
-                child: kIsWeb
-                    // On Web, Image.network causes CORS errors for remote storage URLs.
-                    // Show a tappable photo icon instead — tapping opens the image in a new tab.
-                    ? Container(
-                        width: 30, height: 30,
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Icon(Icons.photo, color: Colors.blue.shade400, size: 16),
-                      )
-                    : Image.network(item.remoteBillPath!, width: 30, height: 30, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(width: 30, height: 30, color: Colors.grey.shade200, child: const Icon(Icons.broken_image, size: 15)),
-                      ),
+                child: getCorsImage(item.remoteBillPath!, width: 30, height: 30, fit: BoxFit.cover),
               ),
             ),
           ],
