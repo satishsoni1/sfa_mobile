@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -71,7 +72,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.73";
+  static const String CURRENT_APP_VERSION = "1.0.74";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -129,6 +130,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!mounted) return;
     setState(() => _isRefreshing = true);
 
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    authProvider.onForegroundMessage = _showFcmForegroundSnackbar;
     final reportProvider = Provider.of<ReportProvider>(context, listen: false);
     final apiService = ApiService();
 
@@ -376,6 +379,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } finally {
       if (mounted) setState(() => _isLoadingAction = false);
     }
+  }
+
+
+  void _showFcmForegroundSnackbar(RemoteMessage message) {
+    if (!mounted) return;
+    
+    final title = message.notification?.title ?? 'New Notification';
+    final body = message.notification?.body ?? '';
+    final String? imageUrl = message.notification?.android?.imageUrl ??
+        message.notification?.apple?.imageUrl ??
+        message.notification?.web?.image ??
+        (message.data['image'] as String?);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            if (imageUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: Image.network(
+                  imageUrl,
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const Icon(Icons.notifications, color: Colors.white),
+                ),
+              ),
+              const SizedBox(width: 12),
+            ] else ...[
+              const Icon(Icons.notifications_active, color: Colors.white),
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  if (body.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      body,
+                      style: const TextStyle(fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.blue.shade800,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        duration: const Duration(seconds: 5),
+        margin: const EdgeInsets.all(16),
+        action: SnackBarAction(
+          label: 'DISMISS',
+          textColor: Colors.white70,
+          onPressed: () {},
+        ),
+      ),
+    );
   }
 
   void _handleLogout() {

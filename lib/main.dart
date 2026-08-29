@@ -1,20 +1,37 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
+import 'firebase_options.dart';
 import 'providers/report_provider.dart';
-import 'providers/auth_provider.dart'; // Ensure this file exists
+import 'providers/auth_provider.dart';
 import 'presentation/dashboard/dashboard_screen.dart';
 import 'presentation/login/login_screen.dart';
 import 'presentation/webview/internal_webview_screen.dart';
 
-void main() {
-  // 1. We wrap the ENTIRE app in MultiProvider here.
-  // This ensures Providers are at the very top of the widget tree.
+void main() async {
+  // Required before any async work in main().
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Firebase — Web only.
+  if (kIsWeb) {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+      debugPrint('[Firebase] Initialized successfully.');
+    } catch (e) {
+      // Firebase init failure must not prevent the app from running.
+      debugPrint('[Firebase] Initialization error (non-fatal): $e');
+    }
+  }
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ReportProvider()),
-        // We initialize AuthProvider and immediately check login status
+        // AuthProvider checks existing session on creation.
         ChangeNotifierProvider(
           create: (_) => AuthProvider()..checkLoginStatus(),
         ),
@@ -29,13 +46,12 @@ class ZForceApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 2. Now Consumer can safely find AuthProvider because ZForceApp is a child of MultiProvider
     return Consumer<AuthProvider>(
       builder: (context, auth, child) {
         return MaterialApp(
-          title: 'vodo-app',
+          title: 'ZForce',
           debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme, // Uses your theme file
+          theme: AppTheme.lightTheme,
           onGenerateRoute: (settings) {
             if (settings.name == InternalWebViewScreen.routeName) {
               final args = settings.arguments;
@@ -48,11 +64,11 @@ class ZForceApp extends StatelessWidget {
             }
             return null;
           },
-          // 3. Smart Navigation based on Auth State
+          // Smart navigation based on Auth State.
           home: auth.isLoading
               ? const Scaffold(
                   body: Center(child: CircularProgressIndicator()),
-                ) // Splash Screen
+                )
               : auth.isAuthenticated
               ? const DashboardScreen()
               : const LoginScreen(),

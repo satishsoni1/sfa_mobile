@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "706778349853",
+    "project_id": "fir-sfa-notification",
+    "storage_bucket": "fir-sfa-notification.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:706778349853:android:042f3cea499b054864a1f4",
+        "android_client_info": {
+          "package_name": "in.globalspace.vodoclm_pro_aurobindo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWtav_QGNjKU5uHVID_hfS608GtxeFn3c"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
