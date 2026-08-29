@@ -55,33 +55,29 @@ class FcmNotificationService {
     required String employeeCode,
     void Function(RemoteMessage message)? onForegroundMessage,
   }) async {
-    // FCM Web is only relevant on the web platform.
-    if (!kIsWeb) {
-      debugPrint('[FCM] Skipping — not a Web platform.');
-      return;
-    }
+    
 
     if (_initialized) {
-      debugPrint('[FCM WEB] Already initialized. Skipping re-init.');
+      debugPrint('[FCM] Already initialized. Skipping re-init.');
       return;
     }
 
     try {
-      debugPrint('[FCM WEB] Starting initialization sequence...');
+      debugPrint('[FCM] Starting initialization sequence...');
       // 1. Request browser notification permission.
-      debugPrint('[FCM WEB] Requesting browser permission...');
+      debugPrint('[FCM] Requesting browser permission...');
       final granted = await _requestPermission();
       if (!granted) {
-        debugPrint('[FCM WEB] Notification permission denied. FCM disabled.');
+        debugPrint('[FCM] Notification permission denied. FCM disabled.');
         return;
       }
-      debugPrint('[FCM WEB] Permission granted!');
+      debugPrint('[FCM] Permission granted!');
 
       // 2. Generate the Web FCM token using the VAPID public key.
-      debugPrint('[FCM WEB] Fetching token from Firebase...');
+      debugPrint('[FCM] Fetching token from Firebase...');
       final token = await _getToken();
       if (token == null) return;
-      debugPrint('[FCM WEB] Token fetched successfully.');
+      debugPrint('[FCM] Token fetched successfully.');
 
       // 3. Register the token with the backend (skips if token unchanged).
       await _registerTokenWithBackend(
@@ -97,16 +93,16 @@ class FcmNotificationService {
       _listenForForegroundMessages(onForegroundMessage);
 
       _initialized = true;
-      debugPrint('[FCM WEB] Initialization complete.');
+      debugPrint('[FCM] Initialization complete.');
     } catch (e) {
       // Never crash the app due to notification failures.
-      debugPrint('[FCM WEB] Initialization error: $e');
+      debugPrint('[FCM] Initialization error: $e');
     }
   }
 
   /// Call this during logout to disassociate the token from the current user.
   Future<void> onLogout({required String authToken}) async {
-    if (!kIsWeb) return;
+    
     try {
       final prefs = await SharedPreferences.getInstance();
       final cachedToken = prefs.getString(_kFcmTokenCacheKey);
@@ -118,9 +114,9 @@ class FcmNotificationService {
       );
       await prefs.remove(_kFcmTokenCacheKey);
       _initialized = false;
-      debugPrint('[FCM WEB] Token removed on logout.');
+      debugPrint('[FCM] Token removed on logout.');
     } catch (e) {
-      debugPrint('[FCM WEB] Logout token removal error: $e');
+      debugPrint('[FCM] Logout token removal error: $e');
     }
   }
 
@@ -139,12 +135,12 @@ class FcmNotificationService {
       );
 
       final status = settings.authorizationStatus;
-      debugPrint('[FCM WEB] Permission status: $status');
+      debugPrint('[FCM] Permission status: $status');
 
       return status == AuthorizationStatus.authorized ||
           status == AuthorizationStatus.provisional;
     } catch (e) {
-      debugPrint('[FCM WEB] Permission request error: $e');
+      debugPrint('[FCM] Permission request error: $e');
       return false;
     }
   }
@@ -154,18 +150,18 @@ class FcmNotificationService {
   Future<String?> _getToken() async {
     try {
       final token = await FirebaseMessaging.instance.getToken(
-        vapidKey: _kWebVapidPublicKey,
+        vapidKey: kIsWeb ? _kWebVapidPublicKey : null,
       );
 
       if (token == null || token.isEmpty) {
-        debugPrint('[FCM WEB] Token is null or empty — check VAPID key and browser support.');
+        debugPrint('[FCM] Token is null or empty — check VAPID key and browser support.');
         return null;
       }
 
-      debugPrint('[FCM WEB] Token generated: ${token.substring(0, 20)}...');
+      debugPrint('[FCM] Token generated: ${token.substring(0, 20)}...');
       return token;
     } catch (e) {
-      debugPrint('[FCM WEB] Token generation error: $e');
+      debugPrint('[FCM] Token generation error: $e');
       return null;
     }
   }
@@ -198,14 +194,14 @@ class FcmNotificationService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         // Cache the token so we don't re-register on subsequent app starts.
         await prefs.setString(_kFcmTokenCacheKey, fcmToken);
-        debugPrint('[FCM WEB] Token registered successfully with backend.');
+        debugPrint('[FCM] Token registered successfully with backend.');
       } else {
         debugPrint(
-            '[FCM WEB] Backend registration failed: ${response.statusCode} ${response.body}');
+            '[FCM] Backend registration failed: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
       // Backend failure must not crash the app.
-      debugPrint('[FCM WEB] Backend registration error: $e');
+      debugPrint('[FCM] Backend registration error: $e');
     }
   }
 
@@ -234,13 +230,13 @@ class FcmNotificationService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_kFcmTokenCacheKey, newToken);
-        debugPrint('[FCM WEB] Token refreshed successfully on backend.');
+        debugPrint('[FCM] Token refreshed successfully on backend.');
       } else {
         debugPrint(
-            '[FCM WEB] Token refresh failed: ${response.statusCode} ${response.body}');
+            '[FCM] Token refresh failed: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      debugPrint('[FCM WEB] Token refresh error: $e');
+      debugPrint('[FCM] Token refresh error: $e');
     }
   }
 
@@ -260,9 +256,9 @@ class FcmNotificationService {
         body: jsonEncode({'fcm_token': fcmToken, 'platform': 'web'}),
       );
 
-      debugPrint('[FCM WEB] Token deletion response: ${response.statusCode}');
+      debugPrint('[FCM] Token deletion response: ${response.statusCode}');
     } catch (e) {
-      debugPrint('[FCM WEB] Token deletion error: $e');
+      debugPrint('[FCM] Token deletion error: $e');
     }
   }
 
@@ -274,7 +270,7 @@ class FcmNotificationService {
   }) {
     FirebaseMessaging.instance.onTokenRefresh.listen(
       (newToken) async {
-        debugPrint('[FCM WEB] Token refreshed by FCM.');
+        debugPrint('[FCM] Token refreshed by FCM.');
         await _refreshTokenOnBackend(
           newToken: newToken,
           authToken: authToken,
@@ -282,7 +278,7 @@ class FcmNotificationService {
         );
       },
       onError: (e) {
-        debugPrint('[FCM WEB] Token refresh stream error: $e');
+        debugPrint('[FCM] Token refresh stream error: $e');
       },
     );
   }
@@ -295,7 +291,7 @@ class FcmNotificationService {
     FirebaseMessaging.onMessage.listen(
       (RemoteMessage message) {
         debugPrint(
-          '[FCM WEB] Foreground message received. '
+          '[FCM] Foreground message received. '
           'Title: ${message.notification?.title} '
           'Body: ${message.notification?.body} '
           'Data: ${message.data}',
@@ -304,7 +300,7 @@ class FcmNotificationService {
         onMessage?.call(message);
       },
       onError: (e) {
-        debugPrint('[FCM WEB] Foreground message stream error: $e');
+        debugPrint('[FCM] Foreground message stream error: $e');
       },
     );
   }

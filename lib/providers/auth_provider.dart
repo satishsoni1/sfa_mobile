@@ -29,9 +29,7 @@ class AuthProvider with ChangeNotifier {
       _isAuthenticated = true;
 
       // Re-initialize FCM for already-logged-in users on page refresh.
-      if (kIsWeb) {
-        await _initFcm(authToken: token, user: user);
-      }
+      await _initFcm(authToken: token, user: user);
     } else {
       _isAuthenticated = false;
     }
@@ -54,9 +52,7 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
 
       // Initialize FCM after a successful login on Web.
-      if (kIsWeb) {
-        await _initFcm(authToken: token, user: user);
-      }
+      await _initFcm(authToken: token, user: user);
 
       if (user.isFirstLogin) {
         return 'FIRST_LOGIN';
@@ -75,11 +71,9 @@ class AuthProvider with ChangeNotifier {
   // 3. LOGOUT ACTION
   Future<void> logout() async {
     // Disassociate FCM token from this user before clearing session.
-    if (kIsWeb) {
-      final authToken = await _apiService.getToken();
-      if (authToken != null) {
-        await FcmNotificationService.instance.onLogout(authToken: authToken);
-      }
+    final authToken = await _apiService.getToken();
+    if (authToken != null) {
+      await FcmNotificationService.instance.onLogout(authToken: authToken);
     }
 
     await _apiService.clearSession();

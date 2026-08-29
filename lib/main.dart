@@ -14,19 +14,12 @@ void main() async {
   // Required before any async work in main().
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase — Web only.
-  if (kIsWeb) {
-    try {
-      await Firebase.initializeApp(
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-      debugPrint('[Firebase] Initialized successfully.');
-    } catch (e) {
-      // Firebase init failure must not prevent the app from running.
-      debugPrint('[Firebase] Initialization error (non-fatal): $e');
-    }
-  }
-
+    // Initialize Firebase
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  debugPrint('[Firebase] Initialized successfully.');
+  
   runApp(
     MultiProvider(
       providers: [
