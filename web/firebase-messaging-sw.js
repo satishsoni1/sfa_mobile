@@ -32,7 +32,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[FCM SW] Background message received:', payload);
 
-  const notificationTitle = payload.notification?.title || 'ZForce Notification';
+  const notificationTitle = payload.notification?.title || 'vodo-app Notification';
 
   const notificationOptions = {
     body: payload.notification?.body || '',
