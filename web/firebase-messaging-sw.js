@@ -1,4 +1,4 @@
-// Firebase Messaging Service Worker
+﻿// Firebase Messaging Service Worker
 // Project: zorvia-cc840
 // Firebase JS SDK version: 10.13.0
 // This version aligns with firebase_core ^3.6.0 / firebase_messaging ^15.1.3
@@ -32,7 +32,7 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[FCM SW] Background message received:', payload);
 
-  const notificationTitle = payload.notification?.title || 'vodo-app Notification';
+  const notificationTitle = payload.notification?.title || 'himalayas-app Notification';
 
   const notificationOptions = {
     body: payload.notification?.body || '',

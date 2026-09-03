@@ -1928,7 +1928,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         });
       }
       _recalculateTotal();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
         setState(() {
           if (previousEndLocation != null) _endLocation = previousEndLocation;
@@ -1937,10 +1937,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           _manualKmController.text = prevKm.toStringAsFixed(1);
           _manualTaController.text = prevTaAmt.toStringAsFixed(2);
         });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Check your internet connection'),
+        
+        String errorMessage = 'Check your internet connection';
+        if (e is Exception) {
+          errorMessage = e.toString().replaceFirst('Exception: ', '');
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(errorMessage),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 4),
+          duration: const Duration(seconds: 4),
         ));
       }
     } finally {
@@ -2050,8 +2056,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         _manualTaController.text = _serverTaAmount.toStringAsFixed(2);
       });
       _recalculateTotal();
-    } catch (_) {
-      // Server unreachable — values stay at zero until next successful call
+    } catch (e) {
+      if (mounted) {
+        String errorMessage = 'Server unreachable';
+        if (e is Exception) {
+          errorMessage = e.toString().replaceFirst('Exception: ', '');
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(errorMessage),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ));
+      }
     } finally {
       if (mounted && myToken == _recalcToken) {
         setState(() => _isRecalculating = false);

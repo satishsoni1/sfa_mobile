@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart'; // For kIsWeb check
+﻿import 'package:flutter/foundation.dart'; // For kIsWeb check
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -137,7 +137,7 @@ class SupportScreen extends StatelessWidget {
                   subtitle: "Browse FAQs and knowledge base articles",
                   actionText: "Visit Site",
                   color: Colors.blue,
-                  onTap: () => _launchAction(context, Uri.parse("https://vodoclm-pro.globalspace.in/help")),
+                  onTap: () => _launchAction(context, Uri.parse("https://himalaya.globalspace.in/help")),
                 ),
                 const SizedBox(height: 40),
 

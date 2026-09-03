@@ -1,4 +1,4 @@
-import '../tp_deviation/tp_deviation_history_screen.dart';
+﻿import '../tp_deviation/tp_deviation_history_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -72,7 +72,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.78";
+  static const String CURRENT_APP_VERSION = "1.0.79";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -468,7 +468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    final url = 'https://vodoclm-pro.globalspace.in/dcrapproval/$employeeCode';
+    final url = 'https://himalaya.globalspace.in/dcrapproval/$employeeCode';
 
     await Navigator.pushNamed(
       context,
@@ -491,7 +491,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final url =
-        'https://vodoclm-pro.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://himalaya.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     await Navigator.pushNamed(
       context,

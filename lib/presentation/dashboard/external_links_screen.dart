@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zforce/core/constants/app_colors.dart';
@@ -38,7 +38,7 @@ class _ExternalLinksScreenState extends State<ExternalLinksScreen> {
     return [
       const _ExternalLink(
         title: 'Dashboard',
-        url: 'https://vodoclm-pro.globalspace.in/login',
+        url: 'https://himalaya.globalspace.in/login',
         isWeb: true,
       ),
       ...apiLinks,
@@ -54,7 +54,7 @@ class _ExternalLinksScreenState extends State<ExternalLinksScreen> {
  Future<void> _openLink(_ExternalLink link) async {
     final url = _buildEmployeeUrl(link.url);
     final uri = Uri.tryParse(url);
-    final opensInsideApp = uri?.host == 'vodoclm-pro.globalspace.in';
+    final opensInsideApp = uri?.host == 'himalaya.globalspace.in';
 
     if (!opensInsideApp && uri != null) {
       final launched = await launchUrl(

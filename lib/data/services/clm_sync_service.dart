@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -17,7 +17,7 @@ class ClmSyncService {
   factory ClmSyncService() => _instance;
   ClmSyncService._();
 
-  static const String _baseUrl = 'https://vodoclm-pro.globalspace.in/api';
+  static const String _baseUrl = 'https://himalaya.globalspace.in/api';
   static const String _prefLastSync = 'clm_last_master_sync';
 
   final ClmDatabaseService _db = ClmDatabaseService();

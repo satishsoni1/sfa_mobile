@@ -1,6 +1,6 @@
-{
-    "name": "vodo-app",
-    "short_name": "vodo-app",
+﻿{
+    "name": "himalayas-app",
+    "short_name": "himalayas-app",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#ffffff",

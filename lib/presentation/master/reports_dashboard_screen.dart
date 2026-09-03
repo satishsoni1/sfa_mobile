@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:zforce/core/constants/app_colors.dart';
 import 'package:zforce/providers/auth_provider.dart';
@@ -222,7 +222,7 @@ class ReportsDashboardScreen extends StatelessWidget {
 
     // These report links are opened directly with the logged-in user's employee code.
     final url =
-        'https://vodoclm-pro.globalspace.in/$path?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://himalaya.globalspace.in/$path?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     Navigator.pushNamed(
       context,

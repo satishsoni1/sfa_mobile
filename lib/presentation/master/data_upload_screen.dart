@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart'; // Needed for web bytes
+﻿import 'package:flutter/foundation.dart'; // Needed for web bytes
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
@@ -80,7 +80,7 @@ class _DataUploadScreenState extends State<DataUploadScreen> {
   // --- Actual Download Logic ---
   Future<void> _downloadSample(String fileType) async {
     // Base URL of your uploads folder
-    const String baseUrl = "https://vodoclm-pro.globalspace.in/assets/uploads";
+    const String baseUrl = "https://himalaya.globalspace.in/assets/uploads";
 
     // Set the exact filename based on the type requested
     String fileName = "";
