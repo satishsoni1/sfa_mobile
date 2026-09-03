@@ -25,7 +25,13 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchRoutes();
+    _selectedDate = DateTime.now();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    await _fetchRoutes();
+    if (mounted) await _fetchCurrentPlan(_selectedDate!);
   }
   
   @override
@@ -290,27 +296,24 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // 1. Date Selection
-                  _buildSectionTitle('Select Date'),
-                  InkWell(
-                    onTap: _selectDate,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.calendar_today, color: AppColors.primary, size: 20),
-                          const SizedBox(width: 12),
-                          Text(
-                            _selectedDate == null ? 'Tap to select date' : DateFormat('dd MMMM yyyy').format(_selectedDate!),
-                            style: GoogleFonts.poppins(fontSize: 14, color: _selectedDate == null ? Colors.grey : Colors.black87),
-                          ),
-                        ],
-                      ),
+                  _buildSectionTitle('Date'),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today, color: Colors.grey, size: 20),
+                        const SizedBox(width: 12),
+                        Text(
+                          _selectedDate == null ? '' : DateFormat('dd MMMM yyyy').format(_selectedDate!),
+                          style: GoogleFonts.poppins(fontSize: 14, color: Colors.black54),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 24),
