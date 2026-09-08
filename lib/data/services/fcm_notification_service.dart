@@ -8,7 +8,7 @@ import 'package:zforce/data/services/api_service.dart';
 
 /// FCM Web VAPID public key.
 const String _kWebVapidPublicKey =
-    'BCvycA-IWy1DGUjXjV74sIHOTMuOhuG_ZdgnTZWtjuoqV2VqdELEFo76pxy3iLjZPp-MK1IpUh_CBZlU0I7rMsw';
+    'BATCNOHZ0IgIaAfooNWtGqj9GJD_rlnbJEEyudGuYWzkrW6sljaQ0YfIMYxi2ijIH7Gj0JdcwdxriXeNEzaG0xc';
 
 /// SharedPreferences key for cached FCM token
 const String _kFcmTokenCacheKey = 'fcm_token_cached';

@@ -72,7 +72,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.80";
+  static const String CURRENT_APP_VERSION = "1.0.81";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -1997,7 +1997,8 @@ class _DcrRequestCard extends StatelessWidget {
     final employeeName = rawName.trim().isNotEmpty
         ? rawName.trim()
         : (rawId.trim().isNotEmpty ? rawId.trim() : 'Unknown');
-    final requestType = _str('request_type', 'TAB').toUpperCase();
+    final requestType = _str('request_type').trim().toUpperCase();
+    final category = _str('category').trim();
     String typeLabel;
     Color typeColor;
     Color typeBg;
@@ -2013,13 +2014,42 @@ class _DcrRequestCard extends StatelessWidget {
       typeColor = Colors.orange.shade700;
       typeBg = Colors.orange.shade50;
       typeIcon = Icons.language_outlined;
-    } else {
+    } else if (requestType == 'DCR_SUBMISSION') {
+      typeLabel = 'DCR Submission Approval Request';
+      typeColor = Colors.indigo.shade700;
+      typeBg = Colors.indigo.shade50;
+      typeIcon = Icons.assignment_turned_in_outlined;
+    } else if (requestType == 'TAB') {
       typeLabel = 'Tab DCR Unlock Request';
       typeColor = Colors.blue.shade700;
       typeBg = Colors.blue.shade50;
       typeIcon = Icons.tablet_android_outlined;
+    } else {
+      final source = category.isNotEmpty
+          ? category
+          : (requestType.isNotEmpty ? requestType : 'Request');
+      typeLabel = source
+          .replaceAll('_', ' ')
+          .trim()
+          .split(RegExp(r'\s+'))
+          .map((w) => w.isNotEmpty
+              ? '${w[0].toUpperCase()}${w.substring(1).toLowerCase()}'
+              : '')
+          .join(' ');
+      if (!typeLabel.toLowerCase().contains('request') &&
+          !typeLabel.toLowerCase().contains('approval')) {
+        typeLabel = '$typeLabel Request';
+      }
+      typeColor = Colors.blueGrey.shade700;
+      typeBg = Colors.blueGrey.shade50;
+      typeIcon = Icons.notifications_active_outlined;
     }
-    final reason = _str('request_reason', '—');
+
+    // Reason: reads request_reason directly from API, with fallback to reason
+    final rawReason = _str('request_reason').trim().isNotEmpty
+        ? _str('request_reason').trim()
+        : _str('reason').trim();
+    final reason = rawReason.isNotEmpty ? rawReason : '—';
     final requestedAt = formatDateTime(
       _str('requested_at').isEmpty ? null : _str('requested_at'),
     );
@@ -2096,7 +2126,9 @@ class _DcrRequestCard extends StatelessWidget {
                         Icon(typeIcon, size: 12, color: typeColor),
                         const SizedBox(width: 4),
                         Text(
-                          requestType,
+                          requestType.isNotEmpty
+                              ? requestType
+                              : (category.isNotEmpty ? category : 'REQUEST'),
                           style: GoogleFonts.poppins(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,

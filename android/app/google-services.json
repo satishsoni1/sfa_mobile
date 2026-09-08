@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "706778349853",
-    "project_id": "fir-sfa-notification",
-    "storage_bucket": "fir-sfa-notification.firebasestorage.app"
+    "project_number": "615438101526",
+    "project_id": "himalaya-e7d22",
+    "storage_bucket": "himalaya-e7d22.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:706778349853:android:042f3cea499b054864a1f4",
+        "mobilesdk_app_id": "1:615438101526:android:92807169bad73c86fa5937",
         "android_client_info": {
-          "package_name": "in.globalspace.vodoclm_pro_aurobindo"
+          "package_name": "in.globalspace.vodoclm_himalaya"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAWtav_QGNjKU5uHVID_hfS608GtxeFn3c"
+          "current_key": "AIzaSyAnzOtwTTVjYgHRax4xWn_APMN5gRN8MBY"
         }
       ],
       "services": {

@@ -23,23 +23,23 @@ class DefaultFirebaseOptions {
     }
   }
 
-  /// Firebase Web configuration for project: zorvia-cc840
+  /// Firebase Web configuration for project: aurobindo
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAtgGLEga4ludFAnoT6o1UCjHxPx469ZxM',
-    appId: '1:706778349853:web:c631b3839dbd722164a1f4',
-    messagingSenderId: '706778349853',
-    projectId: 'fir-sfa-notification',
-    authDomain: 'fir-sfa-notification.firebaseapp.com',
-    storageBucket: 'fir-sfa-notification.firebasestorage.app',
-    measurementId: 'G-C9HZ9WCRF9',
+    apiKey: 'AIzaSyDIofuhNzvLSQ89W3v4Eg_hvpbXwWWapnY',
+    appId: '1:615438101526:web:b912d5db6686b19dfa5937',
+    messagingSenderId: '615438101526',
+    projectId: 'himalaya-e7d22',
+    authDomain: 'himalaya-e7d22.firebaseapp.com',
+    storageBucket: 'himalaya-e7d22.firebasestorage.app',
+    measurementId: 'G-M74BFVDN5X',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyAWtav_QGNjKU5uHVID_hfS608GtxeFn3c',
-    appId: '1:706778349853:android:042f3cea499b054864a1f4',
-    messagingSenderId: '706778349853',
-    projectId: 'fir-sfa-notification',
-    storageBucket: 'fir-sfa-notification.firebasestorage.app',
+    appId: '1:615438101526:android:92807169bad73c86fa5937',
+    messagingSenderId: '615438101526',
+    projectId: 'himalaya-e7d22',
+    storageBucket: 'himalaya-e7d22.firebasestorage.app',
   );
 }

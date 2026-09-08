@@ -15,13 +15,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-com
 
 // Firebase Web configuration — matches firebase_options.dart
 firebase.initializeApp({
-  apiKey: 'AIzaSyAtgGLEga4ludFAnoT6o1UCjHxPx469ZxM',
-  authDomain: 'fir-sfa-notification.firebaseapp.com',
-  projectId: 'fir-sfa-notification',
-  storageBucket: 'fir-sfa-notification.firebasestorage.app',
-  messagingSenderId: '706778349853',
-  appId: '1:706778349853:web:c631b3839dbd722164a1f4',
-  measurementId: 'G-C9HZ9WCRF9'
+  apiKey: 'AIzaSyDIofuhNzvLSQ89W3v4Eg_hvpbXwWWapnY',
+  authDomain: 'himalaya-e7d22.firebaseapp.com',
+  projectId: 'himalaya-e7d22',
+  storageBucket: 'himalaya-e7d22.firebasestorage.app',
+  messagingSenderId: '615438101526',
+  appId: '1:615438101526:web:b912d5db6686b19dfa5937',
+  measurementId: 'G-M74BFVDN5X'
 });
 
 const messaging = firebase.messaging();
