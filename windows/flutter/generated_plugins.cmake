@@ -7,12 +7,16 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   file_selector_windows
   firebase_core
+  flutter_doc_scanner
   flutter_tts
   geolocator_windows
+  pdfx
+  permission_handler_windows
   printing
   record_windows
   share_plus
   speech_to_text_windows
+  syncfusion_pdfviewer_windows
   url_launcher_windows
 )
 

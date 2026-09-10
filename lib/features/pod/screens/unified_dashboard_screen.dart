@@ -1,0 +1,1645 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:intl/intl.dart';
+import 'package:zforce/features/pod/bloc/hospital_dashboard_bloc.dart';
+import 'package:zforce/features/pod/bloc/hospital_dashboard_event.dart';
+import 'package:zforce/features/pod/bloc/hospital_dashboard_state.dart';
+import 'package:zforce/features/pod/bloc/sales_bloc.dart';
+import 'package:zforce/features/pod/bloc/sales_event.dart';
+import 'package:zforce/features/pod/bloc/sales_state.dart';
+import 'package:zforce/features/pod/screens/document_upload_screen.dart';
+import 'package:zforce/features/pod/models/sales_dashboard_models.dart';
+// HospitalSalesScreen is intentionally left importable but no longer
+// rendered here — the "Hospital Sales" tab was replaced by the embeddable
+// Sales Analytics dashboard (SalesDashboardBody). Keep the file in the repo
+// for backward compatibility and any deep-links that still point at it.
+import 'package:zforce/features/pod/screens/sales_dashboard_screen.dart';
+import 'package:zforce/features/pod/screens/documents_list_screen.dart';
+// import 'package:zforce/features/pod/screens/notifications_screen.dart'; // Notification icon commented out
+import 'package:zforce/features/pod/services/hospital_dashboard_service.dart';
+import 'package:zforce/features/pod/services/sales_service.dart';
+import 'package:zforce/features/pod/widgets/executive_kpi_section.dart';
+import 'package:zforce/features/pod/widgets/pod_centered_performance.dart';
+import 'package:zforce/features/pod/widgets/pod_kam_filter.dart';
+
+class UnifiedDashboardScreen extends StatefulWidget {
+  const UnifiedDashboardScreen({super.key});
+
+  @override
+  State<UnifiedDashboardScreen> createState() => _UnifiedDashboardScreenState();
+}
+
+class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
+    with TickerProviderStateMixin {
+  late TabController _tabController;
+
+  // POD Dashboard month-window state. Initialised to the current calendar
+  // month so the user lands on "this month" — same default as the Sales
+  // Analytics filter bar. Selecting a different month rewrites both
+  // [_dateFrom] / [_dateTo] and triggers a HospitalDashboardLoadRequested
+  // with the new window. ExecutiveKpiSection re-fetches via its `filters`
+  // prop on the same change.
+  late DateTime _selectedMonth;
+  String get _dateFrom =>
+      DateFormat('yyyy-MM-dd').format(DateTime(_selectedMonth.year, _selectedMonth.month, 1));
+  String get _dateTo => DateFormat('yyyy-MM-dd')
+      .format(DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0));
+
+  /// Selected KAM emp_id for the POD Dashboard filter pill. `null` means
+  /// "all KAMs in the user's hierarchy" (default). When set, the same
+  /// emp_id threads through both `ExecutiveKpiSection` and
+  /// `PodCenteredPerformanceSection` via `SalesDashboardFilters.empId` so
+  /// the backend narrows EVERY card + tab consistently.
+  String? _selectedKamEmpId;
+
+  SalesDashboardFilters get _podDashFilters => SalesDashboardFilters(
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+        empId: _selectedKamEmpId,
+      );
+
+  HospitalDashboardBloc? _hospitalBloc;
+
+  @override
+  void initState() {
+    super.initState();
+    // _tabController = TabController(length: 3, vsync: this); // Sales Analytics tab commented out
+    _tabController = TabController(length: 2, vsync: this);
+    final now = DateTime.now();
+    _selectedMonth = DateTime(now.year, now.month, 1);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _onMonthChanged(DateTime month) {
+    setState(() {
+      _selectedMonth = DateTime(month.year, month.month, 1);
+    });
+    _hospitalBloc?.add(HospitalDashboardLoadRequested(
+      dateFrom: _dateFrom,
+      dateTo: _dateTo,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) {
+            // Capture the BLoC handle so the month dropdown (which lives
+            // OUTSIDE this provider scope on rebuild) can dispatch the
+            // reload event. Avoids `context.read<HospitalDashboardBloc>()`
+            // failing in the dropdown's `onChanged`.
+            final bloc = HospitalDashboardBloc(HospitalDashboardService())
+              ..add(HospitalDashboardLoadRequested(
+                dateFrom: _dateFrom,
+                dateTo: _dateTo,
+              ));
+            _hospitalBloc = bloc;
+            return bloc;
+          },
+        ),
+        BlocProvider(
+          create: (_) => SalesBloc(SalesService())..add(const SalesLoadRequested()),
+        ),
+      ],
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          title: const Text('Zydus Vistaar'),
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF2C3E50),
+          elevation: 0,
+          centerTitle: true,
+          iconTheme: const IconThemeData(color: Color(0xFF2C3E50)),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Color(0xFF2C3E50)),
+            tooltip: 'Back',
+            onPressed: () {
+              Navigator.of(context, rootNavigator: true).pop();
+            },
+          ),
+          actions: const [
+            // Notification icon commented out as per requirement
+            // IconButton(
+            //   tooltip: 'Notifications',
+            //   onPressed: () {
+            //     Navigator.of(context).push(
+            //       MaterialPageRoute(
+            //         builder: (_) => const NotificationsScreen(),
+            //       ),
+            //     );
+            //   },
+            //   icon: const Icon(Icons.notifications_rounded),
+            // ),
+          ],
+          bottom: TabBar(
+            controller: _tabController,
+            // isScrollable: true,
+            labelColor: const Color(0xFF00A0A8),
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: const Color(0xFF00A0A8),
+            // Tab order locked: Sales Analytics (headline) Â· PODs documents
+            // (was "All Documents") Â· POD Dashboard (was "Overview"). Labels
+            // updated per the latest product call to surface the POD scope
+            // explicitly. TabBarView children below mirror this order.
+            tabs: const [
+              // Tab(icon: Icon(Icons.insights_rounded), text: 'Sales Analytics'),
+              Tab(icon: Icon(Icons.dashboard), text: 'Secondary Sales Dashboard'),
+              Tab(icon: Icon(Icons.description), text: 'Secondary Sales Documents'),
+            ],
+          ),
+        ),
+        body: TabBarView(
+          controller: _tabController,
+          children: [
+            // SalesDashboardBody owns its own BLoC, so this tab is fully
+            // self-contained and lazy-loads on first focus.
+            // const SalesDashboardBody(),
+            _buildOverviewTab(),
+            const DocumentsListScreen(),
+          ],
+        ),
+        // FAB removed — Upload now lives in the bottom-nav (between
+        // Dashboard and Profile) so the persistent UI has a single,
+        // canonical Upload entry point.
+      ),
+    );
+  }
+
+  Widget _buildOverviewTab() {
+    return BlocBuilder<HospitalDashboardBloc, HospitalDashboardState>(
+      builder: (context, state) {
+        if (state is HospitalDashboardLoading) {
+          return const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+            ),
+          );
+        }
+
+        if (state is HospitalDashboardError) {
+          return _buildErrorWidget(context, state.message);
+        }
+
+        if (state is HospitalDashboardLoaded) {
+          return _buildOverviewContent(context, state);
+        }
+
+        return const Center(
+          child: Text('No data available'),
+        );
+      },
+    );
+  }
+
+  Widget _buildAnalyticsTab() {
+    return BlocBuilder<SalesBloc, SalesState>(
+      builder: (context, state) {
+        if (state is SalesLoading) {
+          return const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+            ),
+          );
+        }
+
+        if (state is SalesError) {
+          return _buildAnalyticsErrorWidget(context, state.message);
+        }
+
+        if (state is SalesLoaded) {
+          return _buildAnalyticsContent(context, state);
+        }
+
+        return const Center(
+          child: Text('No analytics data available'),
+        );
+      },
+    );
+  }
+
+  Widget _buildErrorWidget(BuildContext context, String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Failed to load dashboard',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              context.read<HospitalDashboardBloc>().add(
+                HospitalDashboardLoadRequested(
+                  dateFrom: _dateFrom,
+                  dateTo: _dateTo,
+                ),
+              );
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00A0A8),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsErrorWidget(BuildContext context, String message) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.error_outline,
+            size: 64,
+            color: Colors.red.shade400,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Failed to load analytics data',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            message,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey.shade600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton.icon(
+            onPressed: () {
+              context.read<SalesBloc>().add(const SalesLoadRequested());
+            },
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00A0A8),
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewContent(BuildContext context, HospitalDashboardLoaded state) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        print('onRefresh');
+        context.read<HospitalDashboardBloc>().add(
+          HospitalDashboardRefreshRequested(
+            dateFrom: _dateFrom,
+            dateTo: _dateTo,
+          ),
+        );
+      },
+      color: const Color(0xFF00A0A8),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // The legacy "POD Dashboard / Hospital document management
+            // overview" gradient banner (_buildHeader) was removed in favour
+            // of a denser month-picker strip here. The month dropdown mirrors
+            // Sales Analytics' behaviour so a user has one consistent way to
+            // pin the period everywhere.
+            _PodDashboardMonthBar(
+              selectedMonth: _selectedMonth,
+              onMonthChanged: _onMonthChanged,
+            ),
+            const SizedBox(height: 10),
+            // KAM filter pill — `null` = "All KAMs in scope" (default).
+            // Picking a KAM narrows every executive KPI card AND every
+            // analytics tab via SalesDashboardFilters.empId, which the
+            // backend honours in both summary-cards and
+            // pod-entity-performance.
+            PodKamFilter(
+              filters: _podDashFilters,
+              selectedEmpId: _selectedKamEmpId,
+              onChanged: (empId) {
+                setState(() => _selectedKamEmpId = empId);
+              },
+            ),
+            const SizedBox(height: 14),
+            // Executive KPIs pulled from the hierarchy-scoped
+            // /api/sales-dashboard/summary-cards endpoint — gives the user
+            // Sales / POD / Coverage / Completion at a glance on the home
+            // screen without opening Sales Analytics.
+            ExecutiveKpiSection(filters: _podDashFilters),
+            const SizedBox(height: 20),
+            // Zone + KAM / Hospital / Stockist analytics — same hierarchy
+            // scope, same month window, same KAM filter. Surfaced via the
+            // dedicated pod-centered-performance + pod-entity-performance
+            // endpoints.
+            PodCenteredPerformanceSection(filters: _podDashFilters),
+            const SizedBox(height: 20),
+            _buildStatsGrid(context, state.dashboardData),
+            const SizedBox(height: 24),
+            _buildRecentDocumentsSection(context, state.recentDocuments),
+            // const SizedBox(height: 24),
+            // _buildQuickActions(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsContent(BuildContext context, SalesLoaded state) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        context.read<SalesBloc>().add(const SalesRefreshRequested());
+      },
+      color: const Color(0xFF00A0A8),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildAnalyticsHeader(context),
+            const SizedBox(height: 24),
+            _buildSummaryStats(state.summaryStats),
+            const SizedBox(height: 24),
+            _buildQuickActions(),
+            const SizedBox(height: 24),
+            _buildHospitalSummary(state.hospitalSummaries),
+            const SizedBox(height: 24),
+            _buildRecentSales(state.salesData),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsHeader(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF00A0A8),
+            const Color(0xFF6EC1C7),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00A0A8).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Icon(
+              Icons.analytics,
+              color: Colors.white,
+              size: 32,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Sales Analytics',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Comprehensive sales analytics',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatsGrid(BuildContext context, Map<String, dynamic> dashboardData) {
+    // print('dashboardData: $dashboardData');
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final w = constraints.maxWidth;
+        final cols = w >= 1024 ? 4 : (w >= 600 ? 3 : 2);
+        final aspect = w >= 1100 ? 1.95 : (w >= 600 ? 1.85 : 1.55);
+        final spacing = cols >= 3 ? 10.0 : 8.0;
+
+        return Container(
+          color: Colors.white,
+          child: GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: cols,
+            crossAxisSpacing: spacing,
+            mainAxisSpacing: spacing,
+            childAspectRatio: aspect,
+            children: [
+        _buildStatCard(
+          'Total Documents',
+          (dashboardData['total_documents'] ?? 0).toString(),
+          Icons.description,
+          const Color(0xFF00A0A8),
+        ),
+        _buildStatCard(
+          'POD Documents',
+          (dashboardData['pod_count'] ?? 0).toString(),
+          Icons.receipt_long,
+          const Color(0xFF4CAF50),
+        ),
+        _buildStatCard(
+          'GRN Documents',
+          (dashboardData['grn_count'] ?? 0).toString(),
+          Icons.inventory,
+          const Color(0xFF2196F3),
+        ),
+        _buildStatCard(
+          'E-Invoices',
+          (dashboardData['einvoice_count'] ?? 0).toString(),
+          Icons.qr_code,
+          const Color(0xFF9C27B0),
+        ),
+        _buildStatCard(
+          'Pending',
+          (dashboardData['pending_count'] ?? 0).toString(),
+          Icons.schedule,
+          const Color(0xFFFF9800),
+        ),
+        _buildStatCard(
+          'Verified',
+          (dashboardData['approved_count'] ?? 0).toString(),
+          Icons.check_circle,
+          const Color(0xFF4CAF50),
+        ),
+        ],
+      ),
+    );
+      },
+    );
+  }
+
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 20,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentDocumentsSection(BuildContext context, List<Map<String, dynamic>> recentDocuments) {
+    print('recentDocuments: $recentDocuments');
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.15),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00A0A8).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.history,
+                  color: Color(0xFF00A0A8),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Recent Documents',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2C3E50),
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => _tabController.animateTo(1),
+                child: const Text(
+                  'View All',
+                  style: TextStyle(
+                    color: Color(0xFF00A0A8),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (recentDocuments.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.description_outlined,
+                      size: 48,
+                      color: Colors.grey,
+                    ),
+                    SizedBox(height: 16),
+                    Text(
+                      'No documents uploaded yet',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: recentDocuments.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final doc = recentDocuments[index];
+                print('doc: $doc');
+                return _buildDocumentItem(context, doc);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDocumentItem(BuildContext context, Map<String, dynamic> doc) {
+    final status = doc['status'] ?? 'Unknown';
+    final type = doc['type'] ?? 'Unknown';
+    final statusColor = _getStatusColor(status);
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: statusColor.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(
+          _getTypeIcon(type),
+          color: statusColor,
+          size: 20,
+        ),
+      ),
+      title: Text(
+        doc['name'] ?? 'Unknown Document',
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                type,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _formatDate(doc['uploaded_at'] ?? ''),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade500,
+            ),
+          ),
+        ],
+      ),
+      trailing: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(
+            doc['size'] ?? '0 MB',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Icon(
+            Icons.arrow_forward_ios,
+            size: 12,
+            color: Colors.grey.shade400,
+          ),
+        ],
+      ),
+      onTap: () {
+        _showTransactionDetails(doc);
+      },
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Quick Actions',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2C3E50),
+            ),
+          ),
+          const SizedBox(height: 16),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: constraints.maxWidth > 600 ? 4 : 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.1,
+                children: [
+                  _buildActionButton(
+                    'View Documents',
+                    Icons.description,
+                    const Color(0xFF4CAF50),
+                    () => _tabController.animateTo(2),
+                  ),
+                  _buildActionButton(
+                    'Sales Analytics',
+                    Icons.insights_rounded,
+                    const Color(0xFF00A0A8),
+                    () => _tabController.animateTo(1),
+                  ),
+                  _buildActionButton(
+                    'Target vs Achievement',
+                    Icons.flag_rounded,
+                    const Color(0xFF6366F1),
+                    () => _tabController.animateTo(1),
+                  ),
+                  _buildActionButton(
+                    'Overview',
+                    Icons.dashboard,
+                    const Color(0xFF9C27B0),
+                    () => _tabController.animateTo(0),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(String title, IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(height: 6),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryStats(Map<String, dynamic> stats) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF00A0A8),
+            const Color(0xFF6EC1C7),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00A0A8).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.analytics,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Sales Overview',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Comprehensive sales analytics',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return GridView.count(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisCount: constraints.maxWidth > 600 ? 4 : 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: constraints.maxWidth > 600 ? 1.2 : 1.3,
+                children: [
+                  _buildAnalyticsStatCard(
+                    'Total Sales',
+                    '₹${_formatAmount(stats['total_sales'] ?? 0)}',
+                    Icons.currency_rupee,
+                    Colors.white,
+                  ),
+                  _buildAnalyticsStatCard(
+                    'Transactions',
+                    '${stats['total_transactions'] ?? 0}',
+                    Icons.receipt_long,
+                    Colors.white,
+                  ),
+                  _buildAnalyticsStatCard(
+                    'Avg. Value',
+                    '₹${_formatAmount(stats['average_transaction_value'] ?? 0)}',
+                    Icons.trending_up,
+                    Colors.white,
+                  ),
+                  _buildAnalyticsStatCard(
+                    'Growth',
+                    '${stats['monthly_growth'] ?? 0}%',
+                    Icons.show_chart,
+                    Colors.white,
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsStatCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 6),
+          Flexible(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              title,
+              style: TextStyle(
+                fontSize: 10,
+                color: color.withOpacity(0.8),
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHospitalSummary(List<dynamic> hospitalSummaries) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Top Hospitals',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2C3E50),
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => _tabController.animateTo(1),
+                child: const Text(
+                  'View All',
+                  style: TextStyle(
+                    color: Color(0xFF00A0A8),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...hospitalSummaries.take(3).map((summary) => _buildSummaryItem(
+            summary.hospitalName,
+            '₹${_formatAmount(summary.totalAmount)}',
+            '${summary.totalTransactions} transactions',
+            Icons.local_hospital,
+            const Color(0xFF00A0A8),
+          )).toList(),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildSummaryItem(String title, String amount, String subtitle, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Text(
+            amount,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentSales(List<dynamic> salesData) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recent Sales',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2C3E50),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...salesData.take(5).map((sale) => _buildSaleItem(sale)).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSaleItem(dynamic sale) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _getStatusColor(sale.status).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(
+              _getTypeIcon(sale.documentType),
+              color: _getStatusColor(sale.status),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  sale.productName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '${sale.hospitalName} • ${sale.stockistName}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '₹${_formatAmount(sale.totalAmount)}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF00A0A8),
+                ),
+              ),
+              Text(
+                sale.date,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatAmount(double amount) {
+    if (amount >= 100000) {
+      return '${(amount / 100000).toStringAsFixed(1)}L';
+    } else if (amount >= 1000) {
+      return '${(amount / 1000).toStringAsFixed(1)}K';
+    } else {
+      return amount.toStringAsFixed(0);
+    }
+  }
+
+  String _formatDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      final now = DateTime.now();
+      final difference = now.difference(date);
+
+      if (difference.inDays > 0) {
+        return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
+      } else if (difference.inHours > 0) {
+        return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
+      } else if (difference.inMinutes > 0) {
+        return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
+      } else {
+        return 'Just now';
+      }
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+      case 'verified':
+        return Colors.green;
+      case 'pending':
+        return Colors.orange;
+      case 'processed':
+        return Colors.blue;
+      case 'rejected':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getTypeIcon(String type) {
+    switch (type.toUpperCase()) {
+      case 'POD':
+        return Icons.receipt_long;
+      case 'GRN':
+        return Icons.inventory;
+      case 'E-INVOICE':
+        return Icons.qr_code;
+      default:
+        return Icons.description;
+    }
+  }
+
+  void _showTransactionDetails(Map<String, dynamic> doc) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(20),
+            ),
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.symmetric(vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(
+                                doc['status'] ?? '',
+                              ).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              _getTypeIcon(doc['type'] ?? ''),
+                              color: _getStatusColor(
+                                doc['status'] ?? '',
+                              ),
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  doc['name'] ?? 'Unknown Document',
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 4,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _getStatusColor(
+                                      doc['status'] ?? '',
+                                    ).withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    doc['status'] ?? 'Unknown',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: _getStatusColor(
+                                        doc['status'] ?? '',
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      _buildTransactionDetailSection('Transaction Information', [
+                        _buildTransactionDetailRow(
+                          'Type',
+                          doc['type'] ?? 'Unknown',
+                        ),
+                        _buildTransactionDetailRow(
+                          'Status',
+                          doc['status'] ?? 'Unknown',
+                        ),
+                        _buildTransactionDetailRow(
+                          'Size',
+                          doc['size'] ?? '0 MB',
+                        ),
+                        _buildTransactionDetailRow(
+                          'Upload Date',
+                          _formatDetailedDate(doc['uploaded_at'] ?? ''),
+                        ),
+                      ]),
+                      const SizedBox(height: 20),
+                      _buildTransactionDetailSection('Business Information', [
+                        _buildTransactionDetailRow(
+                          'Stockist',
+                          doc['stockist_name'] ?? 'Unknown',
+                        ),
+                        _buildTransactionDetailRow(
+                          'Hospital',
+                          doc['hospital_name'] ?? 'Unknown',
+                        ),
+                        _buildTransactionDetailRow(
+                          'Invoice Number',
+                          doc['invoice_number'] ?? 'N/A',
+                        ),
+                        _buildTransactionDetailRow(
+                          'Amount',
+                          doc['total_amount'] ?? 'N/A',
+                        ),
+                      ]),
+                      // const SizedBox(height: 20),
+                      // _buildActionButtons(doc),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransactionDetailSection(String title, List<Widget> children) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C3E50),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(children: children),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTransactionDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade600,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(Map<String, dynamic> doc) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              // Navigate to full document view
+              _tabController.animateTo(2);
+            },
+            icon: const Icon(Icons.visibility),
+            label: const Text('View Full Details'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF00A0A8),
+              side: const BorderSide(color: Color(0xFF00A0A8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              // Add any additional action here
+            },
+            icon: const Icon(Icons.download),
+            label: const Text('Download'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00A0A8),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatDetailedDate(String dateString) {
+    try {
+      final date = DateTime.parse(dateString);
+      return '${date.day}/${date.month}/${date.year} at ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'Unknown';
+    }
+  }
+}
+
+/// Compact month-picker strip pinned to the top of the POD Dashboard tab.
+///
+/// Mirrors the dropdown styling + 24-month rolling window used by the Sales
+/// Analytics filter bar so the two surfaces feel consistent. Lifting the
+/// selected month into the parent's state means the same value drives
+/// (a) the Executive KPI section (via its `filters` prop) and (b) the
+/// HospitalDashboard BLoC's reload event — one source of truth, no drift.
+class _PodDashboardMonthBar extends StatelessWidget {
+  const _PodDashboardMonthBar({
+    required this.selectedMonth,
+    required this.onMonthChanged,
+  });
+
+  final DateTime selectedMonth;
+  final ValueChanged<DateTime> onMonthChanged;
+
+  static String _key(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    // Last 24 months including the current month, newest first.
+    final months = List<DateTime>.generate(
+      24,
+      (i) => DateTime(now.year, now.month - i, 1),
+    );
+    final selectedKey = _key(selectedMonth);
+    final labelFmt = DateFormat('MMM yyyy');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8EEF2)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.025),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00A0A8).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.calendar_month_rounded,
+              color: Color(0xFF00A0A8),
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Text(
+            'Month',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Color(0xFF2C3E50),
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F4F8),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: selectedKey,
+                isDense: true,
+                borderRadius: BorderRadius.circular(12),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF2C3E50),
+                ),
+                items: [
+                  for (final m in months)
+                    DropdownMenuItem<String>(
+                      value: _key(m),
+                      child: Text(labelFmt.format(m)),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  final parts = v.split('-');
+                  final y = int.parse(parts[0]);
+                  final mm = int.parse(parts[1]);
+                  onMonthChanged(DateTime(y, mm, 1));
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

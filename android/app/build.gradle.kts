@@ -4,7 +4,7 @@ import java.io.FileInputStream
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
-    id("com.google.gms.google-services")
+    // id("com.google.gms.google-services")
     // END: FlutterFire Configuration
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
@@ -25,6 +25,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // POD / SECONDARY SALES: Required by flutter_local_notifications and
+        // google_mlkit_document_scanner for Java 8+ API backporting.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -42,10 +45,13 @@ android {
 
     defaultConfig {
         applicationId = "com.globalspace.himalaya"
-        minSdk = flutter.minSdkVersion
+        // POD / SECONDARY SALES: minSdk raised to 30 (Android 11) to support
+        // google_mlkit_document_scanner and flutter_doc_scanner.
+        minSdk = 30
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        multiDexEnabled = true
     }
 
     buildTypes {
@@ -59,4 +65,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // POD / SECONDARY SALES: Core library desugaring for Java 8+ API backporting.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }

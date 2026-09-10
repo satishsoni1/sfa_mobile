@@ -5,8 +5,10 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_linux
   file_selector_linux
+  flutter_doc_scanner
   printing
   record_linux
+  syncfusion_pdfviewer_linux
   url_launcher_linux
 )
 

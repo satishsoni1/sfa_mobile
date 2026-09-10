@@ -1,4 +1,4 @@
-﻿import '../tp_deviation/tp_deviation_history_screen.dart';
+import '../tp_deviation/tp_deviation_history_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -62,6 +62,15 @@ import '../../providers/auth_provider.dart';
 import '../../data/services/api_service.dart';
 import '../../data/models/user_model.dart';
 import '../webview/internal_webview_screen.dart';
+// ============================================================
+// POD / SECONDARY SALES INTEGRATION
+// ------------------------------------------------------------
+// POD is an isolated feature (lib/features/pod/) using BLoC.
+// SFA continues using its existing Provider architecture.
+// Authentication integration: intentionally deferred.
+// Firebase integration:       intentionally deferred.
+// ============================================================
+import '../../features/pod/pod.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -1351,6 +1360,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "TP Deviation Request",
         Colors.amber.shade700,
         () => _navigateTo(const TpDeviationHistoryScreen()),
+      ),
+      // ============================================================
+      // POD / SECONDARY SALES INTEGRATION
+      // ============================================================
+      _MenuAction(
+        Icons.local_shipping_outlined,
+        "Secondary Sales",
+        Colors.teal.shade700,
+        () => _navigateTo(const PodEntryScreen()),
       ),
     ];
     final aiIntel = [

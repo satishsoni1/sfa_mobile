@@ -1,0 +1,201 @@
+﻿import 'dart:convert';
+import 'package:zforce/features/pod/config/pod_config.dart';
+import 'package:zforce/features/pod/services/api_client.dart';
+
+class HospitalDashboardService {
+  final ApiClient _apiClient = ApiClient();
+
+  Future<Map<String, dynamic>> getDashboardStats({String? dateFrom, String? dateTo}) async {
+    try {
+      // Append optional month-window query params so the dashboard counts
+      // honour the user's selected month on the POD Dashboard tab. The
+      // backend (`appApi/DashboardApiController::overview`) reads
+      // date_from/date_to and filters pods.pod_date / grns.grn_date /
+      // e_invoices.invoice_date when both are present.
+      final qp = <String, String>{};
+      if (dateFrom != null && dateFrom.isNotEmpty) qp['date_from'] = dateFrom;
+      if (dateTo != null && dateTo.isNotEmpty) qp['date_to'] = dateTo;
+      final uri = Uri.parse('${API_BASE_URL}dashboard/overview')
+          .replace(queryParameters: qp.isEmpty ? null : qp);
+      final response = await _apiClient.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+        },
+      );
+      print(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return data['data'];
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch dashboard data');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      print('error: $e');
+      // Return mock data for development
+      return _getMockStats();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentDocuments({String? dateFrom, String? dateTo}) async {
+    try {
+      // Mirror the month window into the documents-list query so the
+      // "Recent Documents" panel stays consistent with the headline KPIs
+      // when the user switches months on the POD Dashboard.
+      final qp = <String, String>{'limit': '10'};
+      if (dateFrom != null && dateFrom.isNotEmpty) qp['start_date'] = dateFrom;
+      if (dateTo != null && dateTo.isNotEmpty) qp['end_date'] = dateTo;
+      final uri = Uri.parse('${API_BASE_URL}dashboard/documents/all')
+          .replace(queryParameters: qp);
+      final response = await _apiClient.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['data'] ?? []);
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch documents');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      print('error: $e');
+      // Return mock data for development
+      return _getMockDocuments();
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllDocuments({
+    String? filter,
+    String? searchQuery,
+  }) async {
+    try {
+      final queryParams = <String, String>{};
+      if (filter != null && filter != 'All') {
+        queryParams['type'] = filter;
+      }
+      if (searchQuery != null && searchQuery.isNotEmpty) {
+        queryParams['search'] = searchQuery;
+      }
+
+      final uri = Uri.parse('${API_BASE_URL}dashboard/documents/all').replace(
+        queryParameters: queryParams,
+      );
+
+      final response = await _apiClient.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return List<Map<String, dynamic>>.from(data['data'] ?? []);
+        } else {
+          throw Exception(data['message'] ?? 'Failed to fetch documents');
+        }
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.body}');
+      }
+    } catch (e) {
+      print('error: $e');
+      // Return mock data for development
+      return _getMockDocuments();
+    }
+  }
+
+  Map<String, dynamic> _getMockStats() {
+    return {
+      'total_documents': 0,
+      'pod_count': 0,
+      'grn_count': 0,
+      'einvoice_count': 0,
+      'pending_count': 0,
+      'approved_count': 0,
+      'rejected_count': 0,
+      'processing_count': 0,
+      'total_amount': 0,
+      'monthly_uploads': 0,
+      'weekly_uploads': 0,
+    };
+  }
+
+  List<Map<String, dynamic>> _getMockDocuments() {
+    // return [
+    //   {
+    //     'id': '1',
+    //     'name': 'POD_2024_001.pdf',
+    //     'type': 'POD',
+    //     'status': 'Approved',
+    //     'uploaded_at': '2024-01-15T10:30:00Z',
+    //     'size': '2.4 MB',
+    //     'stockist': 'ABC Medical Store',
+    //     'hospital': 'City Hospital',
+    //     'invoice_number': 'INV-2024-001',
+    //     'amount': '₹15,000',
+    //   },
+    //   {
+    //     'id': '2',
+    //     'name': 'E-Invoice_2024_002.pdf',
+    //     'type': 'E-INVOICE',
+    //     'status': 'Pending',
+    //     'uploaded_at': '2024-01-15T09:15:00Z',
+    //     'size': '1.8 MB',
+    //     'stockist': 'XYZ Pharmacy',
+    //     'hospital': 'General Hospital',
+    //     'invoice_number': 'INV-2024-002',
+    //     'amount': '₹8,500',
+    //   },
+    //   {
+    //     'id': '3',
+    //     'name': 'GRN_2024_003.pdf',
+    //     'type': 'GRN',
+    //     'status': 'Approved',
+    //     'uploaded_at': '2024-01-14T16:45:00Z',
+    //     'size': '3.2 MB',
+    //     'stockist': 'MediCare Store',
+    //     'hospital': 'Central Hospital',
+    //     'invoice_number': 'INV-2024-003',
+    //     'amount': '₹22,000',
+    //   },
+    //   {
+    //     'id': '4',
+    //     'name': 'POD_2024_004.pdf',
+    //     'type': 'POD',
+    //     'status': 'Processing',
+    //     'uploaded_at': '2024-01-14T14:20:00Z',
+    //     'size': '2.1 MB',
+    //     'stockist': 'Health Plus',
+    //     'hospital': 'Metro Hospital',
+    //     'invoice_number': 'INV-2024-004',
+    //     'amount': '₹12,500',
+    //   },
+    //   {
+    //     'id': '5',
+    //     'name': 'E-Invoice_2024_005.pdf',
+    //     'type': 'E-INVOICE',
+    //     'status': 'Approved',
+    //     'uploaded_at': '2024-01-14T11:30:00Z',
+    //     'size': '1.9 MB',
+    //     'stockist': 'Life Care',
+    //     'hospital': 'Regional Hospital',
+    //     'invoice_number': 'INV-2024-005',
+    //     'amount': '₹9,800',
+    //   },
+    // ];
+  
+  return [];
+  }
+}
