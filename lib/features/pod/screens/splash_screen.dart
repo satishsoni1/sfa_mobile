@@ -89,8 +89,8 @@ class _SplashScreenState extends State<SplashScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF00A0A8),
-              const Color(0xFF6EC1C7),
+              const Color(0xFF450095),
+              const Color(0xFF8E24AA),
               const Color(0xFFB24B9E),
             ],
             stops: const [0.0, 0.6, 1.0],
@@ -144,7 +144,7 @@ class _SplashScreenState extends State<SplashScreen>
                     child: Column(
                       children: [
                         const Text(
-                          'Zydus Vistaar',
+                          'Secondary Sales',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 32,
@@ -154,7 +154,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Zydus Healthcare KAM CRM Platform',
+                          'KAM CRM Platform',
                           style: TextStyle(
                             color: Colors.white.withOpacity(0.9),
                             fontSize: 16,

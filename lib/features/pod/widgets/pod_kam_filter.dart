@@ -70,7 +70,7 @@ class _PodKamFilterState extends State<PodKamFilter> {
     final label = selected == null
         ? 'All KAMs'
         : (_nameCache[selected] ?? 'KAM $selected');
-    final accent = const Color(0xFF00A0A8);
+    final accent = const Color(0xFF450095);
     return InkWell(
       onTap: _openPicker,
       borderRadius: BorderRadius.circular(12),
@@ -460,13 +460,13 @@ class _KamPickerSheetState extends State<_KamPickerSheet> {
             dense: true,
             leading: CircleAvatar(
               radius: 14,
-              backgroundColor: const Color(0xFF00A0A8).withOpacity(0.12),
+              backgroundColor: const Color(0xFF450095).withOpacity(0.12),
               child: Text(
                 r.name.isNotEmpty ? r.name.characters.first.toUpperCase() : '?',
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF00A0A8),
+                  color: Color(0xFF450095),
                 ),
               ),
             ),
@@ -491,7 +491,7 @@ class _KamPickerSheetState extends State<_KamPickerSheet> {
             ),
             trailing: selected
                 ? const Icon(Icons.check_circle_rounded,
-                    size: 18, color: Color(0xFF00A0A8))
+                    size: 18, color: Color(0xFF450095))
                 : const Icon(Icons.chevron_right_rounded,
                     size: 18, color: Color(0xFF94A3B8)),
             onTap: r.empId.isEmpty

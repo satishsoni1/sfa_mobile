@@ -106,7 +106,7 @@ class _PodEntryScreenState extends State<PodEntryScreen> {
         // While the bridge is running, show a branded loading screen.
         if (snapshot.connectionState != ConnectionState.done) {
           return const Scaffold(
-            backgroundColor: Color(0xFF00A0A8),
+            backgroundColor: Color(0xFF450095),
             body: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -169,7 +169,7 @@ class _PodEntryScreenState extends State<PodEntryScreen> {
         });
 
         return const Scaffold(
-          backgroundColor: Color(0xFF00A0A8),
+          backgroundColor: Color(0xFF450095),
           body: Center(
             child: CircularProgressIndicator(
               valueColor: AlwaysStoppedAnimation<Color>(Colors.white),

@@ -154,7 +154,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       barrierDismissible: false,
       builder: (_) => const Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
         ),
       ),
     );
@@ -191,7 +191,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         messenger.showSnackBar(
           const SnackBar(
             content: Text(
-              'PODs are still being processed. Please try again shortly.',
+              'Documents are still being processed. Please try again shortly.',
             ),
           ),
         );
@@ -254,7 +254,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+          valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
         ),
       );
     }
@@ -266,7 +266,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     return RefreshIndicator(
       onRefresh: _load,
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       child: ListView.separated(
         controller: _scrollController,
         padding: const EdgeInsets.all(16),
@@ -372,7 +372,7 @@ class _NotificationCard extends StatelessWidget {
   bool get _isActionable =>
       notification.data?['type']?.toString() == 'pod_batch_review';
 
-  static const Color _actionableAccent = Color(0xFF00A0A8);
+  static const Color _actionableAccent = Color(0xFF450095);
 
   @override
   Widget build(BuildContext context) {

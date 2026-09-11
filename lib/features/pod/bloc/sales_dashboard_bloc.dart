@@ -1,4 +1,4 @@
-﻿import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:zforce/features/pod/bloc/sales_dashboard_event.dart';
 import 'package:zforce/features/pod/bloc/sales_dashboard_state.dart';
@@ -135,7 +135,7 @@ class SalesDashboardBloc extends Bloc<SalesDashboardEvent, SalesDashboardState> 
     // "Connection closed before full header was received". Keep the
     // typed value in state so the text field doesn't jump, but DO NOT
     // wipe the current list or fire the fetch until the query is
-    // either cleared (length 0 â†’ reload) or â‰¥ 2 chars (real filter).
+    // either cleared (length 0 -> reload) or >= 2 chars (real filter).
     final trimmed = _search.trim();
     if (trimmed.isNotEmpty && trimmed.length < 2) {
       emit(current.copyWith(leaderboardSearch: _search));

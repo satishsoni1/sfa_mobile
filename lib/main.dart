@@ -1,9 +1,9 @@
 // import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-// import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
-// import 'firebase_options.dart';
+import 'firebase_options.dart';
 import 'providers/report_provider.dart';
 import 'providers/auth_provider.dart';
 import 'presentation/dashboard/dashboard_screen.dart';
@@ -14,14 +14,10 @@ void main() async {
   // Required before any async work in main().
   WidgetsFlutterBinding.ensureInitialized();
 
-  // ============================================================
-  // TEMPORARILY COMMENTED: Firebase Initialization
-  // Uncomment this block when Firebase google-services.json is configured.
-  // await Firebase.initializeApp(
-  //   options: DefaultFirebaseOptions.currentPlatform,
-  // );
-  // debugPrint('[Firebase] Initialized successfully.');
-  // ============================================================
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  debugPrint('[Firebase] Initialized successfully.');
   
   runApp(
     MultiProvider(

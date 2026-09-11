@@ -15,7 +15,7 @@ class HospitalDashboardPane extends StatelessWidget {
         if (state is HospitalDashboardLoading) {
           return const Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
             ),
           );
         }
@@ -73,7 +73,7 @@ class HospitalDashboardPane extends StatelessWidget {
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
             ),
           ),
@@ -89,7 +89,7 @@ class HospitalDashboardPane extends StatelessWidget {
           const HospitalDashboardRefreshRequested(),
         );
       },
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -113,8 +113,8 @@ class HospitalDashboardPane extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF00A0A8),
-            const Color(0xFF6EC1C7),
+            const Color(0xFF450095),
+            const Color(0xFF8E24AA),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -122,7 +122,7 @@ class HospitalDashboardPane extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00A0A8).withOpacity(0.3),
+            color: const Color(0xFF450095).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -148,7 +148,7 @@ class HospitalDashboardPane extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'POD Dashboard',
+                  'Secondary Sales Dashboard',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
@@ -184,10 +184,10 @@ class HospitalDashboardPane extends StatelessWidget {
           'Total Documents',
           (dashboardData['total_documents'] ?? 0).toString(),
           Icons.description,
-          const Color(0xFF00A0A8),
+          const Color(0xFF450095),
         ),
         _buildStatCard(
-          'POD Documents',
+          'Secondary Sales Document',
           (dashboardData['pod_count'] ?? 0).toString(),
           Icons.receipt_long,
           const Color(0xFF4CAF50),
@@ -298,12 +298,12 @@ class HospitalDashboardPane extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00A0A8).withOpacity(0.1),
+                  color: const Color(0xFF450095).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.history,
-                  color: Color(0xFF00A0A8),
+                  color: Color(0xFF450095),
                   size: 20,
                 ),
               ),
@@ -329,7 +329,7 @@ class HospitalDashboardPane extends StatelessWidget {
                 child: const Text(
                   'View All',
                   style: TextStyle(
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                     fontWeight: FontWeight.w600,
                   ),
                 ),

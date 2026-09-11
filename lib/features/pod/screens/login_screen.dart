@@ -303,7 +303,7 @@ class _LoginScreenState extends State<LoginScreen>
                 child: const Text(
                   'OK',
                   style: TextStyle(
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
                   ),
@@ -338,9 +338,9 @@ class _LoginScreenState extends State<LoginScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF00A0A8).withOpacity(0.1),
+              const Color(0xFF450095).withOpacity(0.1),
               Colors.white,
-              const Color(0xFF6EC1C7).withOpacity(0.05),
+              const Color(0xFF8E24AA).withOpacity(0.05),
             ],
           ),
         ),
@@ -400,14 +400,14 @@ class _LoginScreenState extends State<LoginScreen>
       padding: const EdgeInsets.all(32),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [const Color(0xFF00A0A8), const Color(0xFF00858C)],
+          colors: [const Color(0xFF450095), const Color(0xFF311B92)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(32),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00A0A8).withOpacity(0.4),
+            color: const Color(0xFF450095).withOpacity(0.4),
             blurRadius: 30,
             offset: const Offset(0, 15),
             spreadRadius: -5,
@@ -460,7 +460,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'Sign in to continue to Zydus Vistaar',
+            'Sign in to continue to..',
             style: TextStyle(
               color: Colors.white.withOpacity(0.9),
               fontSize: 16,
@@ -520,7 +520,7 @@ class _LoginScreenState extends State<LoginScreen>
                   _obscure
                       ? Icons.visibility_outlined
                       : Icons.visibility_off_outlined,
-                  color: const Color(0xFF00A0A8),
+                  color: const Color(0xFF450095),
                 ),
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
@@ -579,10 +579,10 @@ class _LoginScreenState extends State<LoginScreen>
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF00A0A8).withOpacity(0.1),
+                color: const Color(0xFF450095).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Icon(icon, color: const Color(0xFF00A0A8), size: 20),
+              child: Icon(icon, color: const Color(0xFF450095), size: 20),
             ),
             suffixIcon: suffixIcon,
             filled: true,
@@ -597,7 +597,7 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
-              borderSide: const BorderSide(color: Color(0xFF00A0A8), width: 2),
+              borderSide: const BorderSide(color: Color(0xFF450095), width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(16),
@@ -632,7 +632,7 @@ class _LoginScreenState extends State<LoginScreen>
                 colors:
                     _isLoading
                         ? [Colors.grey.shade400, Colors.grey.shade500]
-                        : [const Color(0xFF00A0A8), const Color(0xFF00858C)],
+                        : [const Color(0xFF450095), const Color(0xFF311B92)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
@@ -642,7 +642,7 @@ class _LoginScreenState extends State<LoginScreen>
                       ? []
                       : [
                         BoxShadow(
-                          color: const Color(0xFF00A0A8).withOpacity(0.4),
+                          color: const Color(0xFF450095).withOpacity(0.4),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                           spreadRadius: -5,

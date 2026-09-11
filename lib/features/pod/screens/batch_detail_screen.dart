@@ -95,7 +95,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
         : _selectedFailed.toList();
     if (targets.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one failed POD to retry')),
+        const SnackBar(content: Text('Select at least one failed document to retry')),
       );
       return;
     }
@@ -303,7 +303,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
             ),
             const SizedBox(width: 12),
             Text(
-              'Checking for failed PODs…',
+              'Checking for failed documents…',
               style: TextStyle(color: Colors.orange.shade700),
             ),
           ],
@@ -325,7 +325,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'No failed PODs in this batch',
+                'No failed documents in this batch',
                 style: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: Colors.green.shade800,
@@ -349,7 +349,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
           initiallyExpanded: true,
           leading: Icon(Icons.error_outline_rounded, color: Colors.red.shade700),
           title: Text(
-            'Failed PODs (${_failed.length})',
+            'Failed Documents (${_failed.length})',
             style: TextStyle(
               fontWeight: FontWeight.w700,
               color: Colors.red.shade800,

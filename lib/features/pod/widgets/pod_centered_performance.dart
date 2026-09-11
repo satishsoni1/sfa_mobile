@@ -140,9 +140,9 @@ class _PodCenteredPerformanceSectionState
                 color: Colors.transparent,
                 child: TabBar(
                   controller: _tabCtl,
-                  labelColor: const Color(0xFF00A0A8),
+                  labelColor: const Color(0xFF450095),
                   unselectedLabelColor: Colors.grey,
-                  indicatorColor: const Color(0xFF00A0A8),
+                  indicatorColor: const Color(0xFF450095),
                   indicatorWeight: 2.4,
                   labelStyle:
                       const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700),
@@ -342,7 +342,7 @@ class _ZoneRowTile extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  '${_inr(row.salesValue)} sales · ${_inr(row.zydusPodValue)} zydus',
+                  '${_inr(row.salesValue)} sales · ${_inr(row.zydusPodValue)} secondary',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style:
@@ -423,7 +423,7 @@ class _EntityTabState extends State<_EntityTab> {
   int _total = 0;
   int _page = 1;
   String _search = '';
-  String _sortBy = 'sales'; // 'sales' | 'zydus' | 'completion' | 'processed'
+  String _sortBy = 'sales'; // 'sales' | 'secondary' | 'completion' | 'processed'
   String _sortDir = 'desc';
   Object? _lastError;
   // True when the filters / search / sort changed while this tab was
@@ -703,8 +703,8 @@ class _EntityTabState extends State<_EntityTab> {
                         ),
                       ),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF00A0A8),
-                        side: const BorderSide(color: Color(0xFF00A0A8)),
+                        foregroundColor: const Color(0xFF450095),
+                        side: const BorderSide(color: Color(0xFF450095)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
                         ),
@@ -752,7 +752,7 @@ class _SearchAndSortBar extends StatelessWidget {
 
   static const _opts = <Map<String, String>>[
     {'key': 'sales', 'label': 'Sales'},
-    // {'key': 'zydus', 'label': 'Zydus'},
+    // {'key': 'secondary', 'label': 'Zydus'},
     {'key': 'completion', 'label': '%'},
     {'key': 'processed', 'label': 'Processed'},
   ];
@@ -835,7 +835,7 @@ class _SortChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = const Color(0xFF00A0A8);
+    final accent = const Color(0xFF450095);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
@@ -937,7 +937,7 @@ class _EntityTile extends StatelessWidget {
                 height: 26,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00A0A8).withOpacity(0.1),
+                  color: const Color(0xFF450095).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -945,7 +945,7 @@ class _EntityTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                   ),
                 ),
               ),
@@ -1086,10 +1086,10 @@ class _SectionHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: const Color(0xFF00A0A8).withOpacity(0.1),
+            color: const Color(0xFF450095).withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: const Color(0xFF00A0A8), size: 16),
+          child: Icon(icon, color: const Color(0xFF450095), size: 16),
         ),
         const SizedBox(width: 8),
         Text(

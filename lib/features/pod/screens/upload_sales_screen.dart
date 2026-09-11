@@ -94,8 +94,8 @@ class _UploadSalesScreenState extends State<UploadSalesScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF00A0A8),
-            const Color(0xFF6EC1C7),
+            const Color(0xFF450095),
+            const Color(0xFF8E24AA),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -103,7 +103,7 @@ class _UploadSalesScreenState extends State<UploadSalesScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00A0A8).withOpacity(0.3),
+            color: const Color(0xFF450095).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -428,15 +428,15 @@ class _UploadSalesScreenState extends State<UploadSalesScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF00A0A8).withOpacity(0.1),
+        color: const Color(0xFF450095).withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF00A0A8).withOpacity(0.3)),
+        border: Border.all(color: const Color(0xFF450095).withOpacity(0.3)),
       ),
       child: Row(
         children: [
           const Icon(
             Icons.calculate,
-            color: Color(0xFF00A0A8),
+            color: Color(0xFF450095),
           ),
           const SizedBox(width: 12),
           const Flexible(
@@ -454,7 +454,7 @@ class _UploadSalesScreenState extends State<UploadSalesScreen> {
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: Color(0xFF00A0A8),
+                color: Color(0xFF450095),
               ),
               overflow: TextOverflow.ellipsis,
             ),
@@ -474,7 +474,7 @@ class _UploadSalesScreenState extends State<UploadSalesScreen> {
           child: ElevatedButton(
             onPressed: isLoading ? null : _submitForm,
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(

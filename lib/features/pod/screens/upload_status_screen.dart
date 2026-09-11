@@ -174,7 +174,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
             ? 'Extraction complete'
             : (isFailed ? 'Extraction failed' : 'Processing…'),
         icon: Icons.cloud_upload,
-        color: const Color(0xFF00A0A8),
+        color: const Color(0xFF450095),
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -215,7 +215,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
                 value: _progressPercentage > 0 ? _progressPercentage / 100 : null,
                 minHeight: 8,
                 backgroundColor: Colors.teal.withOpacity(0.15),
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF00A0A8)),
+                valueColor: const AlwaysStoppedAnimation(Color(0xFF450095)),
               ),
               const SizedBox(height: 8),
               Text(
@@ -349,7 +349,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
           children: [
             Row(
               children: [
-                Icon(icon, color: const Color(0xFF00A0A8), size: 20),
+                Icon(icon, color: const Color(0xFF450095), size: 20),
                 const SizedBox(width: 8),
                 Text(
                   title,
@@ -454,7 +454,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
         ? 'Processing failed. Please retry the upload or contact support.'
         : (isTerminalNoNew
             ? (_terminalMessage ??
-                'No new PODs were created — the invoices in this upload match records that already exist. Use the dashboard to review existing PODs.')
+                'No new documents were created — the invoices in this upload match records that already exist. Use the dashboard to review existing documents.')
             : (isCompleted
                 ? 'Extraction finished. You will be redirected to review the hospitals detected in the invoices.'
                 : 'Your files are being processed. This screen updates automatically every few seconds.'));
@@ -497,7 +497,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
             icon: const Icon(Icons.dashboard),
             label: const Text('Go to Dashboard'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(

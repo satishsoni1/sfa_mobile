@@ -149,7 +149,7 @@ class _KpiGrid extends StatelessWidget {
             ? '—'
             : _inr(summary.totalPodValue!),
         subtitle: summary.podsUploadedCount == null
-            ? 'PODs'
+            ? 'Secondary Sales'
             : '${_int(summary.podsUploadedCount!)} Documents',
         icon: Icons.cloud_upload_rounded,
         gradient: const [Color(0xFFF59E0B), Color(0xFFFBBF24)], // orange/amber
@@ -275,12 +275,12 @@ class _SectionHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: const Color(0xFF00A0A8).withOpacity(0.1),
+            color: const Color(0xFF450095).withOpacity(0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(
             Icons.insights_rounded,
-            color: Color(0xFF00A0A8),
+            color: Color(0xFF450095),
             size: 18,
           ),
         ),

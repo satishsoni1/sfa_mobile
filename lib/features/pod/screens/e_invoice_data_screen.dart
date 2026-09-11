@@ -79,7 +79,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
       title: 'E-Invoice Data',
       subtitle: _hasValidData ? 'QR Code Information' : 'No Data Available',
       icon: Icons.receipt_long,
-      color: const Color(0xFF6EC1C7),
+      color: const Color(0xFF8E24AA),
       // actions: _hasValidData
       //     ? [
       //         IconButton(
@@ -112,7 +112,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: _hasValidData
-                  ? [const Color(0xFF6EC1C7), const Color(0xFF4ECDC4)]
+                  ? [const Color(0xFF8E24AA), const Color(0xFF4ECDC4)]
                   : [const Color(0xFFFF9800), const Color(0xFFFFB74D)],
             ),
           ),
@@ -265,7 +265,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'This POD doesn\'t have E-Invoice data yet.\nChoose an option below to add invoice information.',
+                    'This document doesn\'t have E-Invoice data yet.\nChoose an option below to add invoice information.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 16,
@@ -283,7 +283,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _isLoading 
                             ? Colors.grey 
-                            : const Color(0xFF6EC1C7),
+                            : const Color(0xFF8E24AA),
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
@@ -311,7 +311,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
                       label: Text(_isLoading 
                           ? 'Processing...' 
                           : widget.podId != null && widget.podId!.isNotEmpty
-                              ? 'Auto Fetch from POD'
+                              ? 'Auto Fetch from Document'
                               : 'Auto Fetch from File'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF4CAF50),
@@ -376,14 +376,14 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
               icon: Icons.qr_code_scanner,
               title: 'Manual Scan',
               description: 'Use camera to scan QR code from physical document',
-              color: const Color(0xFF6EC1C7),
+              color: const Color(0xFF8E24AA),
             ),
             const SizedBox(height: 12),
             _buildHelpItem(
               icon: Icons.auto_fix_high,
               title: 'Auto Fetch',
               description: widget.podId != null && widget.podId!.isNotEmpty
-                  ? 'Automatically extract QR data from POD file using API'
+                  ? 'Automatically extract QR data from document using API'
                   : 'Automatically extract QR data from uploaded PDF file',
               color: const Color(0xFF4CAF50),
             ),
@@ -461,11 +461,11 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
         controller: _tabController,
         indicator: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: const Color(0xFF6EC1C7),
+          color: const Color(0xFF8E24AA),
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         labelColor: Colors.white,
-        unselectedLabelColor: const Color(0xFF6EC1C7),
+        unselectedLabelColor: const Color(0xFF8E24AA),
         labelStyle: const TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 14,
@@ -499,7 +499,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
           _buildSectionCard(
             title: 'Invoice Information',
             icon: Icons.receipt,
-            color: const Color(0xFF6EC1C7),
+            color: const Color(0xFF8E24AA),
             children: [
               if (basicFields['DocNo'] != null)
                 _buildInfoRow('Invoice Number', basicFields['DocNo']),
@@ -657,7 +657,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
               icon: const Icon(
                 Icons.open_in_full,
                 size: 16,
-                color: Color(0xFF6EC1C7),
+                color: Color(0xFF8E24AA),
               ),
               constraints: const BoxConstraints(
                 minWidth: 32,
@@ -792,7 +792,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
                 ),
               ),
               SizedBox(width: 12),
-              Text('Processing QR extraction from POD...'),
+              Text('Processing QR extraction from document...'),
             ],
           ),
           backgroundColor: Colors.blue,
@@ -823,7 +823,7 @@ class _EInvoiceDataScreenState extends State<EInvoiceDataScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                response['message'] ?? 'Failed to extract QR data from POD file'
+                response['message'] ?? 'Failed to extract QR data from uploaded file'
               ),
               backgroundColor: Colors.orange,
             ),

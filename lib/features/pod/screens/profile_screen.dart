@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:zforce/features/pod/services/auth_service.dart';
@@ -107,7 +107,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
         title: 'Profile',
         subtitle: 'Account Settings',
         icon: Icons.person_rounded,
-        color: const Color(0xFF00A0A8),
+        color: const Color(0xFF450095),
         actions: [
           IconButton(
             onPressed: () {
@@ -129,7 +129,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
               ),
             )
           : FadeTransition(
@@ -169,7 +169,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
       title: 'Account Profile',
       subtitle: 'Manage your account settings and preferences',
       icon: Icons.account_circle_rounded,
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
     );
   }
 
@@ -196,8 +196,8 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  const Color(0xFF00A0A8),
-                  const Color(0xFF6EC1C7),
+                  const Color(0xFF450095),
+                  const Color(0xFF8E24AA),
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -205,7 +205,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
               borderRadius: BorderRadius.circular(50),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF00A0A8).withOpacity(0.3),
+                  color: const Color(0xFF450095).withOpacity(0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -380,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
             'Change Password',
             'Update your account password',
             Icons.lock_reset_rounded,
-            const Color(0xFF00A0A8),
+            const Color(0xFF450095),
             () => _showChangePasswordDialog(context),
           ),
           _buildModernDivider(),
@@ -563,7 +563,7 @@ class _ProfileScreenState extends State<ProfileScreen> with TickerProviderStateM
           ),
           const SizedBox(height: 12),
           Text(
-            'Â© ${DateTime.now().year} Globalspace Technologies Pvt. Ltd. All rights reserved.',
+            '© ${DateTime.now().year} Globalspace Technologies Pvt. Ltd. All rights reserved.',
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey.shade500,
@@ -1025,8 +1025,8 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> with Ticker
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              const Color(0xFF00A0A8),
-                              const Color(0xFF6EC1C7),
+                              const Color(0xFF450095),
+                              const Color(0xFF8E24AA),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
@@ -1161,7 +1161,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> with Ticker
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _changePassword,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00A0A8),
+                            backgroundColor: const Color(0xFF450095),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -1238,7 +1238,7 @@ class _ChangePasswordDialogState extends State<ChangePasswordDialog> with Ticker
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF00A0A8), width: 2),
+              borderSide: const BorderSide(color: Color(0xFF450095), width: 2),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),

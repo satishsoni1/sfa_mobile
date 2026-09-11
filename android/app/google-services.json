@@ -7,9 +7,28 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:615438101526:android:92807169bad73c86fa5937",
+        "mobilesdk_app_id": "1:615438101526:android:5bea291e2c6dca6ffa5937",
         "android_client_info": {
           "package_name": "com.globalspace.himalaya"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAnzOtwTTVjYgHRax4xWn_APMN5gRN8MBY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:615438101526:android:92807169bad73c86fa5937",
+        "android_client_info": {
+          "package_name": "in.globalspace.vodoclm_himalaya"
         }
       },
       "oauth_client": [],

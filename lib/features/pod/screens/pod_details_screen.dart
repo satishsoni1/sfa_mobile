@@ -149,7 +149,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
           PodRoutes.pdfPreview,
           arguments: {
             'pdfBytes': response.bodyBytes,
-            'title': 'POD - ${pod['pod_number'] ?? 'Document'}',
+            'title': 'Document - ${pod['pod_number'] ?? 'Document'}',
           },
         );
       } else {
@@ -173,7 +173,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text('POD Details'),
+        title: const Text('Document Details'),
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
@@ -206,7 +206,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
           Icon(Icons.error_outline, size: 64, color: Colors.red.shade300),
           const SizedBox(height: 16),
           Text(
-            'Error Loading POD Details',
+            'Error Loading Document Details',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -467,7 +467,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           gradient: LinearGradient(
-            colors: [const Color(0xFF00A0A8), const Color(0xFF6EC1C7)],
+            colors: [const Color(0xFF450095), const Color(0xFF8E24AA)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -522,7 +522,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
               children: [
                 _buildInfoItem(
                   Icons.calendar_today,
-                  'POD Date',
+                  'Delivery Date',
                   _formatDate(pod['pod_date']),
                 ),
                 const SizedBox(width: 24),
@@ -623,12 +623,12 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00A0A8).withOpacity(0.1),
+                    color: const Color(0xFF450095).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.business,
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                     size: 20,
                   ),
                 ),
@@ -737,12 +737,12 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6EC1C7).withOpacity(0.1),
+                    color: const Color(0xFF8E24AA).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
                     Icons.inventory_2,
-                    color: Color(0xFF6EC1C7),
+                    color: Color(0xFF8E24AA),
                     size: 20,
                   ),
                 ),
@@ -792,7 +792,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00A0A8).withOpacity(0.1),
+                  color: const Color(0xFF450095).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -800,7 +800,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                   ),
                 ),
               ),
@@ -913,7 +913,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
             style: TextStyle(
               fontSize: isTotal ? 16 : 14,
               fontWeight: isTotal ? FontWeight.bold : FontWeight.w500,
-              color: isTotal ? const Color(0xFF00A0A8) : Colors.grey.shade700,
+              color: isTotal ? const Color(0xFF450095) : Colors.grey.shade700,
             ),
           ),
           Text(
@@ -921,7 +921,7 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
             style: TextStyle(
               fontSize: isTotal ? 18 : 14,
               fontWeight: isTotal ? FontWeight.bold : FontWeight.w500,
-              color: isTotal ? const Color(0xFF00A0A8) : Colors.grey.shade700,
+              color: isTotal ? const Color(0xFF450095) : Colors.grey.shade700,
             ),
           ),
         ],

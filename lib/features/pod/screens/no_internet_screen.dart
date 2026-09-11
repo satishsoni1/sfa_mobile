@@ -203,7 +203,7 @@ class _NoInternetScreenState extends State<NoInternetScreen> with TickerProvider
                   ElevatedButton.icon(
                     onPressed: _isChecking ? null : _checkConnection,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00A0A8),
+                      backgroundColor: const Color(0xFF450095),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -247,7 +247,7 @@ class _NoInternetScreenState extends State<NoInternetScreen> with TickerProvider
             width: 6,
             height: 6,
             decoration: BoxDecoration(
-              color: const Color(0xFF00A0A8),
+              color: const Color(0xFF450095),
               shape: BoxShape.circle,
             ),
           ),

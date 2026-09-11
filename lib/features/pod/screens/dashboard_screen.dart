@@ -25,7 +25,7 @@ class DashboardScreen extends StatelessWidget {
         ..add(const HospitalDashboardLoadRequested()),
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('POD Dashboard'),
+          title: const Text('Secondary Sales Dashboard'),
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF2C3E50),
           elevation: 0,
@@ -43,7 +43,7 @@ class DashboardScreen extends StatelessWidget {
           onPressed: () => _openUploader(context),
           icon: const Icon(Icons.upload_file),
           label: const Text('Upload'),
-          backgroundColor: const Color(0xFF00A0A8),
+          backgroundColor: const Color(0xFF450095),
           foregroundColor: Colors.white,
         ),
       ),

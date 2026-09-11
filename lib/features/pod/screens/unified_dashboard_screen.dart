@@ -111,7 +111,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
       child: Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
-          title: const Text('Zydus Vistaar'),
+          title: const Text('Secondary Sales'),
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF2C3E50),
           elevation: 0,
@@ -141,11 +141,11 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
           bottom: TabBar(
             controller: _tabController,
             // isScrollable: true,
-            labelColor: const Color(0xFF00A0A8),
+            labelColor: const Color(0xFF450095),
             unselectedLabelColor: Colors.grey,
-            indicatorColor: const Color(0xFF00A0A8),
-            // Tab order locked: Sales Analytics (headline) Â· PODs documents
-            // (was "All Documents") Â· POD Dashboard (was "Overview"). Labels
+            indicatorColor: const Color(0xFF450095),
+            // Tab order locked: Sales Analytics (headline) · PODs documents
+            // (was "All Documents") · POD Dashboard (was "Overview"). Labels
             // updated per the latest product call to surface the POD scope
             // explicitly. TabBarView children below mirror this order.
             tabs: const [
@@ -178,7 +178,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
         if (state is HospitalDashboardLoading) {
           return const Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
             ),
           );
         }
@@ -204,7 +204,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
         if (state is SalesLoading) {
           return const Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
             ),
           );
         }
@@ -265,7 +265,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
             ),
           ),
@@ -310,7 +310,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
             ),
           ),
@@ -330,7 +330,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
           ),
         );
       },
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -388,7 +388,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
       onRefresh: () async {
         context.read<SalesBloc>().add(const SalesRefreshRequested());
       },
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -416,8 +416,8 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF00A0A8),
-            const Color(0xFF6EC1C7),
+            const Color(0xFF450095),
+            const Color(0xFF8E24AA),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -425,7 +425,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00A0A8).withOpacity(0.3),
+            color: const Color(0xFF450095).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -497,10 +497,10 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
           'Total Documents',
           (dashboardData['total_documents'] ?? 0).toString(),
           Icons.description,
-          const Color(0xFF00A0A8),
+          const Color(0xFF450095),
         ),
         _buildStatCard(
-          'POD Documents',
+          'Secondary Sales Document',
           (dashboardData['pod_count'] ?? 0).toString(),
           Icons.receipt_long,
           const Color(0xFF4CAF50),
@@ -615,12 +615,12 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00A0A8).withOpacity(0.1),
+                  color: const Color(0xFF450095).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
                   Icons.history,
-                  color: Color(0xFF00A0A8),
+                  color: Color(0xFF450095),
                   size: 20,
                 ),
               ),
@@ -639,7 +639,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                 child: const Text(
                   'View All',
                   style: TextStyle(
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -826,7 +826,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                   _buildActionButton(
                     'Sales Analytics',
                     Icons.insights_rounded,
-                    const Color(0xFF00A0A8),
+                    const Color(0xFF450095),
                     () => _tabController.animateTo(1),
                   ),
                   _buildActionButton(
@@ -888,8 +888,8 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF00A0A8),
-            const Color(0xFF6EC1C7),
+            const Color(0xFF450095),
+            const Color(0xFF8E24AA),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -897,7 +897,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00A0A8).withOpacity(0.3),
+            color: const Color(0xFF450095).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -1064,7 +1064,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                 child: const Text(
                   'View All',
                   style: TextStyle(
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1077,7 +1077,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
             '₹${_formatAmount(summary.totalAmount)}',
             '${summary.totalTransactions} transactions',
             Icons.local_hospital,
-            const Color(0xFF00A0A8),
+            const Color(0xFF450095),
           )).toList(),
         ],
       ),
@@ -1212,7 +1212,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF00A0A8),
+                  color: Color(0xFF450095),
                 ),
               ),
               Text(
@@ -1497,8 +1497,8 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
             icon: const Icon(Icons.visibility),
             label: const Text('View Full Details'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF00A0A8),
-              side: const BorderSide(color: Color(0xFF00A0A8)),
+              foregroundColor: const Color(0xFF450095),
+              side: const BorderSide(color: Color(0xFF450095)),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -1515,7 +1515,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
             icon: const Icon(Icons.download),
             label: const Text('Download'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -1586,12 +1586,12 @@ class _PodDashboardMonthBar extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFF00A0A8).withOpacity(0.1),
+              color: const Color(0xFF450095).withOpacity(0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.calendar_month_rounded,
-              color: Color(0xFF00A0A8),
+              color: Color(0xFF450095),
               size: 18,
             ),
           ),

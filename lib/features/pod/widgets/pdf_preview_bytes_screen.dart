@@ -18,7 +18,7 @@ class PdfPreviewBytesScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: const Color(0xFF00A0A8),
+        backgroundColor: const Color(0xFF450095),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
           onPressed: () => Navigator.pop(context),

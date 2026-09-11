@@ -1,3 +1,4 @@
 {
-    "cmake.sourceDirectory": "C:/sfa_mobile/linux"
+    "cmake.sourceDirectory": "C:/sfa_mobile/linux",
+    "java.configuration.updateBuildConfiguration": "automatic"
 }

@@ -24,13 +24,13 @@ class _ModernDocumentUploadScreenState extends State<ModernDocumentUploadScreen>
     TabInfo(
       title: 'Secondary Sales Documents Upload',
       icon: Icons.description,
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       page: const PODUploadPage(),
     ),
     // TabInfo(
     //   title: 'E-Invoice',
     //   icon: Icons.receipt_long,
-    //   color: const Color(0xFF6EC1C7),
+    //   color: const Color(0xFF8E24AA),
     //   page: const EInvoiceUploadPage(),
     // ),
     // TabInfo(
@@ -90,7 +90,7 @@ class _ModernDocumentUploadScreenState extends State<ModernDocumentUploadScreen>
       title: 'Document Upload',
       subtitle: 'Upload & Process Documents',
       icon: Icons.cloud_upload,
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Colors.black),
         tooltip: 'Back',
@@ -158,14 +158,14 @@ class _PODUploadPageState extends State<PODUploadPage> {
           //   title: 'Secondary Sales Documents Upload',
           //   subtitle: 'Upload secondary sales documents',
           //   icon: Icons.description,
-          //   color: const Color(0xFF00A0A8),
+          //   color: const Color(0xFF450095),
           // ),
           // const SizedBox(height: 24),
           ModernUIComponents.buildUploadCard(
             title: 'Upload Secondary Sales Documents',
             subtitle: 'Select and upload your secondary sales files',
             icon: Icons.upload_file,
-            color: const Color(0xFF00A0A8),
+            color: const Color(0xFF450095),
             onTap: () {
               // Navigate to dedicated POD upload screen
               Navigator.pushNamed(context, PodRoutes.podUpload);
@@ -238,14 +238,14 @@ class _EInvoiceUploadPageState extends State<EInvoiceUploadPage> {
             title: 'E-Invoice Upload',
             subtitle: 'Upload and process E-Invoice documents',
             icon: Icons.receipt_long,
-            color: const Color(0xFF6EC1C7),
+            color: const Color(0xFF8E24AA),
           ),
           const SizedBox(height: 24),
           ModernUIComponents.buildUploadCard(
             title: 'Upload E-Invoice',
             subtitle: 'Select and process E-Invoice files',
             icon: Icons.receipt,
-            color: const Color(0xFF6EC1C7),
+            color: const Color(0xFF8E24AA),
             onTap: () {
               _handleEInvoiceUpload();
             },

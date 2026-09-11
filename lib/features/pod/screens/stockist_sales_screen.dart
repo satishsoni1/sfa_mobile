@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:zforce/features/pod/bloc/sales_bloc.dart';
 import 'package:zforce/features/pod/bloc/sales_event.dart';
@@ -40,7 +40,7 @@ class _StockistSalesScreenState extends State<StockistSalesScreen> {
           if (state is SalesLoading) {
             return const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
               ),
             );
           }
@@ -97,7 +97,7 @@ class _StockistSalesScreenState extends State<StockistSalesScreen> {
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
             ),
           ),
@@ -117,7 +117,7 @@ class _StockistSalesScreenState extends State<StockistSalesScreen> {
             onRefresh: () async {
               context.read<SalesBloc>().add(const SalesRefreshRequested());
             },
-            color: const Color(0xFF00A0A8),
+            color: const Color(0xFF450095),
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: filteredSummaries.length,
@@ -151,10 +151,10 @@ class _StockistSalesScreenState extends State<StockistSalesScreen> {
                     _selectedFilter = filter;
                   });
                 },
-                selectedColor: const Color(0xFF00A0A8).withOpacity(0.2),
-                checkmarkColor: const Color(0xFF00A0A8),
+                selectedColor: const Color(0xFF450095).withOpacity(0.2),
+                checkmarkColor: const Color(0xFF450095),
                 labelStyle: TextStyle(
-                  color: isSelected ? const Color(0xFF00A0A8) : Colors.grey.shade700,
+                  color: isSelected ? const Color(0xFF450095) : Colors.grey.shade700,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
@@ -515,7 +515,7 @@ class _StockistSalesScreenState extends State<StockistSalesScreen> {
                   ),
                 ),
                 Text(
-                  '${transaction.quantity} units Ã— ₹${transaction.unitPrice}',
+                  '${transaction.quantity} units × ₹${transaction.unitPrice}',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade600,

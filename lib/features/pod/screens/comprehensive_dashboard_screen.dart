@@ -50,9 +50,9 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
-          labelColor: const Color(0xFF00A0A8),
+          labelColor: const Color(0xFF450095),
           unselectedLabelColor: Colors.grey,
-          indicatorColor: const Color(0xFF00A0A8),
+          indicatorColor: const Color(0xFF450095),
           tabs: const [
             Tab(icon: Icon(Icons.dashboard), text: 'Overview'),
             Tab(icon: Icon(Icons.insights_rounded), text: 'Sales Analytics'),
@@ -81,7 +81,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
         if (state is SalesLoading) {
           return const Center(
             child: CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
             ),
           );
         }
@@ -137,7 +137,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
             ),
           ),
@@ -151,7 +151,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
       onRefresh: () async {
         context.read<SalesBloc>().add(const SalesRefreshRequested());
       },
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
@@ -179,8 +179,8 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF00A0A8),
-            const Color(0xFF6EC1C7),
+            const Color(0xFF450095),
+            const Color(0xFF8E24AA),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -188,7 +188,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00A0A8).withOpacity(0.3),
+            color: const Color(0xFF450095).withOpacity(0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -361,7 +361,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
                   _buildActionButton(
                     'Upload Sales',
                     Icons.cloud_upload,
-                    const Color(0xFF00A0A8),
+                    const Color(0xFF450095),
                     () => _tabController.animateTo(3),
                   ),
                   _buildActionButton(
@@ -457,7 +457,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
                 child: const Text(
                   'View All',
                   style: TextStyle(
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -470,7 +470,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
             '₹${_formatAmount(summary.totalAmount)}',
             '${summary.totalTransactions} transactions',
             Icons.local_hospital,
-            const Color(0xFF00A0A8),
+            const Color(0xFF450095),
           )).toList(),
         ],
       ),
@@ -510,7 +510,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
                 child: const Text(
                   'View All',
                   style: TextStyle(
-                    color: Color(0xFF00A0A8),
+                    color: Color(0xFF450095),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -657,7 +657,7 @@ class _ComprehensiveDashboardScreenState extends State<ComprehensiveDashboardScr
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF00A0A8),
+                  color: Color(0xFF450095),
                 ),
               ),
               Text(

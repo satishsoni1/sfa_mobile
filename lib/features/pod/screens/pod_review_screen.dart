@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -53,7 +53,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
   }
 
   /// Greedy clustering: each row joins the first existing group whose
-  /// representative name scores â‰¥ [_groupSimilarityThreshold] against it.
+  /// representative name scores >= [_groupSimilarityThreshold] against it.
   /// If a row has no master match it never collapses with another row — we
   /// don't want to fold two unrelated unmapped hospitals together by accident.
   List<_HospitalGroup> _buildGroups(List<_HospitalRow> rows) {
@@ -218,10 +218,10 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
 
     return Scaffold(
       appBar: ModernUIComponents.buildModernAppBar(
-        title: 'Review PODs',
+        title: 'Review Secondary Sales',
         subtitle: '${_groups.length} hospital(s) • ${_rows.length} invoice(s) • $_selectedCount selected',
         icon: Icons.fact_check,
-        color: const Color(0xFF00A0A8),
+        color: const Color(0xFF450095),
       ),
       body: isWide
           ? Row(
@@ -294,7 +294,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00A0A8),
+                  backgroundColor: const Color(0xFF450095),
                   foregroundColor: Colors.white,
                   padding: EdgeInsets.symmetric(vertical: isNarrow ? 12 : 14),
                   shape: RoundedRectangleBorder(
@@ -361,7 +361,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
           children: [
             Row(
               children: [
-                const Icon(Icons.store, color: Color(0xFF00A0A8)),
+                const Icon(Icons.store, color: Color(0xFF450095)),
                 const SizedBox(width: 8),
                 const Text(
                   'Selected stockist',
@@ -493,7 +493,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
           ),
           title: Row(
             children: [
-              const Icon(Icons.receipt_long, color: Color(0xFF00A0A8)),
+              const Icon(Icons.receipt_long, color: Color(0xFF450095)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -621,7 +621,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
                               vertical: 2,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF00A0A8).withOpacity(0.1),
+                              color: const Color(0xFF450095).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -629,7 +629,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF00A0A8),
+                                color: Color(0xFF450095),
                               ),
                             ),
                           ),
@@ -644,7 +644,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 8),
                               minimumSize: const Size(0, 28),
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              foregroundColor: const Color(0xFF00A0A8),
+                              foregroundColor: const Color(0xFF450095),
                             ),
                           ),
                           TextButton.icon(
@@ -698,7 +698,7 @@ class _PodReviewScreenState extends State<PodReviewScreen> {
   Widget _buildLinkedPanel(_HospitalRow row) {
     final linked = row.linked;
     final hasLink = linked.hasId;
-    final color = hasLink ? const Color(0xFF00A0A8) : Colors.orange;
+    final color = hasLink ? const Color(0xFF450095) : Colors.orange;
 
     return Padding(
       padding: const EdgeInsets.only(top: 4),

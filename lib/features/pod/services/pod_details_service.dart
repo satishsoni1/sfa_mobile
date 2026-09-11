@@ -18,10 +18,10 @@ class PodDetailsService {
         print('Pod Details: $data');
         return data;
       } else {
-        throw Exception('Failed to load POD details: ${response.statusCode}');
+        throw Exception('Failed to load document details: ${response.statusCode}');
       }
     } catch (e) {
-      throw Exception('Error fetching POD details: $e');
+      throw Exception('Error fetching document details: $e');
     }
   }
 

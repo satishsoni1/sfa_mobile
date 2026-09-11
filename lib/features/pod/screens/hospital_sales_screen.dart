@@ -75,7 +75,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
           if (state is SalesLoading) {
             return const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
               ),
             );
           }
@@ -140,7 +140,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
             ),
           ),
@@ -172,7 +172,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                     ),
                   );
                 },
-                color: const Color(0xFF00A0A8),
+                color: const Color(0xFF450095),
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
@@ -223,7 +223,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                     ),
                   );
                 },
-                color: const Color(0xFF00A0A8),
+                color: const Color(0xFF450095),
                 child: ListView.builder(
                   padding: const EdgeInsets.all(16),
                   itemCount: filteredSummaries.length,
@@ -256,10 +256,10 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
             });
             setModalState(() {});
           },
-          selectedColor: const Color(0xFF00A0A8).withOpacity(0.2),
-          checkmarkColor: const Color(0xFF00A0A8),
+          selectedColor: const Color(0xFF450095).withOpacity(0.2),
+          checkmarkColor: const Color(0xFF450095),
           labelStyle: TextStyle(
-            color: isSelected ? const Color(0xFF00A0A8) : Colors.grey.shade700,
+            color: isSelected ? const Color(0xFF450095) : Colors.grey.shade700,
             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
           ),
         );
@@ -278,15 +278,15 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF00A0A8).withOpacity(0.1),
-            const Color(0xFF6EC1C7).withOpacity(0.05),
+            const Color(0xFF450095).withOpacity(0.1),
+            const Color(0xFF8E24AA).withOpacity(0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF00A0A8).withOpacity(0.3),
+          color: const Color(0xFF450095).withOpacity(0.3),
           width: 1.5,
         ),
       ),
@@ -295,12 +295,12 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: const Color(0xFF00A0A8).withOpacity(0.2),
+              color: const Color(0xFF450095).withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
               Icons.calendar_month,
-              color: Color(0xFF00A0A8),
+              color: Color(0xFF450095),
               size: 20,
             ),
           ),
@@ -342,7 +342,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                     },
                     icon: const Icon(
                       Icons.filter_list,
-                      color: Color(0xFF00A0A8),
+                      color: Color(0xFF450095),
                       size: 20,
                     ),
                     tooltip: 'Filter & Date Range',
@@ -355,7 +355,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                         width: 8,
                         height: 8,
                         decoration: const BoxDecoration(
-                          color: Color(0xFF00A0A8),
+                          color: Color(0xFF450095),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -378,7 +378,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
             },
             icon: const Icon(
               Icons.refresh,
-              color: Color(0xFF00A0A8),
+              color: Color(0xFF450095),
               size: 20,
             ),
             tooltip: 'Refresh',
@@ -460,12 +460,12 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF00A0A8).withOpacity(0.1),
+                              color: const Color(0xFF450095).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Icon(
                               Icons.filter_list,
-                              color: Color(0xFF00A0A8),
+                              color: Color(0xFF450095),
                               size: 24,
                             ),
                           ),
@@ -553,10 +553,10 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                         Container(
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00A0A8).withOpacity(0.1),
+                            color: const Color(0xFF450095).withOpacity(0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                              color: const Color(0xFF00A0A8).withOpacity(0.3),
+                              color: const Color(0xFF450095).withOpacity(0.3),
                             ),
                           ),
                           child: Row(
@@ -564,7 +564,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                               const Icon(
                                 Icons.info_outline,
                                 size: 16,
-                                color: Color(0xFF00A0A8),
+                                color: Color(0xFF450095),
                               ),
                               const SizedBox(width: 8),
                               Expanded(
@@ -572,7 +572,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                                   'Filter applied: ${_dateFrom != null ? _formatDateForDisplay(_dateFrom!) : 'Any'} to ${_dateTo != null ? _formatDateForDisplay(_dateTo!) : 'Any'}',
                                   style: const TextStyle(
                                     fontSize: 12,
-                                    color: Color(0xFF00A0A8),
+                                    color: Color(0xFF450095),
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
@@ -614,7 +614,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                               icon: const Icon(Icons.check, size: 18),
                               label: const Text('Apply Filter'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF00A0A8),
+                                backgroundColor: const Color(0xFF450095),
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(vertical: 14),
                                 elevation: 2,
@@ -658,7 +658,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
             Icon(
               Icons.calendar_today,
               size: 16,
-              color: date != null ? const Color(0xFF00A0A8) : Colors.grey.shade600,
+              color: date != null ? const Color(0xFF450095) : Colors.grey.shade600,
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -716,7 +716,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
-              primary: Color(0xFF00A0A8),
+              primary: Color(0xFF450095),
               onPrimary: Colors.white,
               surface: Colors.white,
               onSurface: Color(0xFF2C3E50),
@@ -786,7 +786,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isHighPerformer 
-            ? [const Color(0xFF00A0A8).withOpacity(0.1), const Color(0xFF6EC1C7).withOpacity(0.05)]
+            ? [const Color(0xFF450095).withOpacity(0.1), const Color(0xFF8E24AA).withOpacity(0.05)]
             : [Colors.white, Colors.grey.shade50],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -795,14 +795,14 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
         boxShadow: [
           BoxShadow(
             color: isHighPerformer 
-              ? const Color(0xFF00A0A8).withOpacity(0.2)
+              ? const Color(0xFF450095).withOpacity(0.2)
               : Colors.black.withOpacity(0.08),
             blurRadius: isHighPerformer ? 20 : 10,
             offset: const Offset(0, 8),
           ),
         ],
         border: isHighPerformer 
-          ? Border.all(color: const Color(0xFF00A0A8).withOpacity(0.3), width: 1.5)
+          ? Border.all(color: const Color(0xFF450095).withOpacity(0.3), width: 1.5)
           : null,
       ),
       child: Material(
@@ -825,8 +825,8 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            const Color(0xFF00A0A8),
-                            const Color(0xFF6EC1C7),
+                            const Color(0xFF450095),
+                            const Color(0xFF8E24AA),
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -834,7 +834,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                         borderRadius: BorderRadius.circular(16),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF00A0A8).withOpacity(0.3),
+                            color: const Color(0xFF450095).withOpacity(0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 4),
                           ),
@@ -897,7 +897,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF00A0A8).withOpacity(0.1),
+                                  color: const Color(0xFF450095).withOpacity(0.1),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -905,7 +905,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                                   style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: Color(0xFF00A0A8),
+                                    color: Color(0xFF450095),
                                   ),
                                 ),
                               ),
@@ -1248,15 +1248,15 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            const Color(0xFF00A0A8).withOpacity(0.1),
-            const Color(0xFF6EC1C7).withOpacity(0.1),
+            const Color(0xFF450095).withOpacity(0.1),
+            const Color(0xFF8E24AA).withOpacity(0.1),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: const Color(0xFF00A0A8).withOpacity(0.3),
+          color: const Color(0xFF450095).withOpacity(0.3),
         ),
       ),
       child: Column(
@@ -1267,18 +1267,18 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF00A0A8).withOpacity(0.2),
+                  color: const Color(0xFF450095).withOpacity(0.2),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Icon(
                   Icons.compare_arrows,
-                  color: Color(0xFF00A0A8),
+                  color: Color(0xFF450095),
                   size: 16,
                 ),
               ),
               const SizedBox(width: 8),
               const Text(
-                'POD vs System Sales',
+                'Secondary vs System Sales',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
@@ -1292,7 +1292,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
             children: [
               Expanded(
                 child: _buildComparisonItem(
-                  'POD Sales',
+                  'Secondary Sales',
                   '₹${_formatAmount(podSales)}',
                   podPercentage,
                   Colors.green,
@@ -1328,7 +1328,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                 ),
                 const SizedBox(width: 4),
                 Text(
-                  'POD Coverage: ${podPercentage.toStringAsFixed(1)}%',
+                  'Secondary Coverage: ${podPercentage.toStringAsFixed(1)}%',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -1431,12 +1431,12 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF00A0A8).withOpacity(0.1),
+                              color: const Color(0xFF450095).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(
                               Icons.local_hospital,
-                              color: Color(0xFF00A0A8),
+                              color: Color(0xFF450095),
                               size: 24,
                             ),
                           ),
@@ -1468,7 +1468,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                       const SizedBox(height: 24),
                       _buildDetailSection('Sales Summary', [
                         _buildDetailRow('Total Transactions', summary.totalTransactions.toString()),
-                        _buildDetailRow('Total POD Amount', '₹${_formatAmount(summary.totalAmount)}'),
+                        _buildDetailRow('Total Secondary Sales Amount', '₹${_formatAmount(summary.totalAmount)}'),
                         // _buildDetailRow('Average Transaction Value', '₹${_formatAmount(summary.averageTransactionValue)}'),
                         _buildDetailRow('Top Product', summary.topProduct),
                         _buildDetailRow('Last Transaction', _formatDate(summary.lastTransactionDate)),
@@ -1543,7 +1543,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'POD vs System Sales Analysis',
+          'Secondary vs System Sales Analysis',
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.bold,
@@ -1556,15 +1556,15 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                const Color(0xFF00A0A8).withOpacity(0.1),
-                const Color(0xFF6EC1C7).withOpacity(0.1),
+                const Color(0xFF450095).withOpacity(0.1),
+                const Color(0xFF8E24AA).withOpacity(0.1),
               ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: const Color(0xFF00A0A8).withOpacity(0.3),
+              color: const Color(0xFF450095).withOpacity(0.3),
             ),
           ),
           child: Column(
@@ -1573,7 +1573,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                 children: [
                   Expanded(
                     child: _buildDetailComparisonItem(
-                      'POD Sales (App)',
+                      'Secondary Sales (App)',
                       '₹${_formatAmount(podSales)}',
                       podPercentage,
                       Colors.green,
@@ -1612,7 +1612,7 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'POD Coverage Analysis',
+                            'Secondary Sales Coverage Analysis',
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
@@ -1622,8 +1622,8 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
                           const SizedBox(height: 4),
                           Text(
                             podPercentage < 50 
-                                ? 'Low POD coverage detected. Only ${podPercentage.toStringAsFixed(1)}% of total sales are captured through POD uploads.'
-                                : 'Good POD coverage. ${podPercentage.toStringAsFixed(1)}% of total sales are captured through POD uploads.',
+                                ? 'Low secondary sales coverage detected. Only ${podPercentage.toStringAsFixed(1)}% of total sales are captured through document uploads.'
+                                : 'Good secondary sales coverage. ${podPercentage.toStringAsFixed(1)}% of total sales are captured through document uploads.',
                             style: TextStyle(
                               fontSize: 12,
                               color: podPercentage < 50 ? Colors.red.shade700 : Colors.green.shade700,
@@ -1637,9 +1637,9 @@ class _HospitalSalesScreenState extends State<HospitalSalesScreen> {
               ),
               const SizedBox(height: 12),
               _buildDetailRow('Total', '₹${_formatAmount(totalSystemSales)}'),
-              _buildDetailRow('POD Sales', '₹${_formatAmount(podSales)}'),
+              _buildDetailRow('Secondary Sales', '₹${_formatAmount(podSales)}'),
               _buildDetailRow('System Sales', '₹${_formatAmount(systemSales)}'),
-              _buildDetailRow('POD Coverage', '${podPercentage.toStringAsFixed(1)}%'),
+              _buildDetailRow('Secondary Coverage', '${podPercentage.toStringAsFixed(1)}%'),
             ],
           ),
         ),

@@ -845,7 +845,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         if (_isEinvoiceDoc()) _autoMarkEinvoiceSelectedForEinvoiceFlow();
 
         if (_debugEinvoice) {
-          debugPrint('[QR] âœ“ Pre-upload extraction: ${doc.displayName}');
+          debugPrint('[QR] ✓ Pre-upload extraction: ${doc.displayName}');
         }
       }
     } catch (e) {
@@ -1187,7 +1187,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
         if (_isPodDoc() || _isEinvoiceDoc()) {
           final idx = _capturedDocuments.length - 1;
-          _enqueueExtraction(newDoc, idx); // â† your existing QR pipeline
+          _enqueueExtraction(newDoc, idx); // ← your existing QR pipeline
         }
       }
 
@@ -1314,7 +1314,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         }
         if (_debugEinvoice) {
           debugPrint(
-            '[QR] âŒ No QR from single API attempt for ${docInfo.displayName}',
+            '[QR] ❌ No QR from single API attempt for ${docInfo.displayName}',
           );
         }
         return;
@@ -1341,7 +1341,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'âœ… QR extracted via API',
+                    '✅ QR extracted via API',
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1486,21 +1486,21 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
     if (_isPodDoc()) {
       if (_selectedStockist == null || _selectedChemist == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select Stockist & Hospital for POD.')),
+          const SnackBar(content: Text('Select Stockist & Hospital for Secondary Sales.')),
         );
         return;
       }
     } else if (_isEinvoiceDoc()) {
       if (_selectedPod == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select POD to upload E-Invoice.')),
+          const SnackBar(content: Text('Select Secondary Sales Document to upload E-Invoice.')),
         );
         return;
       }
     } else {
       if (_selectedPod == null) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Select POD to upload document.')),
+          const SnackBar(content: Text('Select Secondary Sales Document to upload document.')),
         );
         return;
       }
@@ -1623,7 +1623,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'âœ… Uploaded ${validDocs.length} POD document(s) in a single request.',
+                '✅ Uploaded ${validDocs.length} Secondary Sales document(s) in a single request.',
               ),
               backgroundColor: Colors.green,
             ),
@@ -1652,12 +1652,12 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           }
         } else {
           debugPrint(
-            'POD upload failed: ${resp.statusCode} ${resp.body.isNotEmpty ? "- ${resp.body}" : ""}',
+            'Secondary Sales upload failed: ${resp.statusCode} ${resp.body.isNotEmpty ? "- ${resp.body}" : ""}',
           );
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'POD upload failed: ${resp.statusCode} ${resp.body.isNotEmpty ? "- ${resp.body}" : ""}',
+                'Secondary Sales upload failed: ${resp.statusCode} ${resp.body.isNotEmpty ? "- ${resp.body}" : ""}',
               ),
               backgroundColor: Colors.red,
             ),
@@ -1779,7 +1779,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'âœ… Uploaded ${successes.length} document(s) successfully.',
+                '✅ Uploaded ${successes.length} document(s) successfully.',
               ),
               backgroundColor: Colors.green,
             ),
@@ -1788,7 +1788,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
         if (failures.isNotEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('âš ï¸ ${failures.length} document(s) failed.'),
+              content: Text('⚠️ ${failures.length} document(s) failed.'),
               backgroundColor: Colors.orange,
             ),
           );
@@ -2045,7 +2045,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
       ),
       body: RefreshIndicator(
         onRefresh: _onRefresh,
-        color: Colors.teal,
+        color: const Color(0xFF450095),
         backgroundColor: Colors.white,
         strokeWidth: 2.5,
         displacement: 40.0,
@@ -2053,12 +2053,8 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
           behavior: HitTestBehavior.translucent,
           onTap: () => FocusScope.of(context).unfocus(),
           child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Colors.teal.withOpacity(0.05), Colors.white],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
+            decoration: const BoxDecoration(
+              color: Colors.white,
             ),
             child: SingleChildScrollView(
               controller: _scrollController,
@@ -2092,7 +2088,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                     title: 'Document Type',
                     child: SegmentedButton<String>(
                       segments: const [
-                        ButtonSegment(value: 'POD', label: Text('POD')),
+                        ButtonSegment(value: 'POD', label: Text('Secondary Sales')),
                         ButtonSegment(value: 'GRN', label: Text('GRN')),
                         ButtonSegment(
                           value: 'E-INVOICE',
@@ -2154,13 +2150,13 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                   if (!_isPodDoc())
                     _buildSectionCard(
                       icon: Icons.receipt_long,
-                      title: 'POD Link',
-                      subtitle: 'Select POD (recommended for E-Invoice / GRN)',
+                      title: 'Secondary Sales Link',
+                      subtitle: 'Select Secondary Sales document (recommended for E-Invoice / GRN)',
                       child: _customAutocomplete(
                         key: _podKey,
                         options: _allPods,
                         selected: _selectedPod,
-                        label: 'Search POD',
+                        label: 'Search Secondary Sales Document',
                         onSelected: (opt) => setState(() => _selectedPod = opt),
                         onClear: () => setState(() => _selectedPod = null),
                       ),
@@ -2169,7 +2165,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                     icon: Icons.add_a_photo,
                     title: 'Add Documents',
                     subtitle:
-                        'Images converted to PDF. POD & E-INVOICE types auto-extract QR.',
+                        'Images converted to PDF. Secondary Sales & E-Invoice types auto-extract QR.',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -2292,7 +2288,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
                       title:
                           'Documents ($validDocCount valid / ${_capturedDocuments.length} total)',
                       subtitle:
-                          'Green border = QR extracted (POD & E-INVOICE). Tap to preview. Tap QR badge to view.',
+                          'Green border = QR extracted (Secondary Sales & E-Invoice). Tap to preview. Tap QR badge to view.',
                       child: Column(
                         children: [
                           Wrap(
@@ -2868,7 +2864,7 @@ class _DocumentUploadScreenState extends State<DocumentUploadScreen> {
 
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text('âœ… Manual QR scan successful'),
+                                content: Text('✅ Manual QR scan successful'),
                                 backgroundColor: Colors.green,
                                 duration: Duration(seconds: 2),
                               ),

@@ -116,7 +116,7 @@ class _UniversalPdfViewerState extends State<UniversalPdfViewer> {
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00A0A8),
+                backgroundColor: const Color(0xFF450095),
                 foregroundColor: Colors.white,
               ),
             ),

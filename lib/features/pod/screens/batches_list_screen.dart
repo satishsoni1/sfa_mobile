@@ -377,7 +377,7 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Start uploading POD documents to see batches here',
+            'Start uploading Secondary Sales documents to see batches here',
             style: TextStyle(color: Colors.grey.shade600),
           ),
         ],

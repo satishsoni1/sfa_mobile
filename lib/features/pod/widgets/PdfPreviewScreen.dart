@@ -160,7 +160,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                 }
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00A0A8),
+                backgroundColor: const Color(0xFF450095),
                 foregroundColor: Colors.white,
               ),
               child: const Text('Go'),
@@ -194,7 +194,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
               ),
           ],
         ),
-        backgroundColor: const Color(0xFF00A0A8),
+        backgroundColor: const Color(0xFF450095),
         foregroundColor: Colors.white,
         actions: [
           if (_totalPages > 1) ...[
@@ -244,7 +244,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
             ),
             const SizedBox(height: 16),
             Text(
@@ -285,7 +285,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
                 icon: const Icon(Icons.arrow_back),
                 label: const Text('Go Back'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00A0A8),
+                  backgroundColor: const Color(0xFF450095),
                   foregroundColor: Colors.white,
                 ),
               ),
@@ -325,13 +325,13 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         documentLoaderBuilder:
             (_) => const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
               ),
             ),
         pageLoaderBuilder:
             (_) => const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
               ),
             ),
         errorBuilder:

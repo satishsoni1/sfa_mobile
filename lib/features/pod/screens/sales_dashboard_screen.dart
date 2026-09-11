@@ -32,7 +32,7 @@ bool _isTablet(BuildContext context) {
 
 /// Premium "executive BI" Sales Analytics Dashboard.
 ///
-/// Layout (top â†’ bottom):
+/// Layout (top -> bottom):
 ///  1. Filter bar (date range, zone, leaderboard type, refresh)
 ///  2. KPI grid — 8 large cards (Target / Achievement / Achievement % /
 ///     Gap / Growth / Active KAMs / Hospitals / Stockists)
@@ -60,7 +60,7 @@ class SalesDashboardScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Sales Analytics'),
         elevation: 0,
-        backgroundColor: const Color(0xFF00A0A8),
+        backgroundColor: const Color(0xFF450095),
         foregroundColor: Colors.white,
       ),
       body: const SalesDashboardBody(),
@@ -88,7 +88,7 @@ class SalesDashboardBody extends StatelessWidget {
   }
 }
 
-/// First day â†’ last day of the current month as ISO yyyy-MM-dd strings.
+/// First day -> last day of the current month as ISO yyyy-MM-dd strings.
 /// Exposed as a top-level helper so the filter bar can compare against it
 /// (to highlight "this month" vs. a custom range).
 SalesDashboardFilters _currentMonthFilters() {
@@ -345,7 +345,7 @@ class _MonthDropdown extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.date_range_rounded, size: 16, color: Color(0xFF00A0A8)),
+          const Icon(Icons.date_range_rounded, size: 16, color: Color(0xFF450095)),
           const SizedBox(width: 6),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
@@ -410,8 +410,8 @@ class _MonthDropdown extends StatelessWidget {
   }
 
   /// Return the dropdown value that matches the current filter window. If
-  /// the user has set a custom range via the From/To pickers (date_from â‰ 
-  /// first-of-month or date_to â‰  last-of-month), fall back to the synthetic
+  /// the user has set a custom range via the From/To pickers (date_from !=
+  /// first-of-month or date_to != last-of-month), fall back to the synthetic
   /// "__custom__" key so the dropdown doesn't lie about what's selected.
   String _selectedKey(List<DateTime> months) {
     final from = DateTime.tryParse(filters.dateFrom ?? '');
@@ -454,7 +454,7 @@ class _FilterChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: const Color(0xFF00A0A8)),
+            Icon(icon, size: 16, color: const Color(0xFF450095)),
             const SizedBox(width: 6),
             Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
           ],
@@ -474,9 +474,9 @@ class _ActiveFilterChip extends StatelessWidget {
     return Chip(
       label: Text(label),
       onDeleted: onClear,
-      backgroundColor: const Color(0xFFE0F4F5),
-      labelStyle: const TextStyle(color: Color(0xFF00858C), fontWeight: FontWeight.w600),
-      deleteIconColor: const Color(0xFF00858C),
+      backgroundColor: const Color(0xFFF3E5F5),
+      labelStyle: const TextStyle(color: Color(0xFF311B92), fontWeight: FontWeight.w600),
+      deleteIconColor: const Color(0xFF311B92),
     );
   }
 }
@@ -494,11 +494,11 @@ class _KpiGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         // Column rules:
-        //   • â‰¥ 1100 px  â†’ 4 cards/row (full desktop)
-        //   • â‰¥ 720 px   â†’ 3 cards/row (small desktop / large tablet)
-        //   • else       â†’ 2 cards/row, including phones in portrait.
+        //   • >= 1100 px  -> 4 cards/row (full desktop)
+        //   • >= 720 px   -> 3 cards/row (small desktop / large tablet)
+        //   • else       -> 2 cards/row, including phones in portrait.
         // Phones used to drop to a single column which felt web-oriented:
-        // 8 KPIs Ã— 1 col = 8 vertical scroll units. Two columns halves that
+        // 8 KPIs x 1 col = 8 vertical scroll units. Two columns halves that
         // and keeps each card readable since the value uses FittedBox.
         final w = constraints.maxWidth;
         final columns = w >= 1100
@@ -548,7 +548,7 @@ class _KpiGrid extends StatelessWidget {
       _KpiCard(
         title: 'Total Achievement',
         value: _inr(summary.netSalesAmount),
-        subtitle: 'Net sales (sales âˆ’ returns)',
+        subtitle: 'Net sales (sales - returns)',
         icon: Icons.trending_up_rounded,
         gradient: const [Color(0xFF10B981), Color(0xFF34D399)],
       ),
@@ -1138,7 +1138,7 @@ class _LeaderboardSearchField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Color(0xFF00A0A8), width: 1),
+              borderSide: const BorderSide(color: Color(0xFF450095), width: 1),
             ),
           ),
           style: const TextStyle(fontSize: 14),
@@ -1173,7 +1173,7 @@ class _TypeSwitcher extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
               color: isActive
-                  ? const Color(0xFF00A0A8)
+                  ? const Color(0xFF450095)
                   : const Color(0xFFF1F4F8),
               borderRadius: BorderRadius.circular(20),
             ),
@@ -1289,7 +1289,7 @@ class _LeaderboardSkeletonRow extends StatelessWidget {
 ///   • mobile (< 600px): name + sales on the top line, the three secondary
 ///     metrics (Target / Achievement % / Gap) wrap into pill chips below,
 ///     then the progress bar. No horizontal scroll needed.
-///   • wider screens (â‰¥ 600px): the row stays compact and the metrics
+///   • wider screens (>= 600px): the row stays compact and the metrics
 ///     render as a single right-aligned strip beside the name.
 ///
 /// Achievement % drives the progress bar so the user can eyeball who is
@@ -1308,7 +1308,7 @@ class _KamLeaderboardRow extends StatelessWidget {
 
   static const Color _green = Color(0xFF16A34A);
   static const Color _red = Color(0xFFB91C1C);
-  static const Color _teal = Color(0xFF00A0A8);
+  static const Color _teal = Color(0xFF450095);
 
   Color _statusColor(double pct) {
     if (pct >= 100) return _green;            // over target
@@ -1330,7 +1330,7 @@ class _KamLeaderboardRow extends StatelessWidget {
 
     final List<Widget> metrics;
     if (isProduct) {
-      // Brands have no target â†’ no Target / Gap pills. Show the share of
+      // Brands have no target -> no Target / Gap pills. Show the share of
       // total brand sales instead.
       metrics = [
         _MetricPill(

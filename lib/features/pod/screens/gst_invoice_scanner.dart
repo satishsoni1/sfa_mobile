@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -244,12 +244,12 @@ class _InvoiceResultScreenState extends State<InvoiceResultScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: (color ?? const Color(0xFF00A0A8)).withOpacity(0.1),
+                color: (color ?? const Color(0xFF450095)).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
-                color: color ?? const Color(0xFF00A0A8),
+                color: color ?? const Color(0xFF450095),
                 size: 24,
               ),
             ),
@@ -307,15 +307,15 @@ class _InvoiceResultScreenState extends State<InvoiceResultScreen> {
       );
       print('Response: ${response.body}');
       if (response.statusCode == 200) {
-        setState(() => apiStatus = "âœ… Sent successfully!");
+        setState(() => apiStatus = "✅ Sent successfully!");
       } else {
         setState(
           () =>
-              apiStatus = "âŒ Error: ${response.statusCode} - ${response.body}",
+              apiStatus = "❌ Error: ${response.statusCode} - ${response.body}",
         );
       }
     } catch (e) {
-      setState(() => apiStatus = "âŒ Exception: $e");
+      setState(() => apiStatus = "❌ Exception: $e");
     } finally {
       setState(() => loading = false);
     }
@@ -333,7 +333,7 @@ class _InvoiceResultScreenState extends State<InvoiceResultScreen> {
             color: Colors.white,
           ),
         ),
-        backgroundColor: const Color(0xFF00A0A8),
+        backgroundColor: const Color(0xFF450095),
         elevation: 0,
         centerTitle: true,
         leading: IconButton(
@@ -351,14 +351,14 @@ class _InvoiceResultScreenState extends State<InvoiceResultScreen> {
               width: double.infinity,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF00A0A8), Color(0xFF00C4CC)],
+                  colors: [Color(0xFF450095), Color(0xFF6A1B9A)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF00A0A8).withOpacity(0.3),
+                    color: const Color(0xFF450095).withOpacity(0.3),
                     spreadRadius: 2,
                     blurRadius: 12,
                     offset: const Offset(0, 4),
@@ -508,8 +508,8 @@ class _InvoiceResultScreenState extends State<InvoiceResultScreen> {
             const SizedBox(height: 16),
 
             // Info cards
-            _buildInfoCard("Seller GSTIN", _val("SellerGstin"), Icons.business, color: const Color(0xFF00A0A8)),
-            _buildInfoCard("Buyer GSTIN", _val("BuyerGstin"), Icons.account_balance, color: const Color(0xFF00A0A8)),
+            _buildInfoCard("Seller GSTIN", _val("SellerGstin"), Icons.business, color: const Color(0xFF450095)),
+            _buildInfoCard("Buyer GSTIN", _val("BuyerGstin"), Icons.account_balance, color: const Color(0xFF450095)),
             _buildInfoCard("Document Type", _val("DocTyp"), Icons.description, color: Colors.orange),
             _buildInfoCard("Total Invoice Value", _val("TotInvVal"), Icons.currency_rupee, color: Colors.green),
             _buildInfoCard("No. of Items", _val("ItemCnt"), Icons.inventory, color: Colors.blue),
@@ -523,24 +523,24 @@ class _InvoiceResultScreenState extends State<InvoiceResultScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: apiStatus!.contains("âœ…") ? Colors.green.shade50 : Colors.red.shade50,
+                  color: apiStatus!.contains("✅") ? Colors.green.shade50 : Colors.red.shade50,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: apiStatus!.contains("âœ…") ? Colors.green.shade200 : Colors.red.shade200,
+                    color: apiStatus!.contains("✅") ? Colors.green.shade200 : Colors.red.shade200,
                   ),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      apiStatus!.contains("âœ…") ? Icons.check_circle : Icons.error,
-                      color: apiStatus!.contains("âœ…") ? Colors.green : Colors.red,
+                      apiStatus!.contains("✅") ? Icons.check_circle : Icons.error,
+                      color: apiStatus!.contains("✅") ? Colors.green : Colors.red,
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         apiStatus!,
                         style: TextStyle(
-                          color: apiStatus!.contains("âœ…") ? Colors.green.shade700 : Colors.red.shade700,
+                          color: apiStatus!.contains("✅") ? Colors.green.shade700 : Colors.red.shade700,
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
                         ),
@@ -558,14 +558,14 @@ class _InvoiceResultScreenState extends State<InvoiceResultScreen> {
               height: 56,
               decoration: BoxDecoration(
                 gradient: const LinearGradient(
-                  colors: [Color(0xFF00A0A8), Color(0xFF00C4CC)],
+                  colors: [Color(0xFF450095), Color(0xFF6A1B9A)],
                   begin: Alignment.centerLeft,
                   end: Alignment.centerRight,
                 ),
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF00A0A8).withOpacity(0.3),
+                    color: const Color(0xFF450095).withOpacity(0.3),
                     spreadRadius: 1,
                     blurRadius: 8,
                     offset: const Offset(0, 4),

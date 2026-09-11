@@ -288,7 +288,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
               SnackBar(
                 content: Text('Loaded ${documents.length} more documents (Page $_currentPage of $_totalPages)'),
                 duration: const Duration(seconds: 1),
-                backgroundColor: const Color(0xFF00A0A8),
+                backgroundColor: const Color(0xFF450095),
               ),
             );
           }
@@ -405,7 +405,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
               ),
             )
           : _errorMessage != null
@@ -443,12 +443,13 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
           const SizedBox(height: 24),
           ElevatedButton.icon(
             onPressed: _loadAllDocuments,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
+            icon: const Icon(Icons.refresh, size: 28),
+            label: const Text('Retry', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00A0A8),
+              backgroundColor: const Color(0xFF450095),
               foregroundColor: Colors.white,
-              minimumSize: const Size(200, 48),
+              minimumSize: const Size(250, 60),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
             ),
           ),
         ],
@@ -472,10 +473,10 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF00A0A8).withOpacity(0.1),
+                color: const Color(0xFF450095).withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: const Color(0xFF00A0A8).withOpacity(0.3),
+                  color: const Color(0xFF450095).withOpacity(0.3),
                 ),
               ),
               child: Row(
@@ -511,18 +512,18 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF00A0A8).withOpacity(0.2),
+                        color: const Color(0xFF450095).withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.arrow_downward, size: 12, color: const Color(0xFF00A0A8)),
+                          Icon(Icons.arrow_downward, size: 12, color: const Color(0xFF450095)),
                           const SizedBox(width: 4),
                           Text(
                             'Scroll for more',
                             style: TextStyle(
                               fontSize: 11,
-                              color: const Color(0xFF00A0A8),
+                              color: const Color(0xFF450095),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -542,7 +543,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                   icon: const Icon(Icons.filter_list),
                   label: const Text('Show All Filters'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00A0A8),
+                    backgroundColor: const Color(0xFF450095),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
@@ -561,7 +562,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                 tooltip: 'Refresh',
                 style: IconButton.styleFrom(
                   backgroundColor: Colors.grey.shade100,
-                  foregroundColor: const Color(0xFF00A0A8),
+                  foregroundColor: const Color(0xFF450095),
                 ),
               ),
               if (hasActiveFilters) ...[
@@ -606,9 +607,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                         _selectedStockistName = '';
                       });
                     },
-                    backgroundColor: const Color(0xFF00A0A8).withOpacity(0.1),
+                    backgroundColor: const Color(0xFF450095).withOpacity(0.1),
                     labelStyle: const TextStyle(
-                      color: Color(0xFF00A0A8),
+                      color: Color(0xFF450095),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -622,9 +623,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                         _selectedHospitalName = '';
                       });
                     },
-                    backgroundColor: const Color(0xFF00A0A8).withOpacity(0.1),
+                    backgroundColor: const Color(0xFF450095).withOpacity(0.1),
                     labelStyle: const TextStyle(
-                      color: Color(0xFF00A0A8),
+                      color: Color(0xFF450095),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -637,9 +638,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                         _selectedFilter = 'All';
                       });
                     },
-                    backgroundColor: const Color(0xFF00A0A8).withOpacity(0.1),
+                    backgroundColor: const Color(0xFF450095).withOpacity(0.1),
                     labelStyle: const TextStyle(
-                      color: Color(0xFF00A0A8),
+                      color: Color(0xFF450095),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -652,9 +653,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                         _fromDate = null;
                       });
                     },
-                    backgroundColor: const Color(0xFF00A0A8).withOpacity(0.1),
+                    backgroundColor: const Color(0xFF450095).withOpacity(0.1),
                     labelStyle: const TextStyle(
-                      color: Color(0xFF00A0A8),
+                      color: Color(0xFF450095),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -667,9 +668,9 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                         _toDate = null;
                       });
                     },
-                    backgroundColor: const Color(0xFF00A0A8).withOpacity(0.1),
+                    backgroundColor: const Color(0xFF450095).withOpacity(0.1),
                     labelStyle: const TextStyle(
-                      color: Color(0xFF00A0A8),
+                      color: Color(0xFF450095),
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -718,7 +719,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF00A0A8),
+                            color: Color(0xFF450095),
                           ),
                         ),
                         IconButton(
@@ -753,7 +754,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                                   return Theme(
                                     data: Theme.of(context).copyWith(
                                       colorScheme: const ColorScheme.light(
-                                        primary: Color(0xFF00A0A8),
+                                        primary: Color(0xFF450095),
                                         onPrimary: Colors.white,
                                         onSurface: Colors.black,
                                       ),
@@ -780,7 +781,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.calendar_today, size: 20, color: Color(0xFF00A0A8)),
+                                  const Icon(Icons.calendar_today, size: 20, color: Color(0xFF450095)),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
@@ -824,7 +825,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                                   return Theme(
                                     data: Theme.of(context).copyWith(
                                       colorScheme: const ColorScheme.light(
-                                        primary: Color(0xFF00A0A8),
+                                        primary: Color(0xFF450095),
                                         onPrimary: Colors.white,
                                         onSurface: Colors.black,
                                       ),
@@ -848,7 +849,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.calendar_today, size: 20, color: Color(0xFF00A0A8)),
+                                  const Icon(Icons.calendar_today, size: 20, color: Color(0xFF450095)),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
@@ -910,7 +911,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: const BorderSide(
-                            color: Color(0xFF00A0A8),
+                            color: Color(0xFF450095),
                             width: 2,
                           ),
                         ),
@@ -971,7 +972,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: const BorderSide(
-                            color: Color(0xFF00A0A8),
+                            color: Color(0xFF450095),
                             width: 2,
                           ),
                         ),
@@ -1029,10 +1030,10 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                               tempFilter = filter;
                             });
                           },
-                          selectedColor: const Color(0xFF00A0A8).withOpacity(0.2),
-                          checkmarkColor: const Color(0xFF00A0A8),
+                          selectedColor: const Color(0xFF450095).withOpacity(0.2),
+                          checkmarkColor: const Color(0xFF450095),
                           labelStyle: TextStyle(
-                            color: isSelected ? const Color(0xFF00A0A8) : Colors.grey.shade700,
+                            color: isSelected ? const Color(0xFF450095) : Colors.grey.shade700,
                             fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
                           ),
                         );
@@ -1059,7 +1060,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                           Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF00A0A8),
+                          backgroundColor: const Color(0xFF450095),
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
@@ -1131,11 +1132,13 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                 padding: const EdgeInsets.only(top: 16),
                 child: ElevatedButton.icon(
                   onPressed: _loadAllDocuments,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Refresh'),
+                  icon: const Icon(Icons.refresh, size: 28),
+                  label: const Text('Refresh', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00A0A8),
+                    backgroundColor: const Color(0xFF450095),
                     foregroundColor: Colors.white,
+                    minimumSize: const Size(250, 60),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                   ),
                 ),
               ),
@@ -1148,7 +1151,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
       onRefresh: () async {
         await _loadAllDocuments(isRefresh: true);
       },
-      color: const Color(0xFF00A0A8),
+      color: const Color(0xFF450095),
       child: ListView.builder(
         controller: _scrollController,
         padding: const EdgeInsets.all(16),
@@ -1357,7 +1360,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
         child: Column(
           children: [
             const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF00A0A8)),
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF450095)),
             ),
             const SizedBox(height: 8),
             Text(

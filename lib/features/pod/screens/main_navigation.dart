@@ -49,7 +49,7 @@ class _MainNavigationState extends State<MainNavigation> {
             children: [
               Icon(
                 Icons.exit_to_app,
-                color: const Color(0xFF00A0A8),
+                color: const Color(0xFF450095),
                 size: 28,
               ),
               const SizedBox(width: 12),
@@ -104,7 +104,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 Navigator.of(context, rootNavigator: true).pop();
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF00A0A8),
+                backgroundColor: const Color(0xFF450095),
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
@@ -165,7 +165,7 @@ class _MainNavigationState extends State<MainNavigation> {
             });
           },
           type: BottomNavigationBarType.fixed,
-          selectedItemColor: const Color(0xFF00A0A8),
+          selectedItemColor: const Color(0xFF450095),
           unselectedItemColor: Colors.grey,
           items: const [
             BottomNavigationBarItem(

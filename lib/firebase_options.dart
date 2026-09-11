@@ -36,8 +36,8 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAWtav_QGNjKU5uHVID_hfS608GtxeFn3c',
-    appId: '1:615438101526:android:92807169bad73c86fa5937',
+    apiKey: 'AIzaSyAnzOtwTTVjYgHRax4xWn_APMN5gRN8MBY',
+    appId: '1:615438101526:android:5bea291e2c6dca6ffa5937',
     messagingSenderId: '615438101526',
     projectId: 'himalaya-e7d22',
     storageBucket: 'himalaya-e7d22.firebasestorage.app',
