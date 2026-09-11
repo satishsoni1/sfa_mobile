@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:zforce/features/pod/services/pod_details_service.dart';
 import 'package:zforce/features/pod/screens/e_invoice_data_screen.dart';
@@ -173,16 +173,25 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: const Text('Document Details'),
+        title: const Text(
+          'Document Details',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Colors.white,
+        foregroundColor: Colors.black,
         elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios),
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.black),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.black),
             onPressed: _loadPodDetails,
           ),
         ],
@@ -232,9 +241,9 @@ class _PodDetailsScreenState extends State<PodDetailsScreen> {
 
   Widget _buildPodDetails() {
     final pod = _podData!['data'];
-    final stockist = pod['stockist'];
-    final hospital = pod['hospital'];
-    final items = pod['items'] as List<dynamic>;
+    final stockist = (pod['stockist'] as Map<String, dynamic>?) ?? {};
+    final hospital = (pod['hospital'] as Map<String, dynamic>?) ?? {};
+    final items = (pod['items'] as List<dynamic>?) ?? [];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),

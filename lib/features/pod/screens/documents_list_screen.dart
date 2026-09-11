@@ -1168,8 +1168,8 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
   }
 
   Widget _buildDocumentCard(Map<String, dynamic> doc) {
-    final status = doc['status'] ?? 'Unknown';
-    final type = doc['type'] ?? 'Unknown';
+    final status = doc['status']?.toString() ?? 'Unknown';
+    final type = doc['type']?.toString() ?? 'Unknown';
     final statusColor = _getStatusColor(status);
 
     return Card(
@@ -1261,14 +1261,14 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                   Expanded(
                     child: _buildInfoItem(
                       'Stockist',
-                      doc['stockist_name'] ?? 'Unknown',
+                      doc['stockist_name']?.toString() ?? 'Unknown',
                       Icons.store,
                     ),
                   ),
                   Expanded(
                     child: _buildInfoItem(
                       'Hospital',
-                      doc['hospital_name'] ?? 'Unknown',
+                      doc['hospital_name']?.toString() ?? 'Unknown',
                       Icons.local_hospital,
                     ),
                   ),
@@ -1280,14 +1280,18 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                   Expanded(
                     child: _buildInfoItem(
                       'Invoice',
-                      doc['invoice_number'] ?? 'N/A',
+                      doc['invoice_number']?.toString() ?? 'N/A',
                       Icons.receipt,
                     ),
                   ),
                   Expanded(
                     child: _buildInfoItem(
                       'Amount',
-                      doc['total_amount'] ?? 'N/A',
+                      doc['total_amount'] != null
+                          ? (doc['total_amount'] is num
+                              ? '₹${doc['total_amount']}'
+                              : doc['total_amount'].toString())
+                          : 'N/A',
                       Icons.currency_rupee,
                     ),
                   ),
@@ -1299,14 +1303,14 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                   Expanded(
                     child: _buildInfoItem(
                       'Uploaded',
-                      _formatDate(doc['uploaded_at'] ?? ''),
+                      _formatDate(doc['uploaded_at']?.toString() ?? ''),
                       Icons.calendar_today,
                     ),
                   ),
                   Expanded(
                     child: _buildInfoItem(
                       'Size',
-                      doc['size'] ?? '0 MB',
+                      doc['size']?.toString() ?? '0 MB',
                       Icons.storage,
                     ),
                   ),
@@ -1319,7 +1323,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
     );
   }
 
-  Widget _buildInfoItem(String label, String value, IconData icon) {
+  Widget _buildInfoItem(String label, dynamic value, IconData icon) {
     return Row(
       children: [
         Icon(icon, size: 14, color: Colors.grey.shade600),
@@ -1337,7 +1341,7 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
                 ),
               ),
               Text(
-                value,
+                value?.toString() ?? 'N/A',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade700,

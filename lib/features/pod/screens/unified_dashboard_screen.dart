@@ -688,8 +688,8 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
   }
 
   Widget _buildDocumentItem(BuildContext context, Map<String, dynamic> doc) {
-    final status = doc['status'] ?? 'Unknown';
-    final type = doc['type'] ?? 'Unknown';
+    final status = (doc['status'] ?? 'Unknown').toString();
+    final type = (doc['type'] ?? 'Unknown').toString();
     final statusColor = _getStatusColor(status);
 
     return ListTile(
@@ -707,7 +707,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
         ),
       ),
       title: Text(
-        doc['name'] ?? 'Unknown Document',
+        (doc['name'] ?? 'Unknown Document').toString(),
         style: const TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 14,
@@ -748,7 +748,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
           ),
           const SizedBox(height: 4),
           Text(
-            _formatDate(doc['uploaded_at'] ?? ''),
+            _formatDate((doc['uploaded_at'] ?? '').toString()),
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey.shade500,
@@ -761,7 +761,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(
-            doc['size'] ?? '0 MB',
+            (doc['size'] ?? '0 MB').toString(),
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey.shade600,
@@ -1289,6 +1289,16 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
   }
 
   void _showTransactionDetails(Map<String, dynamic> doc) {
+    final docStatus = (doc['status'] ?? '').toString();
+    final docType = (doc['type'] ?? '').toString();
+    final docName = (doc['name'] ?? 'Unknown Document').toString();
+    final docSize = (doc['size'] ?? '0 MB').toString();
+    final docUploadedAt = (doc['uploaded_at'] ?? '').toString();
+    final docStockistName = (doc['stockist_name'] ?? 'Unknown').toString();
+    final docHospitalName = (doc['hospital_name'] ?? 'Unknown').toString();
+    final docInvoiceNumber = (doc['invoice_number'] ?? 'N/A').toString();
+    final docTotalAmount = (doc['total_amount'] ?? 'N/A').toString();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1327,16 +1337,12 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(
-                                doc['status'] ?? '',
-                              ).withOpacity(0.1),
+                              color: _getStatusColor(docStatus).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Icon(
-                              _getTypeIcon(doc['type'] ?? ''),
-                              color: _getStatusColor(
-                                doc['status'] ?? '',
-                              ),
+                              _getTypeIcon(docType),
+                              color: _getStatusColor(docStatus),
                               size: 24,
                             ),
                           ),
@@ -1346,7 +1352,7 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  doc['name'] ?? 'Unknown Document',
+                                  docName,
                                   style: const TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -1359,19 +1365,15 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: _getStatusColor(
-                                      doc['status'] ?? '',
-                                    ).withOpacity(0.1),
+                                    color: _getStatusColor(docStatus).withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Text(
-                                    doc['status'] ?? 'Unknown',
+                                    docStatus.isEmpty ? 'Unknown' : docStatus,
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
-                                      color: _getStatusColor(
-                                        doc['status'] ?? '',
-                                      ),
+                                      color: _getStatusColor(docStatus),
                                     ),
                                   ),
                                 ),
@@ -1384,38 +1386,38 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
                       _buildTransactionDetailSection('Transaction Information', [
                         _buildTransactionDetailRow(
                           'Type',
-                          doc['type'] ?? 'Unknown',
+                          docType.isEmpty ? 'Unknown' : docType,
                         ),
                         _buildTransactionDetailRow(
                           'Status',
-                          doc['status'] ?? 'Unknown',
+                          docStatus.isEmpty ? 'Unknown' : docStatus,
                         ),
                         _buildTransactionDetailRow(
                           'Size',
-                          doc['size'] ?? '0 MB',
+                          docSize,
                         ),
                         _buildTransactionDetailRow(
                           'Upload Date',
-                          _formatDetailedDate(doc['uploaded_at'] ?? ''),
+                          _formatDetailedDate(docUploadedAt),
                         ),
                       ]),
                       const SizedBox(height: 20),
                       _buildTransactionDetailSection('Business Information', [
                         _buildTransactionDetailRow(
                           'Stockist',
-                          doc['stockist_name'] ?? 'Unknown',
+                          docStockistName,
                         ),
                         _buildTransactionDetailRow(
                           'Hospital',
-                          doc['hospital_name'] ?? 'Unknown',
+                          docHospitalName,
                         ),
                         _buildTransactionDetailRow(
                           'Invoice Number',
-                          doc['invoice_number'] ?? 'N/A',
+                          docInvoiceNumber,
                         ),
                         _buildTransactionDetailRow(
                           'Amount',
-                          doc['total_amount'] ?? 'N/A',
+                          docTotalAmount,
                         ),
                       ]),
                       // const SizedBox(height: 20),
