@@ -28,6 +28,7 @@ import 'package:zforce/features/pod/screens/pod_upload_screen.dart' as pod_uploa
 import 'package:zforce/features/pod/screens/sales_dashboard_screen.dart';
 import 'package:zforce/features/pod/widgets/notification_handler.dart';
 import 'package:zforce/features/pod/widgets/pdf_preview_bytes_screen.dart';
+import 'package:zforce/features/pod/screens/statement_detail_screen.dart';
 
 /// POD Route name constants — all prefixed with /pod/ to avoid SFA collisions.
 class PodRoutes {
@@ -48,6 +49,7 @@ class PodRoutes {
   static const String pdfPreview         = '/pod/pdf-preview';
   static const String notificationSettings = '/pod/notification-settings';
   static const String salesAnalytics     = '/pod/sales-analytics';
+  static const String statementDetail    = '/pod/statement-detail';
 }
 
 /// POD Route generator — used inside the POD feature Navigator.
@@ -164,6 +166,16 @@ class PodRouteGenerator {
 
       case PodRoutes.notificationSettings:
         return MaterialPageRoute(builder: (_) => const NotificationSettings());
+
+      case PodRoutes.statementDetail:
+        if (args is Map<String, dynamic>) {
+          return MaterialPageRoute(
+            builder: (_) => StatementDetailScreen(
+              podId: args['podId'] as int,
+            ),
+          );
+        }
+        return _errorRoute('StatementDetailScreen requires podId');
 
       default:
         return _errorRoute('Route not found: ${settings.name}');

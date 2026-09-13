@@ -3,7 +3,6 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:zforce/features/pod/config/pod_config.dart';
-import 'package:zforce/features/pod/screens/pod_details_screen.dart';
 import 'package:zforce/features/pod/services/master_data_service.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
 
@@ -1381,10 +1380,8 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
   }
 
   void _showDocumentDetails(Map<String, dynamic> doc) {
-    // Extract document ID and type
+    // Extract document ID
     final docIdRaw = doc['id'];
-    final docType = doc['type'] ?? 'POD';
-    print(docIdRaw);
     // Convert docId to integer, handling both string and int types
     int? docId;
     if (docIdRaw != null) {
@@ -1394,15 +1391,18 @@ class _DocumentsListScreenState extends State<DocumentsListScreen> {
         docId = int.tryParse(docIdRaw);
       }
     }
-    
+
     if (docId != null) {
-      // Navigate to POD details screen
+      // Debug: log all keys in the document map and the ID being used
+      print('[DocumentsListScreen] doc keys: ${doc.keys.toList()}');
+      print('[DocumentsListScreen] doc[id]=$docId  doc[pod_id]=${doc['pod_id']}  doc[document_id]=${doc['document_id']}');
+
+      // Navigate to Statement Detail screen (full view with KPIs, charts, product table)
       Navigator.pushNamed(
         context,
-        PodRoutes.podDetails,
+        PodRoutes.statementDetail,
         arguments: {
-          'podId': docId!,
-          'documentType': docType,
+          'podId': docId,
         },
       );
     } else {
