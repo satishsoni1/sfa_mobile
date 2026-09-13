@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // POD / SECONDARY SALES — API CONFIGURATION
 // ------------------------------------------------------------
 // Active base URL: https://zydus.mediola.in/pod_dev/api/
@@ -20,8 +20,24 @@ const String API_BASE_URL = "https://himalaya.globalspace.in/api/";
 
 const String API_DOC_UPLOAD_URL = "${API_BASE_URL}grn/upload-pdf";
 const String API_POD_UPLOAD_URL = "${API_BASE_URL}pod/upload-pdf";
+
+// ──────────────────────────────────────────────────────────────────────────────
+// SECONDARY SALES UPLOAD ENDPOINT (new)
+// Replaces the two old split-file-processor endpoints below.
+// Accepts: files[] (multipart), stockist_id, statement_month, company_name, remarks
+// ──────────────────────────────────────────────────────────────────────────────
+const String API_SECONDARY_SALES_UPLOAD_URL = "${API_BASE_URL}secondary-sales/upload";
+
+// [OLD — Case A] PDF-only pipeline — kept for reference, no longer used for upload.
+// const String Multi_Api_POD_UPLOAD_URL = "${API_BASE_URL}split-file-processor/process";
+
+// [OLD — Case B] Image-friendly pipeline — kept for reference, no longer used for upload.
+// const String Multi_Api_POD_UPLOAD_URL_IMAGES = "${API_BASE_URL}pod/upload-multi-allow-images";
+
+// Active aliases kept so other screens that still import these names compile without errors.
 const String Multi_Api_POD_UPLOAD_URL = "${API_BASE_URL}split-file-processor/process";
 const String Multi_Api_POD_UPLOAD_URL_IMAGES = "${API_BASE_URL}pod/upload-multi-allow-images";
+
 
 const String API_GRNS_URL = "${API_BASE_URL}grns";
 const String API_EINV_JSON_URL = "${API_BASE_URL}einv/json";

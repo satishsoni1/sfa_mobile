@@ -1308,23 +1308,35 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         );
       }
 
-      // The default endpoint runs an external split-pdf pipeline and rejects
-      // anything other than application/pdf. If the batch contains any image
-      // (JPG/JPEG/PNG/etc.), route to the image-friendly endpoint so it
-      // doesn't get rejected by the server's `extensions:pdf` validation.
-      final bool hasNonPdf = validDocs.any(
-        (d) => p.extension(d.displayName).toLowerCase() != '.pdf',
-      );
-      final String uploadUrl = hasNonPdf
-          ? Multi_Api_POD_UPLOAD_URL_IMAGES
-          : Multi_Api_POD_UPLOAD_URL;
-      debugPrint('[UPLOAD] API Endpoint: $uploadUrl (hasNonPdf=$hasNonPdf)');
+      // ──────────────────────────────────────────────────────────────────────
+      // NEW UPLOAD ENDPOINT
+      // POST ${API_SECONDARY_SALES_UPLOAD_URL}
+      // (https://himalaya.globalspace.in/api/secondary-sales/upload)
+      // Accepts: files[], stockist_id, statement_month, company_name, remarks
+      // ──────────────────────────────────────────────────────────────────────
+
+      // [OLD — Case A / Case B] The split-file-processor pipeline selected the
+      // endpoint based on whether the batch contained non-PDF files.
+      // Kept here for reference — no longer used by _performUpload.
+      //
+      // final bool hasNonPdf = validDocs.any(
+      //   (d) => p.extension(d.displayName).toLowerCase() != '.pdf',
+      // );
+      // final String uploadUrl = hasNonPdf
+      //     ? Multi_Api_POD_UPLOAD_URL_IMAGES   // Case B — images allowed
+      //     : Multi_Api_POD_UPLOAD_URL;          // Case A — PDF only
+      // debugPrint('[UPLOAD] API Endpoint: $uploadUrl (hasNonPdf=$hasNonPdf)');
+
+      // Active endpoint — all file types go to the single secondary-sales upload URL.
+      final String uploadUrl = API_SECONDARY_SALES_UPLOAD_URL;
+      debugPrint('[UPLOAD] API Endpoint: $uploadUrl');
 
       for (int attempt = 0; attempt < maxRetries; attempt++) {
         try {
           final uri = Uri.parse(uploadUrl);
           final req = http.MultipartRequest('POST', uri);
 
+          // ── Attach files as files[] multipart array ──────────────────────
           for (final d in validDocs) {
             final filename = p.basename(d.file.path);
             final contentType = _inferContentTypeFile(d.file);
@@ -1343,6 +1355,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
             );
           }
 
+          // ── Auth header ────────────────────────────────────────────────────
           if (token != null) {
             req.headers['Authorization'] = 'Bearer $token';
           }
@@ -1350,15 +1363,30 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           // Force fresh connection to reduce stale keep-alive socket aborts.
           req.headers['Connection'] = 'close';
 
-          final phpStyleJson = _buildPhpStyleJson(validDocs);
-          req.fields['file_einvoice_sequence'] = phpStyleJson;
-          req.fields['doc_type'] = 'POD';
-          req.fields['document_count'] = validDocs.length.toString();
-          req.fields['multi_page'] = (validDocs.length > 1).toString();
-          req.fields['ocr_enhanced'] = 'true';
-          req.fields['dpi'] = '300';
+          // ── Fields — new secondary-sales/upload API spec ────────────────────
+          // Required
           req.fields['stockist_id'] = stockistId.toString();
-          req.fields['stockistId'] = stockistId.toString();
+
+          // Optional — statement month derived from current date (YYYY-MM).
+          // The backend accepts this as optional; send it when available.
+          final now = DateTime.now();
+          final statementMonth =
+              '${now.year}-${now.month.toString().padLeft(2, '0')}';
+          req.fields['statement_month'] = statementMonth;
+
+          req.fields['company_name'] = 'Himalaya';
+
+          req.fields['remarks'] = 'Mobile upload';
+
+          // ── OLD fields — kept for reference, no longer sent ─────────────────
+          // req.fields['stockistId']            = stockistId.toString(); // duplicate alias
+          // req.fields['file_einvoice_sequence'] = phpStyleJson;          // split-pipeline only
+          // req.fields['doc_type']              = 'POD';                  // split-pipeline only
+          // req.fields['document_count']        = validDocs.length.toString();
+          // req.fields['multi_page']            = (validDocs.length > 1).toString();
+          // req.fields['ocr_enhanced']          = 'true';
+          // req.fields['dpi']                   = '300';
+          // ────────────────────────────────────────────────────────────────────
 
           debugPrint(
             '[UPLOAD] Attempt ${attempt + 1}/$maxRetries: sending ${validDocs.length} file(s)',
@@ -1366,8 +1394,12 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           debugPrint(
             '[UPLOAD] Files: ${validDocs.map((d) => d.displayName).join(', ')}',
           );
+          debugPrint(
+            '[UPLOAD] Fields: stockist_id=$stockistId, statement_month=$statementMonth',
+          );
 
           final resp = await req.send().timeout(connectTimeout);
+
           final responseBody = await resp.stream.bytesToString().timeout(
             responseTimeout,
           );
