@@ -18,9 +18,17 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zforce/features/pod/models/_SplitOut.dart';
+import 'package:zforce/features/pod/models/upload_record.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/screens/upload_status_screen.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
+import 'package:zforce/features/pod/services/api_client.dart';
+import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen.dart';
+import 'package:zforce/features/pod/services/secondary_sales_statement_month.dart';
+import 'package:zforce/features/pod/services/secondary_sales_stockist_service.dart';
+import 'package:zforce/features/pod/services/upload_record_store.dart';
+import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
+import 'package:zforce/features/pod/widgets/secondary_sales_stockist_picker.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:zforce/features/pod/widgets/PdfPreviewScreen.dart'; // ← ADD
 import 'dart:math'; // For min() function
@@ -398,7 +406,9 @@ List<SplitOut> _fallbackUnsplitPdf(File pdfFile) {
 }
 
 class PODUploadScreen extends StatefulWidget {
-  const PODUploadScreen({super.key});
+  const PODUploadScreen({super.key, this.stockistService});
+
+  final SecondarySalesStockistService? stockistService;
 
   @override
   State<PODUploadScreen> createState() => _PODUploadScreenState();
@@ -414,10 +424,19 @@ class _PODUploadScreenState extends State<PODUploadScreen>
   String _currentProcessingMessage = '';
 
   late TabController _tabController;
+  late final SecondarySalesStockistService _stockistService;
 
   List<_SelectItem> _allStockists = [];
   List<_SelectItem> _allChemists = [];
   _SelectItem? _selectedStockist;
+  List<SecondarySalesStockistInfo> _authorizedStockists = [];
+  SecondarySalesStockistInfo? _authorizedSelected;
+  String? _stockistError;
+  String? _stockistsLoadedForToken;
+  DateTime _selectedStatementMonth = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+  );
 
   Timer? _stockistSearchTimer;
   Timer? _hospitalSearchTimer;
@@ -437,6 +456,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 1, vsync: this);
+    _stockistService = widget.stockistService ?? SecondarySalesStockistService();
     _loadLists();
   }
 
@@ -481,9 +501,14 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       setState(() {
         _selectedStockist = null;
         _selectedChemist = null;
+        _authorizedSelected = null;
+        _authorizedStockists = [];
+        _stockistError = null;
+        _stockistsLoadedForToken = null;
         _stockistKey = UniqueKey();
         _chemistKey = UniqueKey();
       });
+      _stockistService.clear();
 
       await _loadLists();
 
@@ -525,6 +550,11 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     });
 
     try {
+      if (isSecondarySalesUpload) {
+        await _loadAuthorizedSecondarySalesStockists();
+        return;
+      }
+
       final results = await Future.wait([
         _fetchSelectItems(API_STOCKISTS_URL),
         _fetchSelectItems(API_HOSPITALS_URL),
@@ -535,9 +565,18 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         _allStockists = results[0];
         _allChemists = results[1];
       });
+    } on UnauthorizedException {
+      // ApiClient / AuthService already handles session expiry.
+      debugPrint('Stockist list load stopped: unauthorized');
     } catch (e) {
       debugPrint('Failed to load lists: $e');
       if (!mounted) return;
+      if (isSecondarySalesUpload) {
+        setState(() {
+          _authorizedStockists = [];
+          _stockistError = e.toString();
+        });
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to load lists: $e')));
@@ -551,7 +590,73 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     }
   }
 
+  Future<void> _loadAuthorizedSecondarySalesStockists() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('authToken');
+
+    if (_stockistsLoadedForToken != null &&
+        _stockistsLoadedForToken != token) {
+      _authorizedStockists = [];
+      _authorizedSelected = null;
+      _selectedStockist = null;
+      _stockistService.clear();
+    }
+
+    try {
+      final stockists = await _stockistService.fetchAuthorizedStockists(
+        authToken: token,
+      );
+      if (!mounted) return;
+
+      SecondarySalesStockistInfo? stillValid;
+      if (_authorizedSelected != null) {
+        for (final item in stockists) {
+          if (item.id == _authorizedSelected!.id) {
+            stillValid = item;
+            break;
+          }
+        }
+      }
+
+      setState(() {
+        _authorizedStockists = stockists;
+        _authorizedSelected = stillValid;
+        _selectedStockist = stillValid == null
+            ? null
+            : _SelectItem(
+                id: stillValid.id.toString(),
+                label: stillValid.name,
+              );
+        _stockistError = null;
+        _stockistsLoadedForToken = token;
+      });
+    } on UnauthorizedException {
+      if (!mounted) return;
+      setState(() {
+        _authorizedStockists = [];
+        _authorizedSelected = null;
+        _selectedStockist = null;
+        _stockistError = null;
+        _stockistsLoadedForToken = null;
+      });
+      rethrow;
+    } on SecondarySalesStockistException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _authorizedStockists = [];
+        _stockistError = e.message;
+        _stockistsLoadedForToken = null;
+      });
+    }
+  }
+
   Future<List<_SelectItem>> _searchStockists(String query) async {
+    if (isSecondarySalesUpload) {
+      return filterAuthorizedStockists(_authorizedStockists, query)
+          .map((s) => _SelectItem(id: s.id.toString(), label: s.name))
+          .toList();
+    }
+
     if (query.length < 3) {
       return _allStockists.take(50).toList();
     }
@@ -1281,6 +1386,27 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       return;
     }
 
+    if (isSecondarySalesUpload) {
+      final monthCheck = validateStatementFilesForSelectedMonth(
+        selectedMonth: _selectedStatementMonth,
+        fileNames: validDocs.map((d) => d.displayName),
+      );
+      if (!monthCheck.canUpload) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                monthCheck.errorMessage ??
+                    kSecondarySalesMonthUndeterminedMessage,
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     await _performUpload(validDocs);
   }
 
@@ -1327,9 +1453,22 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       //     : Multi_Api_POD_UPLOAD_URL;          // Case A — PDF only
       // debugPrint('[UPLOAD] API Endpoint: $uploadUrl (hasNonPdf=$hasNonPdf)');
 
-      // Active endpoint — all file types go to the single secondary-sales upload URL.
-      final String uploadUrl = API_SECONDARY_SALES_UPLOAD_URL;
-      debugPrint('[UPLOAD] API Endpoint: $uploadUrl');
+      // Himalaya: Secondary Sales API. Other clients keep the Invoice POD APIs.
+      final bool secondarySales = isSecondarySalesUpload;
+      final String uploadUrl;
+      if (secondarySales) {
+        uploadUrl = API_SECONDARY_SALES_UPLOAD_URL;
+      } else {
+        final bool hasNonPdf = validDocs.any(
+          (d) => p.extension(d.displayName).toLowerCase() != '.pdf',
+        );
+        uploadUrl = hasNonPdf
+            ? Multi_Api_POD_UPLOAD_URL_IMAGES
+            : Multi_Api_POD_UPLOAD_URL;
+      }
+      debugPrint(
+        '[UPLOAD] API Endpoint: $uploadUrl (uploadType=$POD_CLIENT_UPLOAD_TYPE)',
+      );
 
       for (int attempt = 0; attempt < maxRetries; attempt++) {
         try {
@@ -1363,39 +1502,33 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           // Force fresh connection to reduce stale keep-alive socket aborts.
           req.headers['Connection'] = 'close';
 
-          // ── Fields — new secondary-sales/upload API spec ────────────────────
-          // Required
-          req.fields['stockist_id'] = stockistId.toString();
-
-          // Optional — statement month derived from current date (YYYY-MM).
-          // The backend accepts this as optional; send it when available.
-          final now = DateTime.now();
-          final statementMonth =
-              '${now.year}-${now.month.toString().padLeft(2, '0')}';
-          req.fields['statement_month'] = statementMonth;
-
-          req.fields['company_name'] = 'Himalaya';
-
-          req.fields['remarks'] = 'Mobile upload';
-
-          // ── OLD fields — kept for reference, no longer sent ─────────────────
-          // req.fields['stockistId']            = stockistId.toString(); // duplicate alias
-          // req.fields['file_einvoice_sequence'] = phpStyleJson;          // split-pipeline only
-          // req.fields['doc_type']              = 'POD';                  // split-pipeline only
-          // req.fields['document_count']        = validDocs.length.toString();
-          // req.fields['multi_page']            = (validDocs.length > 1).toString();
-          // req.fields['ocr_enhanced']          = 'true';
-          // req.fields['dpi']                   = '300';
-          // ────────────────────────────────────────────────────────────────────
+          if (secondarySales) {
+            // Secondary Sales — POST /api/secondary-sales/upload
+            req.fields.addAll(
+              buildSecondarySalesUploadFields(
+                stockistId: stockistId,
+                selectedMonth: _selectedStatementMonth,
+              ),
+            );
+            debugPrint(
+              '[UPLOAD] Fields: stockist_id=$stockistId, statement_month=${req.fields['statement_month']}',
+            );
+          } else {
+            // Invoice POD — existing split-file-processor / allow-images fields.
+            req.fields['stockistId'] = stockistId.toString();
+            req.fields['file_einvoice_sequence'] = _buildPhpStyleJson(validDocs);
+            req.fields['doc_type'] = 'POD';
+            req.fields['document_count'] = validDocs.length.toString();
+            req.fields['multi_page'] = (validDocs.length > 1).toString();
+            req.fields['ocr_enhanced'] = 'true';
+            req.fields['dpi'] = '300';
+          }
 
           debugPrint(
             '[UPLOAD] Attempt ${attempt + 1}/$maxRetries: sending ${validDocs.length} file(s)',
           );
           debugPrint(
             '[UPLOAD] Files: ${validDocs.map((d) => d.displayName).join(', ')}',
-          );
-          debugPrint(
-            '[UPLOAD] Fields: stockist_id=$stockistId, statement_month=$statementMonth',
           );
 
           final resp = await req.send().timeout(connectTimeout);
@@ -1404,78 +1537,25 @@ class _PODUploadScreenState extends State<PODUploadScreen>
             responseTimeout,
           );
 
-          if (resp.statusCode == 201) {
+          if (secondarySales && resp.statusCode == 403) {
+            debugPrint('[UPLOAD] Forbidden for selected stockist: $responseBody');
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(
-                    '✅ Uploaded ${validDocs.length} file(s) successfully. Backend processing...',
-                  ),
-                  backgroundColor: Colors.green,
+                  content: Text(secondarySalesUploadForbiddenMessage(responseBody)),
+                  backgroundColor: Colors.red,
                 ),
               );
-            }
-
-            setState(() {
-              _capturedDocuments.clear();
-            });
-
-            if (mounted) {
-              Navigator.pop(context);
             }
             return;
           }
 
-          if (resp.statusCode == 200 || resp.statusCode == 202) {
-            try {
-              final responseData = jsonDecode(responseBody);
-
-              if (responseData is Map<String, dynamic> &&
-                  responseData['success'] == false) {
-                debugPrint('Upload rejected by server: $responseBody');
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        responseData['message']?.toString() ??
-                            'Upload failed: ${resp.statusCode}',
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
-                  );
-                }
-                return;
-              }
-
-              if (mounted) {
-                Navigator.pushReplacementNamed(
-                  context,
-                  PodRoutes.uploadStatus,
-                  arguments: {
-                    'uploadData': responseData,
-                    'totalFiles': validDocs.length,
-                  },
-                );
-              }
-            } catch (e) {
-              debugPrint('Error parsing response: $e');
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      '✅ Uploaded ${validDocs.length} file(s) successfully.',
-                    ),
-                    backgroundColor: Colors.green,
-                  ),
-                );
-              }
-              setState(() {
-                _capturedDocuments.clear();
-              });
-              if (mounted) {
-                Navigator.pop(context);
-              }
-            }
+          if (secondarySalesShouldNavigateToStatus(resp.statusCode)) {
+            await _onUploadAccepted(
+              responseBody: responseBody,
+              validDocs: validDocs,
+              statusCode: resp.statusCode,
+            );
             return;
           }
 
@@ -1507,9 +1587,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(
-                  'Upload failed: ${resp.statusCode} ${responseBody.isNotEmpty ? "- $responseBody" : ""}',
-                ),
+                content: Text(_uploadHttpErrorMessage(resp.statusCode, responseBody)),
                 backgroundColor: Colors.red,
               ),
             );
@@ -1558,6 +1636,113 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           _updateBusyState();
         });
       }
+    }
+  }
+
+  Future<void> _onUploadAccepted({
+    required String responseBody,
+    required List<DocumentInfo> validDocs,
+    required int statusCode,
+  }) async {
+    Map<String, dynamic>? responseData;
+    try {
+      final decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic>) {
+        responseData = decoded;
+      }
+    } catch (e) {
+      debugPrint('[UPLOAD] Response parse error: $e');
+    }
+
+    if (responseData != null && responseData['success'] == false) {
+      debugPrint('Upload rejected by server: $responseBody');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              responseData['message']?.toString() ??
+                  'Upload failed: $statusCode',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    final fileNames = validDocs.map((d) => d.displayName).toList();
+    final record = responseData == null
+        ? null
+        : UploadRecord.tryFromUploadResponse(
+            response: responseData,
+            uploadType: POD_CLIENT_UPLOAD_TYPE,
+            fileNames: fileNames,
+            totalFiles: validDocs.length,
+          );
+
+    if (record != null) {
+      await UploadRecordStore.instance.upsert(record);
+      if (!mounted) return;
+      setState(() {
+        _capturedDocuments.clear();
+      });
+      // Push (do not replace) so the user can go back and start another upload
+      // while this batch keeps processing on the server.
+      Navigator.pushNamed(
+        context,
+        PodRoutes.uploadStatus,
+        arguments: {
+          'uploadData': responseData,
+          'totalFiles': validDocs.length,
+          'batchId': record.batchId,
+          'fileNames': fileNames,
+          'uploadType': record.uploadType,
+        },
+      );
+      return;
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Uploaded ${validDocs.length} file(s). Backend processing…',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+    setState(() {
+      _capturedDocuments.clear();
+    });
+    if (mounted) {
+      Navigator.pop(context);
+    }
+  }
+
+  String _uploadHttpErrorMessage(int statusCode, String body) {
+    switch (statusCode) {
+      case 401:
+        return 'Session expired. Please log in again.';
+      case 403:
+        if (isSecondarySalesUpload) {
+          return secondarySalesUploadForbiddenMessage(body);
+        }
+        return 'You do not have permission to upload.';
+      case 413:
+        return 'File is too large to upload.';
+      case 422:
+        try {
+          final decoded = jsonDecode(body);
+          if (decoded is Map && decoded['message'] != null) {
+            return decoded['message'].toString();
+          }
+        } catch (_) {}
+        return 'The upload was rejected. Please check the file and try again.';
+      case 500:
+        return 'Server error. Please try again later.';
+      default:
+        return 'Upload failed: $statusCode${body.isNotEmpty ? ' - $body' : ''}';
     }
   }
 
@@ -1734,11 +1919,56 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                           ],
                         ),
                       ),
+                    if (isSecondarySalesUpload)
+                      _buildSectionCard(
+                        icon: Icons.calendar_month_rounded,
+                        title: 'Statement Month',
+                        subtitle: 'Upload statements for this month only',
+                        child: SecondarySalesMonthBar(
+                          selectedMonth: _selectedStatementMonth,
+                          onMonthChanged: (month) {
+                            setState(() {
+                              _selectedStatementMonth =
+                                  DateTime(month.year, month.month);
+                            });
+                          },
+                        ),
+                      ),
                     _buildSectionCard(
                       icon: Icons.store_mall_directory,
                       title: 'Stockist',
                       subtitle: 'Select Stockist',
-                      child: _customAutocomplete(
+                      child: isSecondarySalesUpload
+                          ? SecondarySalesStockistPicker(
+                              stockists: _authorizedStockists,
+                              loading: _isLoadingLists,
+                              selected: _authorizedSelected,
+                              errorMessage: _stockistError,
+                              onRetry: _isBusy ? null : _loadLists,
+                              onSelected: (stockist) {
+                                setState(() {
+                                  _authorizedSelected = stockist;
+                                  _selectedStockist = _SelectItem(
+                                    id: stockist.id.toString(),
+                                    label: stockist.name,
+                                  );
+                                });
+                              },
+                              onClear: () {
+                                setState(() {
+                                  _authorizedSelected = null;
+                                  _selectedStockist = null;
+                                });
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Stockist selection cleared'),
+                                    duration: Duration(seconds: 1),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              },
+                            )
+                          : _customAutocomplete(
                         key: _stockistKey,
                         options: _allStockists,
                         selected: _selectedStockist,

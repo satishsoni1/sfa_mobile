@@ -232,7 +232,7 @@ class _KpiGrid extends StatelessWidget {
         // Denser executive style — shorter cards so more KPIs fit in the
         // first viewport. `_KpiCard` also tightened its padding / icon /
         // font sizes below to match.
-        final aspect = w >= 1100 ? 1.95 : (w >= 600 ? 1.85 : 1.55);
+        final aspect = w >= 1100 ? 1.85 : (w >= 600 ? 1.70 : 1.35);
         final spacing = cols >= 3 ? 10.0 : 8.0;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

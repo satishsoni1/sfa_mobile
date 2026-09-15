@@ -74,15 +74,25 @@ class PodRouteGenerator {
         return MaterialPageRoute(builder: (_) => const SalesDashboardScreen());
 
       case PodRoutes.uploadStatus:
-        if (args is Map<String, dynamic>) {
+        if (args is Map<String, dynamic> &&
+            (args['uploadData'] is Map<String, dynamic> ||
+                args['batchId'] != null)) {
           return MaterialPageRoute(
             builder: (_) => UploadStatusScreen(
-              uploadData: args['uploadData'] as Map<String, dynamic>,
-              totalFiles: args['totalFiles'] as int,
+              uploadData:
+                  (args['uploadData'] as Map<String, dynamic>?) ?? const {},
+              totalFiles: args['totalFiles'] as int? ?? 0,
+              batchId: args['batchId']?.toString(),
+              fileNames: (args['fileNames'] as List?)
+                  ?.map((e) => e.toString())
+                  .toList(),
+              uploadType: args['uploadType']?.toString(),
             ),
           );
         }
-        return _errorRoute('UploadStatusScreen requires uploadData and totalFiles');
+        return _errorRoute(
+          'UploadStatusScreen requires uploadData or batchId',
+        );
 
       case PodRoutes.podReview:
         if (args is Map<String, dynamic> && args['review'] is Map<String, dynamic>) {

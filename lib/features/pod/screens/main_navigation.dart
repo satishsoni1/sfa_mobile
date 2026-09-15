@@ -2,8 +2,10 @@
 
 import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart'; // Was used for SystemNavigator.pop() — removed in Phase 3
+import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/screens/modern_document_upload_screen.dart';
 // import 'package:zforce/features/pod/screens/profile_screen.dart'; // Profile screen commented out
+import 'package:zforce/features/pod/screens/secondary_sales_dashboard_screen.dart';
 import 'package:zforce/features/pod/screens/unified_dashboard_screen.dart';
 import 'package:zforce/features/pod/services/api_client.dart';
 
@@ -140,7 +142,9 @@ class _MainNavigationState extends State<MainNavigation> {
     // exactly one entry point in the persistent UI. Drawer entries
     // (if any) are unaffected.
     final List<Widget> screens = [
-      const UnifiedDashboardScreen(),
+      isSecondarySalesUpload
+          ? const SecondarySalesDashboardScreen()
+          : const UnifiedDashboardScreen(),
       const ModernDocumentUploadScreen(),
       // const ProfileScreen(), // Profile screen commented out as per requirement
     ];

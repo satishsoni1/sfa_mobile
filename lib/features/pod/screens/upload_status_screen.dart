@@ -6,17 +6,25 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zforce/features/pod/config/pod_config.dart';
+import 'package:zforce/features/pod/models/upload_record.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
+import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
 
 class UploadStatusScreen extends StatefulWidget {
   final Map<String, dynamic> uploadData;
   final int totalFiles;
+  final String? batchId;
+  final List<String>? fileNames;
+  final String? uploadType;
 
   const UploadStatusScreen({
     super.key,
     required this.uploadData,
     required this.totalFiles,
+    this.batchId,
+    this.fileNames,
+    this.uploadType,
   });
 
   @override
@@ -41,19 +49,24 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
   bool _navigatedToReview = false;
   String? _terminalResult; // e.g. 'no_new_pods'
   String? _terminalMessage;
+  String _uploadType = POD_CLIENT_UPLOAD_TYPE;
+  List<int> _documentIds = const [];
+  List<String> _fileNames = const [];
+  int _totalFiles = 0;
+  String? _statusError;
+  DateTime _createdAt = DateTime.now();
+
+  bool get _isSecondarySales => _uploadType == kUploadTypeSecondarySales;
 
   @override
   void initState() {
     super.initState();
-
-    final data = widget.uploadData['data'] as Map<String, dynamic>?;
-    _batchId = (data?['batch_id'] ?? 'N/A').toString();
-    _batchDbId = _coerceInt(data?['batch_db_id']) ?? _coerceInt(data?['id']);
-    _status = (data?['status'] ?? 'processing').toString();
-
+    _totalFiles = widget.totalFiles;
+    _fileNames = widget.fileNames ?? const [];
+    _uploadType = widget.uploadType ?? POD_CLIENT_UPLOAD_TYPE;
+    _hydrateFromArgs();
     _pollStartedAt = DateTime.now();
-    _pollTimer = Timer.periodic(_pollInterval, (_) => _pollStatus());
-    WidgetsBinding.instance.addPostFrameCallback((_) => _pollStatus());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _bootstrap());
   }
 
   @override
@@ -69,6 +82,106 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
     return null;
   }
 
+  void _hydrateFromArgs() {
+    if (widget.uploadData.isEmpty) return;
+    final payload = UploadRecord.unwrapPayload(widget.uploadData);
+    final parsed = UploadRecord.tryFromUploadResponse(
+      response: widget.uploadData,
+      uploadType: widget.uploadType ?? POD_CLIENT_UPLOAD_TYPE,
+      fileNames: widget.fileNames ?? const [],
+      totalFiles: widget.totalFiles,
+    );
+    if (parsed != null) {
+      _applyRecord(parsed);
+      return;
+    }
+    _batchId = (payload['batch_id'] ?? widget.batchId ?? 'N/A').toString();
+    _batchDbId = _coerceInt(payload['batch_db_id']) ?? _coerceInt(payload['id']);
+    _status = (payload['status'] ?? _status).toString();
+  }
+
+  void _applyRecord(UploadRecord record) {
+    _batchId = record.batchId;
+    _batchDbId = record.batchDbId;
+    _status = record.status;
+    _uploadType = record.uploadType;
+    _documentIds = record.documentIds;
+    _fileNames = record.fileNames.isNotEmpty ? record.fileNames : _fileNames;
+    _totalFiles = record.totalFiles > 0 ? record.totalFiles : _totalFiles;
+    _statusError = record.error;
+    _createdAt = record.createdAt;
+    if (record.uploadType == kUploadTypeSecondarySales &&
+        _normalizeStatus(record.status) == 'completed') {
+      _progressPercentage = 100;
+    }
+  }
+
+  Future<void> _bootstrap() async {
+    UploadRecord? persisted;
+    final lookupId = widget.batchId ??
+        (_batchId.isNotEmpty && _batchId != 'N/A' ? _batchId : null);
+    if (lookupId != null) {
+      persisted = await UploadRecordStore.instance.getByBatchId(lookupId);
+    }
+
+    if (persisted != null) {
+      final incoming = UploadRecord.tryFromUploadResponse(
+        response: widget.uploadData,
+        uploadType: persisted.uploadType,
+        fileNames: widget.fileNames ?? persisted.fileNames,
+        totalFiles: widget.totalFiles > 0 ? widget.totalFiles : persisted.totalFiles,
+      );
+      final merged = persisted.copyWith(
+        batchDbId: incoming?.batchDbId ?? persisted.batchDbId,
+        documentIds: (incoming?.documentIds.isNotEmpty ?? false)
+            ? incoming!.documentIds
+            : persisted.documentIds,
+        fileNames: (incoming?.fileNames.isNotEmpty ?? false)
+            ? incoming!.fileNames
+            : persisted.fileNames,
+        status: incoming?.status ?? persisted.status,
+        totalFiles: incoming?.totalFiles ?? persisted.totalFiles,
+      );
+      if (!mounted) return;
+      setState(() => _applyRecord(merged));
+      await UploadRecordStore.instance.upsert(merged);
+    } else {
+      final created = UploadRecord.tryFromUploadResponse(
+        response: widget.uploadData,
+        uploadType: widget.uploadType ?? POD_CLIENT_UPLOAD_TYPE,
+        fileNames: widget.fileNames ?? const [],
+        totalFiles: widget.totalFiles,
+      );
+      if (created != null) {
+        await UploadRecordStore.instance.upsert(created);
+        if (!mounted) return;
+        setState(() => _applyRecord(created));
+      }
+    }
+
+    if (!mounted) return;
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_pollInterval, (_) => _pollStatus());
+    await _pollStatus();
+  }
+
+  Future<void> _persistCurrent({String? error, bool clearError = false}) async {
+    if (_batchId.isEmpty || _batchId == 'N/A') return;
+    await UploadRecordStore.instance.upsert(
+      UploadRecord(
+        batchId: _batchId,
+        batchDbId: _batchDbId,
+        uploadType: _uploadType,
+        fileNames: _fileNames,
+        documentIds: _documentIds,
+        status: _status,
+        createdAt: _createdAt,
+        error: clearError ? null : error ?? _statusError,
+        totalFiles: _totalFiles,
+      ),
+    );
+  }
+
   Future<void> _pollStatus() async {
     if (_navigatedToReview) return;
     if (_pollStartedAt != null &&
@@ -77,6 +190,102 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
       return;
     }
 
+    if (_isSecondarySales) {
+      await _pollSecondarySalesStatus();
+    } else {
+      await _pollInvoicePodStatus();
+    }
+  }
+
+  Future<void> _pollSecondarySalesStatus() async {
+    if (_documentIds.isEmpty) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('authToken');
+      if (token == null) return;
+
+      final statuses = <String>[];
+      final ids = List<int>.from(_documentIds);
+
+      for (final documentId in ids) {
+        final uri = Uri.parse('${API_PODS_URL}/$documentId');
+        final resp = await http
+            .get(
+              uri,
+              headers: {
+                'Authorization': 'Bearer $token',
+                'Accept': 'application/json',
+              },
+            )
+            .timeout(const Duration(seconds: 15));
+
+        if (resp.statusCode == 401 || resp.statusCode == 403) {
+          if (!mounted) return;
+          setState(() {
+            _statusError = resp.statusCode == 401
+                ? 'Session expired. Please log in again.'
+                : 'You do not have permission to view this upload.';
+          });
+          return;
+        }
+        if (resp.statusCode == 404 || resp.statusCode == 202) {
+          statuses.add('processing');
+          continue;
+        }
+        if (resp.statusCode != 200) {
+          return;
+        }
+
+        final decoded = jsonDecode(resp.body);
+        if (decoded is! Map<String, dynamic>) return;
+        final data = decoded['data'] is Map<String, dynamic>
+            ? decoded['data'] as Map<String, dynamic>
+            : decoded;
+        statuses.add(
+          _normalizeStatus((data['status'] ?? 'processing').toString()),
+        );
+      }
+
+      if (statuses.isEmpty) return;
+      final latestStatus = statuses.any((s) => s == 'failed')
+          ? 'failed'
+          : (statuses.every((s) => s == 'completed')
+              ? 'completed'
+              : 'processing');
+
+      if (!mounted) return;
+      setState(() {
+        _status = latestStatus;
+        _statusError = null;
+        if (latestStatus == 'completed') {
+          _progressPercentage = 100;
+        }
+      });
+      await _persistCurrent(clearError: true);
+
+      if (latestStatus == 'completed' || latestStatus == 'failed') {
+        _pollTimer?.cancel();
+      }
+    } on TimeoutException {
+      // keep PROCESSING — do not re-upload
+    } catch (_) {
+      // transient status failure must not discard the accepted batch
+    }
+  }
+
+  String _normalizeStatus(String raw) {
+    final s = raw.toLowerCase();
+    if (s.contains('fail') || s.contains('error') || s.contains('reject')) {
+      return 'failed';
+    }
+    if (s.contains('complete') || s.contains('success') || s == 'done') {
+      return 'completed';
+    }
+    return 'processing';
+  }
+
+  Future<void> _pollInvoicePodStatus() async {
     final pollKey = _batchDbId?.toString() ?? _batchId;
     if (pollKey.isEmpty || pollKey == 'N/A') {
       return;
@@ -122,6 +331,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
           _currentBlock = blockProgress['current_block']?.toString();
         }
       });
+      await _persistCurrent();
 
       final review = data['review'] as Map<String, dynamic>?;
       final hospitals = review == null ? null : review['hospitals'] as List?;
@@ -160,6 +370,26 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
     }
   }
 
+  /// Invoice POD keeps using API progress_percentage.
+  /// Secondary Sales has no progress payload — derive the bar from status.
+  double? _displayProgressValue(bool isCompleted, bool isFailed) {
+    if (_isSecondarySales) {
+      if (isCompleted) return 1.0;
+      if (isFailed) return _progressPercentage > 0 ? _progressPercentage / 100 : 0.0;
+      return null;
+    }
+    return _progressPercentage > 0 ? _progressPercentage / 100 : null;
+  }
+
+  String _displayProgressLabel(bool isCompleted, bool isFailed) {
+    if (_isSecondarySales) {
+      if (isCompleted) return '100%  •  Processing complete';
+      if (isFailed) return 'Failed';
+      return 'Processing your statement...';
+    }
+    return _progressPercentage > 0 ? '$_progressPercentage%' : 'Starting…';
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasTerminal = _terminalResult != null;
@@ -169,10 +399,12 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
 
     return Scaffold(
       appBar: ModernUIComponents.buildModernAppBar(
-        title: 'Upload Status',
+        title: _isSecondarySales ? 'Secondary Sales Upload' : 'Upload Status',
         subtitle: isCompleted
-            ? 'Extraction complete'
-            : (isFailed ? 'Extraction failed' : 'Processing…'),
+            ? (_isSecondarySales ? 'Processing complete' : 'Extraction complete')
+            : (isFailed
+                ? (_isSecondarySales ? 'Processing failed' : 'Extraction failed')
+                : 'Processing…'),
         icon: Icons.cloud_upload,
         color: const Color(0xFF450095),
       ),
@@ -196,30 +428,37 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
                 title: 'Upload Summary',
                 child: Column(
                   children: [
-                    _buildInfoRow('Total Files', widget.totalFiles.toString()),
+                    _buildInfoRow('Total Files', _totalFiles.toString()),
                     _buildInfoRow('Batch ID', _batchId),
                     _buildInfoRow('Status', _status.toUpperCase()),
-                    if (_blocksTotal > 0)
+                    if (_fileNames.isNotEmpty)
+                      _buildInfoRow('Files', _fileNames.join(', ')),
+                    if (_isSecondarySales && _documentIds.isNotEmpty)
+                      _buildInfoRow(
+                        'Document ID',
+                        _documentIds.join(', '),
+                      ),
+                    if (!_isSecondarySales && _blocksTotal > 0)
                       _buildInfoRow(
                         'Blocks',
                         '$_blocksCompleted / $_blocksTotal'
                             '${_currentBlock != null ? '  •  $_currentBlock' : ''}',
                       ),
-                    if (_invoicesProcessed > 0)
+                    if (!_isSecondarySales && _invoicesProcessed > 0)
                       _buildInfoRow('Invoices Extracted', _invoicesProcessed.toString()),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               LinearProgressIndicator(
-                value: _progressPercentage > 0 ? _progressPercentage / 100 : null,
+                value: _displayProgressValue(isCompleted, isFailed),
                 minHeight: 8,
                 backgroundColor: Colors.teal.withOpacity(0.15),
                 valueColor: const AlwaysStoppedAnimation(Color(0xFF450095)),
               ),
               const SizedBox(height: 8),
               Text(
-                _progressPercentage > 0 ? '$_progressPercentage%' : 'Starting…',
+                _displayProgressLabel(isCompleted, isFailed),
                 style: const TextStyle(fontSize: 12, color: Colors.black54),
               ),
               const SizedBox(height: 16),
@@ -258,18 +497,25 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
         : (isCompleted ? Icons.check_circle : Icons.hourglass_top);
     final isTerminalNoNew = _terminalResult == 'no_new_pods';
     final title = isFailed
-        ? 'Extraction Failed'
+        ? (_isSecondarySales ? 'Secondary Sales Failed' : 'Extraction Failed')
         : (isTerminalNoNew
             ? 'No New Invoices'
-            : (isCompleted ? 'Extraction Complete' : 'Files Uploaded'));
+            : (isCompleted
+                ? (_isSecondarySales
+                    ? 'Secondary Sales Complete'
+                    : 'Extraction Complete')
+                : 'Files Uploaded'));
     final subtitle = isFailed
-        ? 'Something went wrong during processing. Try again.'
+        ? (_statusError ??
+            'Something went wrong during processing. Try again.')
         : (isTerminalNoNew
             ? (_terminalMessage ??
                 'All invoices in this upload were already recorded earlier.')
             : (isCompleted
-                ? 'Redirecting to the review screen…'
-                : 'Background processing is running. This screen auto-updates.'));
+                ? (_isSecondarySales
+                    ? 'Statement processing finished. You can view details or go to the dashboard.'
+                    : 'Redirecting to the review screen…')
+                : 'Background processing is running. You can leave this screen.'));
 
     return Card(
       elevation: 4,
@@ -451,13 +697,16 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
         : (isCompleted ? Colors.green : Colors.blue);
     final isTerminalNoNew = _terminalResult == 'no_new_pods';
     final text = isFailed
-        ? 'Processing failed. Please retry the upload or contact support.'
+        ? (_statusError ??
+            'Processing failed. Please retry the upload or contact support.')
         : (isTerminalNoNew
             ? (_terminalMessage ??
                 'No new documents were created — the invoices in this upload match records that already exist. Use the dashboard to review existing documents.')
             : (isCompleted
-                ? 'Extraction finished. You will be redirected to review the hospitals detected in the invoices.'
-                : 'Your files are being processed. This screen updates automatically every few seconds.'));
+                ? (_isSecondarySales
+                    ? 'Processing finished. Open the statement details or review it from the dashboard document list.'
+                    : 'Extraction finished. You will be redirected to review the hospitals detected in the invoices.')
+                : 'Your files are being processed in the background. Leaving this screen will not cancel processing.'));
 
     return Card(
       elevation: 2,
@@ -486,8 +735,35 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
   }
 
   Widget _buildActionButtons(BuildContext context) {
+    final canViewDetails =
+        _isSecondarySales && _status == 'completed' && _documentIds.isNotEmpty;
+
     return Column(
       children: [
+        if (canViewDetails) ...[
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pushNamed(
+                  PodRoutes.statementDetail,
+                  arguments: {'podId': _documentIds.first},
+                );
+              },
+              icon: const Icon(Icons.description_outlined),
+              label: const Text('View Details'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E88E5),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(

@@ -33,6 +33,28 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  String _loginFailureMessage(String raw) {
+    var msg = raw.trim();
+    if (msg.startsWith('Exception: ')) {
+      msg = msg.substring(11);
+    }
+    if (msg.startsWith('Network Error: ')) {
+      msg = msg.substring(15);
+    }
+    if (msg.startsWith('Exception: ')) {
+      msg = msg.substring(11);
+    }
+
+    if (msg.contains('Unable to create lockable file') ||
+        msg.contains('storage/framework/cache')) {
+      return 'Server is temporarily unavailable. Please try again later.';
+    }
+    if (msg.isEmpty || msg == 'FAIL') {
+      return 'Invalid Credentials or Network Error';
+    }
+    return msg;
+  }
+
   Future<void> _callSupport() async {
     final Uri launchUri = Uri(scheme: 'tel', path: _supportNumber);
     try {
@@ -95,16 +117,13 @@ class _LoginScreenState extends State<LoginScreen> {
               builder: (_) => const DashboardScreen()),
         );
       }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content:
-                Text("Invalid Credentials or Network Error"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_loginFailureMessage(success)),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

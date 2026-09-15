@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:zforce/features/pod/config/pod_config.dart';
+import 'package:zforce/features/pod/models/upload_record.dart';
 import 'package:zforce/features/pod/screens/document_upload_screen.dart';
 import 'package:zforce/features/pod/screens/notifications_screen.dart';
 import 'package:zforce/features/pod/screens/pod_upload_screen.dart';
 import 'package:zforce/features/pod/screens/e_invoice_data_screen.dart';
 import 'package:zforce/features/pod/screens/batches_list_screen.dart';
+import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
 
@@ -147,6 +150,22 @@ class PODUploadPage extends StatefulWidget {
 }
 
 class _PODUploadPageState extends State<PODUploadPage> {
+  List<UploadRecord> _recentUploads = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecentUploads();
+  }
+
+  Future<void> _loadRecentUploads() async {
+    final records = await UploadRecordStore.instance.loadAll();
+    if (!mounted) return;
+    setState(() {
+      _recentUploads = records.take(5).toList();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -166,9 +185,9 @@ class _PODUploadPageState extends State<PODUploadPage> {
             subtitle: 'Select and upload your secondary sales files',
             icon: Icons.upload_file,
             color: const Color(0xFF450095),
-            onTap: () {
-              // Navigate to dedicated POD upload screen
-              Navigator.pushNamed(context, PodRoutes.podUpload);
+            onTap: () async {
+              await Navigator.pushNamed(context, PodRoutes.podUpload);
+              await _loadRecentUploads();
             },
           ),
           const SizedBox(height: 16),
@@ -181,6 +200,10 @@ class _PODUploadPageState extends State<PODUploadPage> {
               Navigator.pushNamed(context, PodRoutes.batchesList);
             },
           ),
+          if (_recentUploads.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            ..._recentUploads.map(_buildRecentUploadCard),
+          ],
           const SizedBox(height: 16),
           ModernUIComponents.buildInfoCard(
             title: 'Secondary sales Requirements',
@@ -192,6 +215,36 @@ class _PODUploadPageState extends State<PODUploadPage> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildRecentUploadCard(UploadRecord record) {
+    final isSecondary = record.uploadType == kUploadTypeSecondarySales;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ModernUIComponents.buildUploadCard(
+        title: isSecondary
+            ? 'Secondary Sales • ${record.status.toUpperCase()}'
+            : 'Upload • ${record.status.toUpperCase()}',
+        subtitle: record.fileNames.isNotEmpty
+            ? '${record.fileNames.first}  •  Batch ${record.batchId}'
+            : 'Batch ${record.batchId}',
+        icon: Icons.history,
+        color: const Color(0xFF00897B),
+        onTap: () async {
+          await Navigator.pushNamed(
+            context,
+            PodRoutes.uploadStatus,
+            arguments: {
+              'batchId': record.batchId,
+              'totalFiles': record.totalFiles,
+              'fileNames': record.fileNames,
+              'uploadType': record.uploadType,
+            },
+          );
+          await _loadRecentUploads();
+        },
       ),
     );
   }

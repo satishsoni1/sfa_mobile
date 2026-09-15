@@ -1,0 +1,63 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zforce/features/pod/models/upload_record.dart';
+
+/// Local persistence for accepted uploads.
+/// Uses the existing SharedPreferences mechanism — no new storage package.
+class UploadRecordStore {
+  UploadRecordStore._();
+  static final UploadRecordStore instance = UploadRecordStore._();
+
+  static const String _prefsKey = 'pod_upload_records';
+  static const int _maxRecords = 50;
+
+  Future<List<UploadRecord>> loadAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefsKey);
+    if (raw == null || raw.isEmpty) return const [];
+
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      return decoded
+          .whereType<Map>()
+          .map((m) => UploadRecord.fromJson(Map<String, dynamic>.from(m)))
+          .where((r) => r.batchId.isNotEmpty && r.batchId != 'N/A')
+          .toList();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<UploadRecord?> getByBatchId(String batchId) async {
+    if (batchId.isEmpty || batchId == 'N/A') return null;
+    final all = await loadAll();
+    for (final record in all) {
+      if (record.batchId == batchId) return record;
+    }
+    return null;
+  }
+
+  Future<void> upsert(UploadRecord record) async {
+    if (record.batchId.isEmpty || record.batchId == 'N/A') return;
+
+    final all = List<UploadRecord>.from(await loadAll());
+    final index = all.indexWhere((r) => r.batchId == record.batchId);
+    if (index >= 0) {
+      all[index] = record;
+    } else {
+      all.insert(0, record);
+    }
+
+    if (all.length > _maxRecords) {
+      all.removeRange(_maxRecords, all.length);
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _prefsKey,
+      jsonEncode(all.map((r) => r.toJson()).toList()),
+    );
+  }
+}

@@ -24,7 +24,7 @@ class StatementChartsSection extends StatelessWidget {
     final hasOpenClose  = detail.openingValue + detail.closingValue > 0;
 
     return LayoutBuilder(builder: (ctx, constraints) {
-      final wide = constraints.maxWidth > 380;
+      final wide = constraints.maxWidth > 600;
 
       Widget donutCard = _ChartCard(
         title: 'Sales vs Closing Value',
@@ -213,42 +213,62 @@ class _SalesClosingDonut extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat('#,##,##0.00');
-    return Column(children: [
-      SizedBox(
-        height: 160,
-        child: PieChart(PieChartData(
-          sections: [
-            PieChartSectionData(
-              value: detail.salesValue,
-              color: const Color(0xFF4CAF50),
-              title: '',
-              radius: 48,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : 220.0;
+        final chartSize = (maxW * 0.72).clamp(96.0, 140.0);
+        final ring = (chartSize * 0.22).clamp(16.0, 28.0);
+        final hole = (chartSize / 2) - ring - 4;
+
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              height: chartSize,
+              width: chartSize,
+              child: PieChart(
+                PieChartData(
+                  sections: [
+                    PieChartSectionData(
+                      value: detail.salesValue,
+                      color: const Color(0xFF4CAF50),
+                      title: '',
+                      radius: ring,
+                    ),
+                    PieChartSectionData(
+                      value: detail.closingValue,
+                      color: const Color(0xFF9C27B0),
+                      title: '',
+                      radius: ring,
+                    ),
+                  ],
+                  centerSpaceRadius: hole.clamp(18.0, chartSize / 2 - 8),
+                  sectionsSpace: 2,
+                ),
+              ),
             ),
-            PieChartSectionData(
-              value: detail.closingValue,
-              color: const Color(0xFF9C27B0),
-              title: '',
-              radius: 48,
+            const SizedBox(height: 8),
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 10,
+              runSpacing: 4,
+              children: [
+                _LegendItem(
+                  color: const Color(0xFF4CAF50),
+                  label: 'Sales  ₹${fmt.format(detail.salesValue)}',
+                ),
+                _LegendItem(
+                  color: const Color(0xFF9C27B0),
+                  label: 'Closing  ₹${fmt.format(detail.closingValue)}',
+                ),
+              ],
             ),
           ],
-          centerSpaceRadius: 44,
-          sectionsSpace: 3,
-        )),
-      ),
-      const SizedBox(height: 10),
-      // Mini legend
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        _Dot(color: const Color(0xFF4CAF50)),
-        const SizedBox(width: 4),
-        Text('Sales  ₹${fmt.format(detail.salesValue)}',
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-        const SizedBox(width: 14),
-        _Dot(color: const Color(0xFF9C27B0)),
-        const SizedBox(width: 4),
-        Text('Closing  ₹${fmt.format(detail.closingValue)}',
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600)),
-      ]),
-    ]);
+        );
+      },
+    );
   }
 }
 
@@ -441,6 +461,34 @@ class _HBarChart extends StatelessWidget {
           );
         }).toList(),
       )),
+    );
+  }
+}
+
+class _LegendItem extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendItem({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 160),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _Dot(color: color),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

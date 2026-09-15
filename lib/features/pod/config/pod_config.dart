@@ -27,6 +27,34 @@ const String API_POD_UPLOAD_URL = "${API_BASE_URL}pod/upload-pdf";
 // Accepts: files[] (multipart), stockist_id, statement_month, company_name, remarks
 // ──────────────────────────────────────────────────────────────────────────────
 const String API_SECONDARY_SALES_UPLOAD_URL = "${API_BASE_URL}secondary-sales/upload";
+const String API_SECONDARY_SALES_STOCKISTS_URL =
+    "${API_BASE_URL}secondary-sales/stockists";
+const String API_SECONDARY_SALES_DASHBOARD_URL =
+    "${API_BASE_URL}secondary-sales/dashboard";
+const String API_SECONDARY_SALES_DASHBOARD_BREAKDOWN_URL =
+    "${API_BASE_URL}secondary-sales/dashboard/breakdown";
+const String API_SECONDARY_SALES_DASHBOARD_RECENT_URL =
+    "${API_BASE_URL}secondary-sales/dashboard/recent";
+
+String secondarySalesStockistStatementsUrl(int stockistId) =>
+    "${API_BASE_URL}secondary-sales/stockist/$stockistId/statements";
+
+String secondarySalesKamStockistsUrl(int kamId) =>
+    "${API_BASE_URL}secondary-sales/dashboard/kam/$kamId/stockists";
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CLIENT UPLOAD TYPE
+// Himalaya reuses the existing POD upload UI for Secondary Sales.
+// Invoice-POD clients should set this to [kUploadTypeInvoicePod].
+// ──────────────────────────────────────────────────────────────────────────────
+const String kUploadTypeSecondarySales = 'secondary_sales';
+const String kUploadTypeInvoicePod = 'invoice_pod';
+
+/// Active upload behaviour for this client build.
+const String POD_CLIENT_UPLOAD_TYPE = kUploadTypeSecondarySales;
+
+bool get isSecondarySalesUpload =>
+    POD_CLIENT_UPLOAD_TYPE == kUploadTypeSecondarySales;
 
 // [OLD — Case A] PDF-only pipeline — kept for reference, no longer used for upload.
 // const String Multi_Api_POD_UPLOAD_URL = "${API_BASE_URL}split-file-processor/process";
