@@ -41,7 +41,7 @@ class ZForceApp extends StatelessWidget {
     return Consumer<AuthProvider>(
       builder: (context, auth, child) {
         return MaterialApp(
-          title: 'himalayas-app',
+          title: 'vodo',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           onGenerateRoute: (settings) {

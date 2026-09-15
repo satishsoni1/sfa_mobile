@@ -93,6 +93,7 @@ class _SecondarySalesKamStockistsScreenState
       appBar: AppBar(
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF2C3E50),
+        iconTheme: const IconThemeData(color: Colors.black),
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

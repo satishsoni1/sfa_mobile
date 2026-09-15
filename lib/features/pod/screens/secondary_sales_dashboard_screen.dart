@@ -147,8 +147,9 @@ class _SecondarySalesDashboardScreenState
         foregroundColor: const Color(0xFF2C3E50),
         elevation: 0,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.black),
           onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
       ),

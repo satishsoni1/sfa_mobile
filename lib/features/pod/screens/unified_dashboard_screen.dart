@@ -116,9 +116,9 @@ class _UnifiedDashboardScreenState extends State<UnifiedDashboardScreen>
           foregroundColor: const Color(0xFF2C3E50),
           elevation: 0,
           centerTitle: true,
-          iconTheme: const IconThemeData(color: Color(0xFF2C3E50)),
+          iconTheme: const IconThemeData(color: Colors.black),
           leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: Color(0xFF2C3E50)),
+            icon: const Icon(Icons.arrow_back, color: Colors.black),
             tooltip: 'Back',
             onPressed: () {
               Navigator.of(context, rootNavigator: true).pop();

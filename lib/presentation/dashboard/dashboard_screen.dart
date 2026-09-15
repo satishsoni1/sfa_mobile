@@ -567,22 +567,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         children: [
                           _buildQuickActions(
                             true,
-                            col1Top: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildAttendanceCard(),
-                                const SizedBox(height: 24),
-                                _buildVisitsOverview(),
-                                const SizedBox(height: 24),
-                              ],
-                            ),
-                            col2Top: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildExecutionReportCard(),
-                                const SizedBox(height: 24),
-                              ],
-                            ),
+                            // col1Top: Column(
+                            //   crossAxisAlignment: CrossAxisAlignment.stretch,
+                            //   children: [
+                            //     _buildAttendanceCard(),
+                            //     const SizedBox(height: 24),
+                            //     _buildVisitsOverview(),
+                            //     const SizedBox(height: 24),
+                            //   ],
+                            // ),
+                            // col2Top: Column(
+                            //   crossAxisAlignment: CrossAxisAlignment.stretch,
+                            //   children: [
+                            //     _buildExecutionReportCard(),
+                            //     const SizedBox(height: 24),
+                            //   ],
+                            // ),
                           ),
                           _buildFooter(),
                         ],
@@ -603,14 +603,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     alignment: Alignment.topCenter,
                     children: [
                       _buildHeaderBackground(user, headerHeight),
-                      Container(
-                        margin: EdgeInsets.only(
-                          top: headerHeight - cardOverlap,
-                          left: 20,
-                          right: 20,
-                        ),
-                        child: _buildAttendanceCard(),
-                      ),
+                      // Container(
+                      //   margin: EdgeInsets.only(
+                      //     top: headerHeight - cardOverlap,
+                      //     left: 20,
+                      //     right: 20,
+                      //   ),
+                      //   child: _buildAttendanceCard(),
+                      // ),
                     ],
                   ),
                   const SizedBox(height: 20),
@@ -620,10 +620,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildVisitsOverview(),
-                        const SizedBox(height: 24),
-                        _buildExecutionReportCard(),
-                        const SizedBox(height: 24),
+                        // _buildVisitsOverview(),
+                        // const SizedBox(height: 24),
+                        // _buildExecutionReportCard(),
+                        // const SizedBox(height: 24),
                         _buildQuickActions(false), // pass false for mobile
                       ],
                     ),
@@ -1297,70 +1297,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final canUseWebDcr =
         _attendanceWebDcrAllowed ?? user?.isWebDcrAllowed ?? false;
     final fieldOps = [
-      _MenuAction(
-        Icons.map,
-        "Route wise Tour Plan",
-        Colors.teal,
-        () => _navigateTo(const RouteTourPlanScreen()),
-      ),
-         // _MenuAction(
-          //   Icons.slideshow_outlined,
-          //   "VODOCLM",
-          //   const Color(0xFF4A148C),
-          //   () => Navigator.push(
-          //     context,
-          //     MaterialPageRoute(
-          //       builder: (_) => ChangeNotifierProvider(
-          //         create: (_) => ClmProvider(),
-          //         child: const ClmHomeScreen(),
-          //       ),
-          //     ),
-          //   ),
-          // ),
-        _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
-          if (_isCheckedIn) {
-            _navigateTo(const DoctorListScreen());
-          } else {
-            _showSnack("Please Check In first!");
-          }
-        }),
-      _MenuAction(
-        Icons.medical_services,
-        "Expense",
-        Colors.purple,
-        () => _navigateTo(ExpenseSummaryScreen()),
-      ),
-      _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
-        if (_isCheckedIn) {
-          _navigateTo(const ChemistListScreen());
-        } else {
-          _showSnack("Please Check In first!");
-        }
-      }),
-        _MenuAction(
-          Icons.assignment_turned_in,
-          "Daily Report",
-          Colors.orange,
-          () => _navigateTo(const DailyReportScreen()),
-        ),
-      _MenuAction(
-        Icons.business_center,
-        "NFW Report",
-        Colors.brown,
-        () => _navigateTo(const NfwReportScreen()),
-      ),
-      _MenuAction(
-        Icons.lock_open,
-        "Requests",
-        Colors.redAccent,
-        () => _navigateTo(const DcrUnlockRequestScreen()),
-      ),
-      _MenuAction(
-        Icons.edit_road,
-        "TP Deviation Request",
-        Colors.amber.shade700,
-        () => _navigateTo(const TpDeviationHistoryScreen()),
-      ),
+      // _MenuAction(
+      //   Icons.map,
+      //   "Route wise Tour Plan",
+      //   Colors.teal,
+      //   () => _navigateTo(const RouteTourPlanScreen()),
+      // ),
+      //    // _MenuAction(
+      //     //   Icons.slideshow_outlined,
+      //     //   "VODOCLM",
+      //     //   const Color(0xFF4A148C),
+      //     //   () => Navigator.push(
+      //     //     context,
+      //     //     MaterialPageRoute(
+      //     //       builder: (_) => ChangeNotifierProvider(
+      //     //         create: (_) => ClmProvider(),
+      //     //         child: const ClmHomeScreen(),
+      //     //       ),
+      //     //     ),
+      //     //   ),
+      //     // ),
+      //   _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
+      //     if (_isCheckedIn) {
+      //       _navigateTo(const DoctorListScreen());
+      //     } else {
+      //       _showSnack("Please Check In first!");
+      //     }
+      //   }),
+      // _MenuAction(
+      //   Icons.medical_services,
+      //   "Expense",
+      //   Colors.purple,
+      //   () => _navigateTo(ExpenseSummaryScreen()),
+      // ),
+      // _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
+      //   if (_isCheckedIn) {
+      //     _navigateTo(const ChemistListScreen());
+      //   } else {
+      //     _showSnack("Please Check In first!");
+      //   }
+      // }),
+      //   _MenuAction(
+      //     Icons.assignment_turned_in,
+      //     "Daily Report",
+      //     Colors.orange,
+      //     () => _navigateTo(const DailyReportScreen()),
+      //   ),
+      // _MenuAction(
+      //   Icons.business_center,
+      //   "NFW Report",
+      //   Colors.brown,
+      //   () => _navigateTo(const NfwReportScreen()),
+      // ),
+      // _MenuAction(
+      //   Icons.lock_open,
+      //   "Requests",
+      //   Colors.redAccent,
+      //   () => _navigateTo(const DcrUnlockRequestScreen()),
+      // ),
+      // _MenuAction(
+      //   Icons.edit_road,
+      //   "TP Deviation Request",
+      //   Colors.amber.shade700,
+      //   () => _navigateTo(const TpDeviationHistoryScreen()),
+      // ),
       // ============================================================
       // POD / SECONDARY SALES INTEGRATION
       // ============================================================
@@ -1369,6 +1369,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "Secondary Sales",
         Colors.teal.shade700,
         () => _navigateTo(const PodEntryScreen()),
+      ),
+      _MenuAction(
+        Icons.hourglass_empty_rounded,
+        "More features\ncoming soon",
+        Colors.grey.shade600,
+        () => _showSnack("More features coming soon!"),
       ),
     ];
     final aiIntel = [
@@ -1443,24 +1449,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _MenuAction(Icons.link, "Other Links", Colors.indigo, _openWebLinks),
     ];
     final utilities = [
-      _MenuAction(
-        Icons.person_search,
-        "MCL Updation",
-        Colors.deepPurple,
-        () => _navigateTo(const NewDrMasterScreen()),
-      ),
-      _MenuAction(
-        Icons.folder_shared,
-        "Dr. Master",
-        Colors.deepPurple,
-        () => _navigateTo(const DoctorMasterScreen()),
-      ),
-      _MenuAction(
-        Icons.medication_outlined,
-        "Brand Pathfinder",
-        Colors.pink,
-        () => _navigateTo(const DoctorBrandScreen()),
-      ),
+      // _MenuAction(
+      //   Icons.person_search,
+      //   "MCL Updation",
+      //   Colors.deepPurple,
+      //   () => _navigateTo(const NewDrMasterScreen()),
+      // ),
+      // _MenuAction(
+      //   Icons.folder_shared,
+      //   "Dr. Master",
+      //   Colors.deepPurple,
+      //   () => _navigateTo(const DoctorMasterScreen()),
+      // ),
+      // _MenuAction(
+      //   Icons.medication_outlined,
+      //   "Brand Pathfinder",
+      //   Colors.pink,
+      //   () => _navigateTo(const DoctorBrandScreen()),
+      // ),
         // _MenuAction(
           //   Icons.business_center,
           //   "Data Upload",
@@ -1502,8 +1508,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 if (col1Top != null) col1Top,
                 _buildMenuCategoryCard("Field Operations", fieldOps),
-                const SizedBox(height: 24),
-                _buildMenuCategoryCard("Manager Reporting", managerOps),
+                // const SizedBox(height: 24),
+                // _buildMenuCategoryCard("Manager Reporting", managerOps),
               ],
             ),
           ),
@@ -1513,8 +1519,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (col2Top != null) col2Top,
-                _buildMenuCategoryCard("AI Intelligence", aiIntel),
-                const SizedBox(height: 24),
+                // _buildMenuCategoryCard("AI Intelligence", aiIntel),
+                // const SizedBox(height: 24),
                 _buildMenuCategoryCard("Utilities", utilities),
               ],
             ),
@@ -1526,10 +1532,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildMenuCategoryCard("Field Operations", fieldOps),
-        const SizedBox(height: 16),
-        _buildMenuCategoryCard("Manager Reporting", managerOps),
-        const SizedBox(height: 16),
-        _buildMenuCategoryCard("AI Intelligence", aiIntel),
+        // const SizedBox(height: 16),
+        // _buildMenuCategoryCard("Manager Reporting", managerOps),
+        // const SizedBox(height: 16),
+        // _buildMenuCategoryCard("AI Intelligence", aiIntel),
         const SizedBox(height: 16),
         _buildMenuCategoryCard("Utilities", utilities),
         const SizedBox(height: 40),
