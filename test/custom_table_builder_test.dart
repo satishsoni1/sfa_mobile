@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:markdown/markdown.dart' as md;
-import 'package:zforce/presentation/chat/chat_screen.dart';
+import 'package:sfa_akumentis/presentation/chat/chat_screen.dart';
 
 // TODO: Import your ChatScreen file here
 // import 'package:your_app/screens/chat_screen.dart';

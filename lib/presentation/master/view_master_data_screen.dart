@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:zforce/data/services/api_service.dart';
+import 'package:sfa_akumentis/data/services/api_service.dart';
 
 class ViewMasterDataScreen extends StatefulWidget {
   final String assignedToId;

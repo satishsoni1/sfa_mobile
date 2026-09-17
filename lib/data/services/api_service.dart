@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 import 'package:intl/intl.dart';
-import 'package:zforce/data/models/attendance_models.dart';
-import 'package:zforce/data/models/visit_report.dart';
+import 'package:sfa_akumentis/data/models/attendance_models.dart';
+import 'package:sfa_akumentis/data/models/visit_report.dart';
 import '../models/doctor.dart' show Doctor;
 import '../models/tour_plan.dart' show TourPlan;
 import '../models/user_model.dart';
@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Android Emulator uses 10.0.2.2. For Real Device use your PC IP (e.g., 192.168.1.5)
-  static const String baseUrl = 'https://himalaya.globalspace.in/api';
+  static const String baseUrl = 'https://va-akumentis.globalspace.in/api';
 
   String _errorMessageFromBody(String body) {
     try {

@@ -42,7 +42,7 @@ class ZForceApp extends StatelessWidget {
     return Consumer<AuthProvider>(
       builder: (context, auth, child) {
         return MaterialApp(
-          title: 'himalayas-app',
+          title: 'sfa-akumentis',
           debugShowCheckedModeBanner: false,
           theme: AppTheme.lightTheme,
           onGenerateRoute: (settings) {

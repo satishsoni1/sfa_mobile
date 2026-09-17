@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:zforce/data/models/chemist_report.dart';
-import 'package:zforce/data/models/product.dart';
+import 'package:sfa_akumentis/data/models/chemist_report.dart';
+import 'package:sfa_akumentis/data/models/product.dart';
 import '../data/services/api_service.dart';
 import '../data/models/visit_report.dart'; // Ensure you have this model
 import '../data/models/doctor.dart'; // Ensure you have this model

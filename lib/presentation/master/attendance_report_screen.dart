@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
-import 'package:zforce/core/constants/app_colors.dart';
-import 'package:zforce/data/models/attendance_models.dart';
-import 'package:zforce/data/services/api_service.dart';
+import 'package:sfa_akumentis/core/constants/app_colors.dart';
+import 'package:sfa_akumentis/data/models/attendance_models.dart';
+import 'package:sfa_akumentis/data/services/api_service.dart';
 
 class AttendanceReportScreen extends StatefulWidget {
   const AttendanceReportScreen({super.key});

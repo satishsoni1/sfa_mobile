@@ -17,7 +17,7 @@ class ClmSyncService {
   factory ClmSyncService() => _instance;
   ClmSyncService._();
 
-  static const String _baseUrl = 'https://himalaya.globalspace.in/api';
+  static const String _baseUrl = 'https://va-akumentis.globalspace.in/api';
   static const String _prefLastSync = 'clm_last_master_sync';
 
   final ClmDatabaseService _db = ClmDatabaseService();

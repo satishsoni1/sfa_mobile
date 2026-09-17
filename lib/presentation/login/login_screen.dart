@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zforce/presentation/dashboard/dashboard_screen.dart';
-import 'package:zforce/presentation/login/change_password_screen.dart';
+import 'package:sfa_akumentis/presentation/dashboard/dashboard_screen.dart';
+import 'package:sfa_akumentis/presentation/login/change_password_screen.dart';
 // Add the import for your new Forgot Password Screen (adjust path as needed)
 import 'forgot_password_screen.dart'; 
 import '../../providers/auth_provider.dart';

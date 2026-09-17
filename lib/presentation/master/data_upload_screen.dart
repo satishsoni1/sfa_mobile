@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zforce/data/services/api_service.dart';
-import 'package:zforce/presentation/master/view_master_data_screen.dart';
+import 'package:sfa_akumentis/data/services/api_service.dart';
+import 'package:sfa_akumentis/presentation/master/view_master_data_screen.dart';
 
 class DataUploadScreen extends StatefulWidget {
   final bool isManager; // Pass true if the logged-in user is a manager
@@ -80,7 +80,7 @@ class _DataUploadScreenState extends State<DataUploadScreen> {
   // --- Actual Download Logic ---
   Future<void> _downloadSample(String fileType) async {
     // Base URL of your uploads folder
-    const String baseUrl = "https://himalaya.globalspace.in/assets/uploads";
+    const String baseUrl = "https://va-akumentis.globalspace.in/assets/uploads";
 
     // Set the exact filename based on the type requested
     String fileName = "";

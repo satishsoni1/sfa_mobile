@@ -1,9 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:zforce/core/constants/app_colors.dart';
-import 'package:zforce/providers/auth_provider.dart';
-import 'package:zforce/presentation/reporting/daily_call_report_screen.dart';
-import 'package:zforce/presentation/webview/internal_webview_screen.dart';
+import 'package:sfa_akumentis/core/constants/app_colors.dart';
+import 'package:sfa_akumentis/providers/auth_provider.dart';
+import 'package:sfa_akumentis/presentation/reporting/daily_call_report_screen.dart';
+import 'package:sfa_akumentis/presentation/webview/internal_webview_screen.dart';
 import 'hierarchy_report_view_screen.dart';
 
 // Enum defined outside so it can be used across files
@@ -222,7 +222,7 @@ class ReportsDashboardScreen extends StatelessWidget {
 
     // These report links are opened directly with the logged-in user's employee code.
     final url =
-        'https://himalaya.globalspace.in/$path?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://va-akumentis.globalspace.in/$path?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     Navigator.pushNamed(
       context,

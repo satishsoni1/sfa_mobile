@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:zforce/core/constants/app_colors.dart';
-import 'package:zforce/data/services/api_service.dart';
-import 'package:zforce/providers/auth_provider.dart';
+import 'package:sfa_akumentis/core/constants/app_colors.dart';
+import 'package:sfa_akumentis/data/services/api_service.dart';
+import 'package:sfa_akumentis/providers/auth_provider.dart';
 
 class DcrUnlockRequestScreen extends StatefulWidget {
   const DcrUnlockRequestScreen({super.key});

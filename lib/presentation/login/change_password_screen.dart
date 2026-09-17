@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:zforce/presentation/dashboard/dashboard_screen.dart';
+import 'package:sfa_akumentis/presentation/dashboard/dashboard_screen.dart';
 import '../../data/services/api_service.dart';
 
 class ChangePasswordScreen extends StatefulWidget {

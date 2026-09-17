@@ -1,4 +1,4 @@
-package com.globalspace.himalaya
+package com.globalspace.akumentis
 
 import io.flutter.embedding.android.FlutterActivity
 

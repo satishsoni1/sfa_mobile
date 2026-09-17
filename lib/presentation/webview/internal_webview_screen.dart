@@ -2,7 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:zforce/core/constants/app_colors.dart';
+import 'package:sfa_akumentis/core/constants/app_colors.dart';
 
 import 'iframe_view_stub.dart'
     if (dart.library.html) 'iframe_view_web.dart';

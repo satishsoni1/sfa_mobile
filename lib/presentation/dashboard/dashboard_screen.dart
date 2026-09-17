@@ -12,23 +12,23 @@ import 'package:universal_html/html.dart'
     as html; // Safe cross-platform HTML handler
 
 // --- SCREENS ---
-import 'package:zforce/presentation/chat/chat_screen.dart';
-import 'package:zforce/presentation/doctor_list/chemist_list_screen.dart';
-import 'package:zforce/presentation/doctor_list/doctor_selection_screen.dart';
-import 'package:zforce/presentation/expense/ExpenseScreen.dart';
-import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
-import 'package:zforce/presentation/expense/ExpenseManagerScreen.dart';
-import 'package:zforce/presentation/doctor_brand/doctor_brand_screen.dart';
-import 'package:zforce/presentation/leave/leave_list_screen.dart';
-import 'package:zforce/presentation/master/data_upload_screen.dart';
-import 'package:zforce/presentation/master/attendance_report_screen.dart';
-import 'package:zforce/presentation/master/reports_dashboard_screen.dart';
-import 'package:zforce/presentation/route_wise_plan/tour_plan_screen.dart';
-import 'package:zforce/presentation/sample/SampleDistributionScreen.dart';
-import 'package:zforce/presentation/support/support_screen.dart';
-import 'package:zforce/presentation/login/change_password_screen.dart';
-import 'package:zforce/presentation/login/login_screen.dart';
-import 'package:zforce/presentation/login/login_screen.dart';
+import 'package:sfa_akumentis/presentation/chat/chat_screen.dart';
+import 'package:sfa_akumentis/presentation/doctor_list/chemist_list_screen.dart';
+import 'package:sfa_akumentis/presentation/doctor_list/doctor_selection_screen.dart';
+import 'package:sfa_akumentis/presentation/expense/ExpenseScreen.dart';
+import 'package:sfa_akumentis/presentation/expense/ExpenseSummaryScreen.dart';
+import 'package:sfa_akumentis/presentation/expense/ExpenseManagerScreen.dart';
+import 'package:sfa_akumentis/presentation/doctor_brand/doctor_brand_screen.dart';
+import 'package:sfa_akumentis/presentation/leave/leave_list_screen.dart';
+import 'package:sfa_akumentis/presentation/master/data_upload_screen.dart';
+import 'package:sfa_akumentis/presentation/master/attendance_report_screen.dart';
+import 'package:sfa_akumentis/presentation/master/reports_dashboard_screen.dart';
+import 'package:sfa_akumentis/presentation/route_wise_plan/tour_plan_screen.dart';
+import 'package:sfa_akumentis/presentation/sample/SampleDistributionScreen.dart';
+import 'package:sfa_akumentis/presentation/support/support_screen.dart';
+import 'package:sfa_akumentis/presentation/login/change_password_screen.dart';
+import 'package:sfa_akumentis/presentation/login/login_screen.dart';
+import 'package:sfa_akumentis/presentation/login/login_screen.dart';
 import '../campaign/campaign_list_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
@@ -468,7 +468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    final url = 'https://himalaya.globalspace.in/dcrapproval/$employeeCode';
+    final url = 'https://va-akumentis.globalspace.in/dcrapproval/$employeeCode';
 
     await Navigator.pushNamed(
       context,
@@ -491,7 +491,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final url =
-        'https://himalaya.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://va-akumentis.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     await Navigator.pushNamed(
       context,
