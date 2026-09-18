@@ -14,6 +14,10 @@ const String kSecondarySalesStockistEmptyMessage =
     'No stockists are available for your account.';
 const String kSecondarySalesUploadForbiddenMessage =
     'You are not authorized to upload a statement for this stockist.';
+const String kSecondarySalesMonthMismatchMessage =
+    'You can upload statements of the selected month only.';
+const String kSecondarySalesMonthUndeterminedMessage =
+    'Unable to determine the statement month. Please upload a valid stock statement.';
 
 /// Stockist list URL for the active upload type.
 /// Himalaya Secondary Sales uses the authorized endpoint only.
@@ -186,6 +190,16 @@ String secondarySalesUploadForbiddenMessage(String body) {
   if (parsed != null && parsed.isNotEmpty) return parsed;
   return kSecondarySalesUploadForbiddenMessage;
 }
+
+String secondarySalesUploadUnprocessableMessage(String body) {
+  final parsed = _messageFromBody(body);
+  if (parsed != null && parsed.isNotEmpty) return parsed;
+  return 'The upload was rejected. Please check the file and try again.';
+}
+
+/// Filename is never used to extract or reject statement month.
+/// Laravel extracts the month from the uploaded document.
+bool secondarySalesClientBlocksOnFilenameMonth(String fileName) => false;
 
 String? _messageFromBody(String body) {
   if (body.trim().isEmpty) return null;

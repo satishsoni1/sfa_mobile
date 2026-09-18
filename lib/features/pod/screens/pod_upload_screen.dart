@@ -24,7 +24,6 @@ import 'package:zforce/features/pod/screens/upload_status_screen.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
 import 'package:zforce/features/pod/services/api_client.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen.dart';
-import 'package:zforce/features/pod/services/secondary_sales_statement_month.dart';
 import 'package:zforce/features/pod/services/secondary_sales_stockist_service.dart';
 import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
@@ -1386,27 +1385,6 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       return;
     }
 
-    if (isSecondarySalesUpload) {
-      final monthCheck = validateStatementFilesForSelectedMonth(
-        selectedMonth: _selectedStatementMonth,
-        fileNames: validDocs.map((d) => d.displayName),
-      );
-      if (!monthCheck.canUpload) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                monthCheck.errorMessage ??
-                    kSecondarySalesMonthUndeterminedMessage,
-              ),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-        return;
-      }
-    }
-
     await _performUpload(validDocs);
   }
 
@@ -1543,6 +1521,21 @@ class _PODUploadScreenState extends State<PODUploadScreen>
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(secondarySalesUploadForbiddenMessage(responseBody)),
+                  backgroundColor: Colors.red,
+                ),
+              );
+            }
+            return;
+          }
+
+          if (secondarySales && resp.statusCode == 422) {
+            debugPrint('[UPLOAD] Laravel rejected statement month: $responseBody');
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    secondarySalesUploadUnprocessableMessage(responseBody),
+                  ),
                   backgroundColor: Colors.red,
                 ),
               );
@@ -1732,6 +1725,9 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       case 413:
         return 'File is too large to upload.';
       case 422:
+        if (isSecondarySalesUpload) {
+          return secondarySalesUploadUnprocessableMessage(body);
+        }
         try {
           final decoded = jsonDecode(body);
           if (decoded is Map && decoded['message'] != null) {
