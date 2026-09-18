@@ -55,6 +55,7 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
   int _totalFiles = 0;
   String? _statusError;
   DateTime _createdAt = DateTime.now();
+  int _missingPolls = 0;
 
   bool get _isSecondarySales => _uploadType == kUploadTypeSecondarySales;
 
@@ -229,7 +230,11 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
           });
           return;
         }
-        if (resp.statusCode == 404 || resp.statusCode == 202) {
+        if (resp.statusCode == 404) {
+          statuses.add('missing');
+          continue;
+        }
+        if (resp.statusCode == 202) {
           statuses.add('processing');
           continue;
         }
@@ -248,9 +253,25 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
       }
 
       if (statuses.isEmpty) return;
-      final latestStatus = statuses.any((s) => s == 'failed')
+      if (statuses.every((s) => s == 'missing')) {
+        _missingPolls += 1;
+        if (_missingPolls >= 3) {
+          _pollTimer?.cancel();
+          await UploadRecordStore.instance.removeByBatchId(_batchId);
+          if (!mounted) return;
+          setState(() {
+            _statusError = 'This upload is no longer available.';
+            _status = 'failed';
+          });
+        }
+        return;
+      }
+      _missingPolls = 0;
+
+      final live = statuses.where((s) => s != 'missing').toList();
+      final latestStatus = live.any((s) => s == 'failed')
           ? 'failed'
-          : (statuses.every((s) => s == 'completed')
+          : (live.every((s) => s == 'completed')
               ? 'completed'
               : 'processing');
 

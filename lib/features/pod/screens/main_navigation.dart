@@ -145,7 +145,7 @@ class _MainNavigationState extends State<MainNavigation> {
       isSecondarySalesUpload
           ? const SecondarySalesDashboardScreen()
           : const UnifiedDashboardScreen(),
-      const ModernDocumentUploadScreen(),
+          ModernDocumentUploadScreen(isActive: _currentIndex == 1),
       // const ProfileScreen(), // Profile screen commented out as per requirement
     ];
 

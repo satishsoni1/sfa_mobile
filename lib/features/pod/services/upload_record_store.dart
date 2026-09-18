@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/models/upload_record.dart';
 
 /// Local persistence for accepted uploads.
@@ -54,10 +55,42 @@ class UploadRecordStore {
       all.removeRange(_maxRecords, all.length);
     }
 
+    await _write(all);
+  }
+
+  Future<void> removeByBatchId(String batchId) async {
+    if (batchId.isEmpty || batchId == 'N/A') return;
+    final all = await loadAll();
+    final next = all.where((r) => r.batchId != batchId).toList();
+    if (next.length == all.length) return;
+    await _write(next);
+  }
+
+  /// Replaces Secondary Sales history only. Invoice POD records are kept.
+  Future<void> replaceSecondarySales(List<UploadRecord> secondary) async {
+    final all = await loadAll();
+    final others = all
+        .where((r) => r.uploadType != kUploadTypeSecondarySales)
+        .toList();
+    final cleaned = <UploadRecord>[];
+    final seen = <String>{};
+    for (final record in secondary) {
+      if (record.uploadType != kUploadTypeSecondarySales) continue;
+      if (record.batchId.isEmpty || record.batchId == 'N/A') continue;
+      if (!seen.add(record.batchId)) continue;
+      cleaned.add(record);
+    }
+    await _write([...cleaned, ...others]);
+  }
+
+  Future<void> _write(List<UploadRecord> all) async {
+    final trimmed = all.length > _maxRecords
+        ? all.sublist(0, _maxRecords)
+        : all;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(
       _prefsKey,
-      jsonEncode(all.map((r) => r.toJson()).toList()),
+      jsonEncode(trimmed.map((r) => r.toJson()).toList()),
     );
   }
 }

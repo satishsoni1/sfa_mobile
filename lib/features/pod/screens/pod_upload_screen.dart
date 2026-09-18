@@ -20,14 +20,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zforce/features/pod/models/_SplitOut.dart';
 import 'package:zforce/features/pod/models/upload_record.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
+import 'package:zforce/features/pod/config/secondary_sales_upload_files.dart';
 import 'package:zforce/features/pod/screens/upload_status_screen.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
 import 'package:zforce/features/pod/services/api_client.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen.dart';
+import 'package:zforce/features/pod/services/secondary_sales_stockist_list_controller.dart';
 import 'package:zforce/features/pod/services/secondary_sales_stockist_service.dart';
 import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
 import 'package:zforce/features/pod/widgets/secondary_sales_stockist_picker.dart';
+import 'package:zforce/features/pod/widgets/secondary_sales_upload_source_sheet.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
 import 'package:zforce/features/pod/widgets/PdfPreviewScreen.dart'; // ← ADD
 import 'dart:math'; // For min() function
@@ -424,13 +427,13 @@ class _PODUploadScreenState extends State<PODUploadScreen>
 
   late TabController _tabController;
   late final SecondarySalesStockistService _stockistService;
+  late final SecondarySalesStockistListController _stockistListController;
 
   List<_SelectItem> _allStockists = [];
   List<_SelectItem> _allChemists = [];
   _SelectItem? _selectedStockist;
   List<SecondarySalesStockistInfo> _authorizedStockists = [];
   SecondarySalesStockistInfo? _authorizedSelected;
-  String? _stockistError;
   String? _stockistsLoadedForToken;
   DateTime _selectedStatementMonth = DateTime(
     DateTime.now().year,
@@ -456,6 +459,10 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     super.initState();
     _tabController = TabController(length: 1, vsync: this);
     _stockistService = widget.stockistService ?? SecondarySalesStockistService();
+    _stockistListController = SecondarySalesStockistListController(
+      service: _stockistService,
+    );
+    _stockistListController.addListener(_onAuthorizedStockistsChanged);
     _loadLists();
   }
 
@@ -473,6 +480,8 @@ class _PODUploadScreenState extends State<PODUploadScreen>
   void dispose() {
     _stockistSearchTimer?.cancel();
     _hospitalSearchTimer?.cancel();
+    _stockistListController.removeListener(_onAuthorizedStockistsChanged);
+    _stockistListController.dispose();
     _scrollController.dispose();
     _tabController.dispose();
     super.dispose();
@@ -502,12 +511,12 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         _selectedChemist = null;
         _authorizedSelected = null;
         _authorizedStockists = [];
-        _stockistError = null;
         _stockistsLoadedForToken = null;
         _stockistKey = UniqueKey();
         _chemistKey = UniqueKey();
       });
       _stockistService.clear();
+      _stockistListController.reset();
 
       await _loadLists();
 
@@ -541,6 +550,24 @@ class _PODUploadScreenState extends State<PODUploadScreen>
   }
 
   Future<void> _loadLists() async {
+    if (isSecondarySalesUpload) {
+      try {
+        await _loadAuthorizedSecondarySalesStockists();
+      } on UnauthorizedException {
+        debugPrint('Stockist list load stopped: unauthorized');
+      } catch (e) {
+        debugPrint('Failed to load lists: $e');
+        if (!mounted) return;
+        setState(() {
+          _authorizedStockists = _stockistListController.stockists;
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load lists: $e')));
+      }
+      return;
+    }
+
     if (_isLoadingLists) return;
 
     setState(() {
@@ -549,11 +576,6 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     });
 
     try {
-      if (isSecondarySalesUpload) {
-        await _loadAuthorizedSecondarySalesStockists();
-        return;
-      }
-
       final results = await Future.wait([
         _fetchSelectItems(API_STOCKISTS_URL),
         _fetchSelectItems(API_HOSPITALS_URL),
@@ -570,12 +592,6 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     } catch (e) {
       debugPrint('Failed to load lists: $e');
       if (!mounted) return;
-      if (isSecondarySalesUpload) {
-        setState(() {
-          _authorizedStockists = [];
-          _stockistError = e.toString();
-        });
-      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Failed to load lists: $e')));
@@ -589,6 +605,10 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     }
   }
 
+  void _onAuthorizedStockistsChanged() {
+    _authorizedStockists = _stockistListController.stockists;
+  }
+
   Future<void> _loadAuthorizedSecondarySalesStockists() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('authToken');
@@ -599,14 +619,14 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       _authorizedSelected = null;
       _selectedStockist = null;
       _stockistService.clear();
+      _stockistListController.reset();
     }
 
     try {
-      final stockists = await _stockistService.fetchAuthorizedStockists(
-        authToken: token,
-      );
+      await _stockistListController.refresh(authToken: token);
       if (!mounted) return;
 
+      final stockists = _stockistListController.stockists;
       SecondarySalesStockistInfo? stillValid;
       if (_authorizedSelected != null) {
         for (final item in stockists) {
@@ -619,14 +639,13 @@ class _PODUploadScreenState extends State<PODUploadScreen>
 
       setState(() {
         _authorizedStockists = stockists;
-        _authorizedSelected = stillValid;
-        _selectedStockist = stillValid == null
-            ? null
-            : _SelectItem(
-                id: stillValid.id.toString(),
-                label: stillValid.name,
-              );
-        _stockistError = null;
+        if (stillValid != null) {
+          _authorizedSelected = stillValid;
+          _selectedStockist = _SelectItem(
+            id: stillValid.id.toString(),
+            label: stillValid.name,
+          );
+        }
         _stockistsLoadedForToken = token;
       });
     } on UnauthorizedException {
@@ -635,15 +654,13 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         _authorizedStockists = [];
         _authorizedSelected = null;
         _selectedStockist = null;
-        _stockistError = null;
         _stockistsLoadedForToken = null;
       });
       rethrow;
-    } on SecondarySalesStockistException catch (e) {
+    } on SecondarySalesStockistException {
       if (!mounted) return;
       setState(() {
-        _authorizedStockists = [];
-        _stockistError = e.message;
+        _authorizedStockists = _stockistListController.stockists;
         _stockistsLoadedForToken = null;
       });
     }
@@ -812,55 +829,21 @@ class _PODUploadScreenState extends State<PODUploadScreen>
 
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Add Documents'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.picture_as_pdf),
-                  title: const Text('PDF Files'),
-                  subtitle: const Text('Select PDF files'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickPDFFiles();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.photo_library),
-                  title: const Text('Gallery'),
-                  subtitle: const Text('Select images from gallery'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _pickFromGallery();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.camera_alt),
-                  title: const Text('Camera'),
-                  subtitle: const Text('Scan documents with camera'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _captureFromCamera();
-                  },
-                ),
-              ],
-            ),
-          ),
+      builder: (context) => SecondarySalesUploadSourceSheet(
+        onCamera: _useRegularCamera,
+        onDocuments: _pickDocumentFiles,
+        onGallery: _pickFromGallery,
+        onScanner: _scanDocument,
+      ),
     );
   }
 
-  // At the top, change import:
-  // import 'package:flutter_doc_scanner/flutter_doc_scanner.dart';  // ← REMOVE
-
-  // Replace _captureFromCamera() method:
-  Future<void> _captureFromCamera() async {
+  Future<void> _scanDocument() async {
     if (_isBusy) return;
 
     setState(() {
       _isProcessingDocuments = true;
-      _currentProcessingMessage = 'Initializing camera...';
+      _currentProcessingMessage = 'Initializing scanner...';
       _updateBusyState();
     });
 
@@ -887,6 +870,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           await documentScanner.scanDocument();
 
       final images = result.images ?? [];
+      final pdfUri = result.pdf?.uri;
       if (images.isNotEmpty) {
         for (final scannedImage in images) {
           // Convert scanned image path to file
@@ -901,6 +885,18 @@ class _PODUploadScreenState extends State<PODUploadScreen>
               content: Text(
                 '✅ ${images.length} document(s) scanned successfully',
               ),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else if (pdfUri != null && pdfUri.isNotEmpty) {
+        final local = pdfUri.replaceFirst('file://', '');
+        await _processAndAddDocumentFile(File(local), isFromScanner: true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Document scanned successfully'),
               backgroundColor: Colors.green,
               duration: Duration(seconds: 2),
             ),
@@ -984,7 +980,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
 
         if (shouldRetry == true) {
           await Future.delayed(const Duration(milliseconds: 500));
-          _captureFromCamera();
+          _scanDocument();
           return;
         }
       } else {
@@ -998,7 +994,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
               action: SnackBarAction(
                 label: 'Retry',
                 textColor: Colors.white,
-                onPressed: () => _captureFromCamera(),
+                onPressed: () => _scanDocument(),
               ),
             ),
           );
@@ -1019,7 +1015,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
             action: SnackBarAction(
               label: 'Retry',
               textColor: Colors.white,
-              onPressed: () => _captureFromCamera(),
+              onPressed: () => _scanDocument(),
             ),
           ),
         );
@@ -1037,6 +1033,8 @@ class _PODUploadScreenState extends State<PODUploadScreen>
 
   // Add this helper method for regular camera fallback
   Future<void> _useRegularCamera() async {
+    if (_isBusy) return;
+
     setState(() {
       _isProcessingDocuments = true;
       _currentProcessingMessage = 'Opening camera...';
@@ -1044,9 +1042,10 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     });
 
     try {
+      // Original camera file: no maxWidth/maxHeight and no JPEG recompress.
       final XFile? photo = await _imagePicker.pickImage(
         source: ImageSource.camera,
-        imageQuality: 100,
+        preferredCameraDevice: CameraDevice.rear,
       );
 
       if (photo != null) {
@@ -1145,20 +1144,28 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     }
   }
 
-  Future<void> _pickPDFFiles() async {
+  Future<void> _pickDocumentFiles() async {
     if (_isBusy) return;
+
+    final extensions = isSecondarySalesUpload
+        ? kSecondarySalesDocumentExtensions
+        : const ['pdf'];
 
     setState(() {
       _isProcessingDocuments = true;
-      _currentProcessingMessage = 'Selecting PDF files...';
+      _currentProcessingMessage = isSecondarySalesUpload
+          ? 'Selecting document files...'
+          : 'Selecting PDF files...';
       _updateBusyState();
     });
 
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf'],
-        allowMultiple: true,
+        allowedExtensions: extensions,
+        allowMultiple: isSecondarySalesUpload
+            ? kSecondarySalesDocumentPickerAllowsMultiple
+            : true,
       );
 
       if (result != null && result.files.isNotEmpty) {
@@ -1172,7 +1179,9 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Added PDF $added/${result.files.length}'),
+                content: Text(
+                  'Added file $added/${result.files.length}',
+                ),
                 duration: const Duration(milliseconds: 400),
               ),
             );
@@ -1183,7 +1192,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Pick PDF error: $e')));
+      ).showSnackBar(SnackBar(content: Text('Pick file error: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -1208,63 +1217,36 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     try {
       final displayNameBase = p.basenameWithoutExtension(originalFile.path);
       final extension = p.extension(originalFile.path).toLowerCase();
+      final allowed = isSecondarySalesUpload
+          ? kSecondarySalesDocumentExtensions
+              .map((e) => '.$e')
+              .toList()
+          : const [
+              '.pdf',
+              '.jpg',
+              '.jpeg',
+              '.png',
+              '.gif',
+              '.bmp',
+              '.webp',
+            ];
 
-      // ✅ UPDATED: Accept both PDFs and images - pass everything to backend as-is
-      if (extension == '.pdf') {
-        setState(() {
-          _currentProcessingMessage =
-              'Adding ${p.basename(originalFile.path)}... ';
-        });
-
-        final newDoc = DocumentInfo(
-          file: originalFile,
-          displayName: p.basename(originalFile.path),
-          isValid: true,
-          qrData: null,
-          qrStatus: QRProcessingStatus.completed,
-          originalRawFile: null, // Not needed - backend handles everything
-          isGoodForExtraction: true,
-          ocrConfidence: 100.0,
-          qualityMessage: 'PDF - Backend will process',
-        );
-
-        setState(() {
-          _capturedDocuments.add(newDoc);
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('✅ PDF added: ${p.basename(originalFile.path)}'),
-              backgroundColor: Colors.green,
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
-      } else if ([
-        '.jpg',
-        '.jpeg',
-        '.png',
-        '.gif',
-        '.bmp',
-        '.webp',
-      ].contains(extension)) {
+      if (allowed.contains(extension)) {
         setState(() {
           _currentProcessingMessage =
               'Adding ${p.basename(originalFile.path)}...';
         });
 
-        // ✅ UPDATED: Images also passed as-is to backend (no frontend conversion)
         final newDoc = DocumentInfo(
           file: originalFile,
           displayName: p.basename(originalFile.path),
           isValid: true,
           qrData: null,
           qrStatus: QRProcessingStatus.completed,
-          originalRawFile: null, // Not needed
+          originalRawFile: null,
           isGoodForExtraction: true,
           ocrConfidence: 100.0,
-          qualityMessage: 'Image - Backend will process',
+          qualityMessage: 'File - Backend will process',
         );
 
         setState(() {
@@ -1274,7 +1256,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ Image added: ${p.basename(originalFile.path)}'),
+              content: Text('✅ File added: ${p.basename(originalFile.path)}'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
@@ -1770,6 +1752,9 @@ class _PODUploadScreenState extends State<PODUploadScreen>
 
   MediaType _inferContentTypeFile(File file) {
     final ext = p.extension(file.path).toLowerCase();
+    if (isSecondarySalesUpload) {
+      return secondarySalesContentTypeForExtension(ext);
+    }
     switch (ext) {
       case '.pdf':
         return MediaType('application', 'pdf');
@@ -1936,11 +1921,8 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                       subtitle: 'Select Stockist',
                       child: isSecondarySalesUpload
                           ? SecondarySalesStockistPicker(
-                              stockists: _authorizedStockists,
-                              loading: _isLoadingLists,
+                              controller: _stockistListController,
                               selected: _authorizedSelected,
-                              errorMessage: _stockistError,
-                              onRetry: _isBusy ? null : _loadLists,
                               onSelected: (stockist) {
                                 setState(() {
                                   _authorizedSelected = stockist;
@@ -1989,7 +1971,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                     ),
                     _buildSectionCard(
                       icon: Icons.add_a_photo,
-                      title: 'Add Documents',
+                      title: 'Upload Files',
                       subtitle: 'Documents sent for processing',
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1998,7 +1980,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                             onPressed:
                                 _isBusy ? null : _showDocumentSourceDialog,
                             icon: const Icon(Icons.add),
-                            label: const Text('Add Documents'),
+                            label: const Text('Upload Files'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: const Color(0xFF450095),
                               foregroundColor: Colors.white,

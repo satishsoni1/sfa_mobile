@@ -6,12 +6,15 @@ import 'package:zforce/features/pod/screens/notifications_screen.dart';
 import 'package:zforce/features/pod/screens/pod_upload_screen.dart';
 import 'package:zforce/features/pod/screens/e_invoice_data_screen.dart';
 import 'package:zforce/features/pod/screens/batches_list_screen.dart';
+import 'package:zforce/features/pod/services/secondary_sales_upload_history_sync.dart';
 import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
 
 class ModernDocumentUploadScreen extends StatefulWidget {
-  const ModernDocumentUploadScreen({super.key});
+  const ModernDocumentUploadScreen({super.key, this.isActive = true});
+
+  final bool isActive;
 
   @override
   State<ModernDocumentUploadScreen> createState() =>
@@ -21,38 +24,22 @@ class ModernDocumentUploadScreen extends StatefulWidget {
 class _ModernDocumentUploadScreenState extends State<ModernDocumentUploadScreen>
     with TickerProviderStateMixin {
   late TabController _tabController;
+  late List<TabInfo> _tabs;
   int _currentIndex = 0;
-
-  final List<TabInfo> _tabs = [
-    TabInfo(
-      title: 'Secondary Sales Documents Upload',
-      icon: Icons.description,
-      color: const Color(0xFF450095),
-      page: const PODUploadPage(),
-    ),
-    // TabInfo(
-    //   title: 'E-Invoice',
-    //   icon: Icons.receipt_long,
-    //   color: const Color(0xFF8E24AA),
-    //   page: const EInvoiceUploadPage(),
-    // ),
-    // TabInfo(
-    //   title: 'GRN Upload',
-    //   icon: Icons.inventory,
-    //   color: const Color(0xFF4CAF50),
-    //   page: const GRNUploadPage(),
-    // ),
-    // TabInfo(
-    //   title: 'Documents',
-    //   icon: Icons.folder_open,
-    //   color: const Color(0xFF2196F3),
-    //   page: const DocumentsPage(),
-    // ),
-  ];
+  final GlobalKey<_PODUploadPageState> _uploadPageKey =
+      GlobalKey<_PODUploadPageState>();
 
   @override
   void initState() {
     super.initState();
+    _tabs = [
+      TabInfo(
+        title: 'Secondary Sales Documents Upload',
+        icon: Icons.description,
+        color: const Color(0xFF450095),
+        page: PODUploadPage(key: _uploadPageKey),
+      ),
+    ];
     _tabController = TabController(length: _tabs.length, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
@@ -61,6 +48,14 @@ class _ModernDocumentUploadScreenState extends State<ModernDocumentUploadScreen>
         });
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant ModernDocumentUploadScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) {
+      _uploadPageKey.currentState?.syncHistory();
+    }
   }
 
   @override
@@ -151,28 +146,54 @@ class PODUploadPage extends StatefulWidget {
 
 class _PODUploadPageState extends State<PODUploadPage> {
   List<UploadRecord> _recentUploads = const [];
+  final SecondarySalesUploadHistorySync _historySync =
+      SecondarySalesUploadHistorySync();
 
   @override
   void initState() {
     super.initState();
-    _loadRecentUploads();
+    syncHistory();
   }
 
-  Future<void> _loadRecentUploads() async {
-    final records = await UploadRecordStore.instance.loadAll();
-    if (!mounted) return;
-    setState(() {
-      _recentUploads = records.take(5).toList();
-    });
+  Future<void> syncHistory() async {
+    final local = await UploadRecordStore.instance.loadAll();
+    if (mounted) {
+      setState(() {
+        _recentUploads = _visibleHistory(local);
+      });
+    }
+    if (!isSecondarySalesUpload) return;
+    try {
+      final synced = await _historySync.synchronize();
+      if (!mounted) return;
+      setState(() {
+        _recentUploads = _visibleHistory(synced);
+      });
+    } catch (_) {
+      // Keep the local list already shown. Network failure is not deletion.
+    }
   }
+
+  List<UploadRecord> _visibleHistory(List<UploadRecord> records) {
+    final filtered = isSecondarySalesUpload
+        ? records.where((r) => r.uploadType == kUploadTypeSecondarySales)
+        : records.where((r) => r.uploadType != kUploadTypeSecondarySales);
+    return filtered.take(5).toList();
+  }
+
+  Future<void> _loadRecentUploads() => syncHistory();
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return RefreshIndicator(
+      color: const Color(0xFF450095),
+      onRefresh: syncHistory,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           // ModernUIComponents.buildPageHeader(
           //   title: 'Secondary Sales Documents Upload',
           //   subtitle: 'Upload secondary sales documents',
@@ -214,7 +235,8 @@ class _PODUploadPageState extends State<PODUploadPage> {
               'Date and time stamps',
             ],
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

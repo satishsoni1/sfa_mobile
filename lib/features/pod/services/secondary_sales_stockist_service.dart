@@ -19,6 +19,8 @@ const String kSecondarySalesMonthMismatchMessage =
 const String kSecondarySalesMonthUndeterminedMessage =
     'Unable to determine the statement month. Please upload a valid stock statement.';
 
+const int kSecondarySalesStockistsPerPage = 50;
+
 /// Stockist list URL for the active upload type.
 /// Himalaya Secondary Sales uses the authorized endpoint only.
 /// Invoice POD keeps GET /api/stockists.
@@ -30,7 +32,53 @@ String stockistListUrlForUploadType(String uploadType) {
 }
 
 bool usesServerSideStockistSearch(String uploadType) {
-  return uploadType != kUploadTypeSecondarySales;
+  return true;
+}
+
+/// GET /api/secondary-sales/stockists?page=&per_page=&search=
+/// Never sends group_id, position_code, employee_id, or an alphabetic filter.
+Uri authorizedStockistsUri({
+  int page = 1,
+  int perPage = kSecondarySalesStockistsPerPage,
+  String search = '',
+}) {
+  final safePage = page < 1 ? 1 : page;
+  final safePerPage =
+      perPage < 1 ? kSecondarySalesStockistsPerPage : perPage;
+  final params = <String, String>{
+    'page': '$safePage',
+    'per_page': '$safePerPage',
+  };
+  final trimmed = search.trim();
+  if (trimmed.isNotEmpty) {
+    params['search'] = trimmed;
+  }
+  return Uri.parse(API_SECONDARY_SALES_STOCKISTS_URL).replace(
+    queryParameters: params,
+  );
+}
+
+class AuthorizedStockistsPage {
+  const AuthorizedStockistsPage({
+    required this.stockists,
+    this.currentPage = 1,
+    this.lastPage = 1,
+    this.nextPage,
+    this.perPage = kSecondarySalesStockistsPerPage,
+    this.total,
+  });
+
+  final List<SecondarySalesStockistInfo> stockists;
+  final int currentPage;
+  final int lastPage;
+  final int? nextPage;
+  final int perPage;
+  final int? total;
+
+  bool get hasMorePages {
+    if (nextPage != null) return nextPage! > currentPage;
+    return currentPage < lastPage;
+  }
 }
 
 class SecondarySalesStockistException implements Exception {
@@ -45,8 +93,7 @@ class SecondarySalesStockistException implements Exception {
   String toString() => message;
 }
 
-/// Fetches stockists authorized by Laravel for the logged-in user.
-/// Does not fall back to GET /api/stockists.
+/// Fetches one authorized stockist page. Does not fall back to GET /api/stockists.
 class SecondarySalesStockistService {
   SecondarySalesStockistService({
     ApiClient? client,
@@ -57,7 +104,7 @@ class SecondarySalesStockistService {
   final ApiClient _client;
   final Future<http.Response> Function(Uri uri)? _getter;
 
-  /// Last identity used to load stockists. Cleared on each successful fetch
+  /// Last identity used to load stockists. Cleared on each successful page-1 fetch
   /// so a later login cannot keep the previous employee's list.
   String? _loadedForToken;
 
@@ -69,10 +116,31 @@ class SecondarySalesStockistService {
 
   Future<List<SecondarySalesStockistInfo>> fetchAuthorizedStockists({
     String? authToken,
+    String search = '',
   }) async {
-    _loadedForToken = null;
+    final page = await fetchAuthorizedStockistsPage(
+      page: 1,
+      search: search,
+      authToken: authToken,
+    );
+    return page.stockists;
+  }
+
+  Future<AuthorizedStockistsPage> fetchAuthorizedStockistsPage({
+    int page = 1,
+    int perPage = kSecondarySalesStockistsPerPage,
+    String search = '',
+    String? authToken,
+  }) async {
+    if (page <= 1) {
+      _loadedForToken = null;
+    }
     try {
-      final uri = Uri.parse(API_SECONDARY_SALES_STOCKISTS_URL);
+      final uri = authorizedStockistsUri(
+        page: page,
+        perPage: perPage,
+        search: search,
+      );
       final getter = _getter;
       final response =
           getter != null ? await getter(uri) : await _client.get(uri);
@@ -80,9 +148,11 @@ class SecondarySalesStockistService {
       if (response.statusCode == 200 ||
           response.statusCode == 201 ||
           response.statusCode == 202) {
-        final stockists = parseAuthorizedStockists(response.body);
-        _loadedForToken = authToken;
-        return stockists;
+        final parsed = parseAuthorizedStockistsPage(response.body);
+        if (page <= 1) {
+          _loadedForToken = authToken;
+        }
+        return parsed;
       }
       if (response.statusCode == 403) {
         throw const SecondarySalesStockistException(
@@ -120,23 +190,125 @@ class SecondarySalesStockistService {
 }
 
 List<SecondarySalesStockistInfo> parseAuthorizedStockists(String body) {
+  return parseAuthorizedStockistsPage(body).stockists;
+}
+
+AuthorizedStockistsPage parseAuthorizedStockistsPage(String body) {
   final decoded = jsonDecode(body);
   if (decoded is List) {
-    return _mapStockists(decoded);
+    return AuthorizedStockistsPage(stockists: _mapStockists(decoded));
   }
-  if (decoded is Map) {
-    final data = decoded['data'];
-    if (data is List) {
-      return _mapStockists(data);
+  if (decoded is! Map) {
+    return const AuthorizedStockistsPage(stockists: []);
+  }
+
+  final map = Map<String, dynamic>.from(decoded);
+  final data = map['data'];
+  var stockists = const <SecondarySalesStockistInfo>[];
+  Map<String, dynamic> pagination = map;
+
+  if (data is List) {
+    stockists = _mapStockists(data);
+  } else if (data is Map) {
+    final nested = Map<String, dynamic>.from(data);
+    if (nested['stockists'] is List) {
+      stockists = _mapStockists(nested['stockists'] as List);
+    } else if (nested['data'] is List) {
+      stockists = _mapStockists(nested['data'] as List);
+      pagination = nested;
     }
-    if (data is Map && data['stockists'] is List) {
-      return _mapStockists(data['stockists'] as List);
-    }
-    if (decoded['stockists'] is List) {
-      return _mapStockists(decoded['stockists'] as List);
+  } else if (map['stockists'] is List) {
+    stockists = _mapStockists(map['stockists'] as List);
+  }
+
+  if (map['pagination'] is Map) {
+    pagination = Map<String, dynamic>.from(map['pagination'] as Map);
+  }
+
+  final meta = map['meta'] is Map
+      ? Map<String, dynamic>.from(map['meta'] as Map)
+      : const <String, dynamic>{};
+  final currentPage = _positiveInt(
+    pagination['current_page'] ??
+        pagination['page'] ??
+        meta['current_page'] ??
+        map['current_page'],
+    1,
+  );
+  final perPage = _positiveInt(
+    pagination['per_page'] ?? meta['per_page'] ?? map['per_page'],
+    kSecondarySalesStockistsPerPage,
+  );
+  final total = _nullablePositiveInt(
+    pagination['total'] ??
+        pagination['total_records'] ??
+        meta['total'] ??
+        map['total'],
+  );
+  final nextPage = _nullablePositiveInt(
+        pagination['next_page'] ?? meta['next_page'] ?? map['next_page'],
+      ) ??
+      _pageFromUrl(
+        pagination['next_page_url'] ??
+            meta['next_page_url'] ??
+            map['next_page_url'] ??
+            _linkNext(pagination) ??
+            _linkNext(map),
+      );
+  var lastPage = _nullablePositiveInt(
+    pagination['last_page'] ??
+        pagination['total_pages'] ??
+        meta['last_page'] ??
+        meta['total_pages'] ??
+        map['last_page'] ??
+        map['total_pages'],
+  );
+  if (lastPage == null) {
+    if (total != null && perPage > 0) {
+      lastPage = (total / perPage).ceil();
+      if (lastPage < 1) lastPage = 1;
+    } else {
+      lastPage = currentPage;
     }
   }
-  return const [];
+
+  return AuthorizedStockistsPage(
+    stockists: stockists,
+    currentPage: currentPage,
+    lastPage: lastPage,
+    nextPage: nextPage,
+    perPage: perPage,
+    total: total,
+  );
+}
+
+int _positiveInt(dynamic value, int fallback) {
+  return _nullablePositiveInt(value) ?? fallback;
+}
+
+int? _nullablePositiveInt(dynamic value) {
+  if (value is int && value > 0) return value;
+  if (value is num && value > 0) return value.toInt();
+  if (value is String) {
+    final parsed = int.tryParse(value);
+    if (parsed != null && parsed > 0) return parsed;
+  }
+  return null;
+}
+
+dynamic _linkNext(Map<String, dynamic> map) {
+  final links = map['links'];
+  if (links is Map) return links['next'];
+  return null;
+}
+
+int? _pageFromUrl(dynamic value) {
+  if (value is! String) return null;
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return null;
+  final uri = Uri.tryParse(trimmed);
+  if (uri == null) return null;
+  return _nullablePositiveInt(uri.queryParameters['page']);
 }
 
 List<SecondarySalesStockistInfo> _mapStockists(List<dynamic> raw) {
@@ -150,6 +322,23 @@ List<SecondarySalesStockistInfo> _mapStockists(List<dynamic> raw) {
     items.add(info);
   }
   return items;
+}
+
+List<SecondarySalesStockistInfo> mergeAuthorizedStockists(
+  List<SecondarySalesStockistInfo> existing,
+  List<SecondarySalesStockistInfo> incoming,
+) {
+  final merged = List<SecondarySalesStockistInfo>.from(existing);
+  final seen = <int>{
+    for (final item in existing)
+      if (item.id != null) item.id!,
+  };
+  for (final item in incoming) {
+    final id = item.id;
+    if (id == null || !seen.add(id)) continue;
+    merged.add(item);
+  }
+  return merged;
 }
 
 List<SecondarySalesStockistInfo> filterAuthorizedStockists(
