@@ -7,13 +7,13 @@ class SecondarySalesUploadSourceSheet extends StatelessWidget {
     required this.onCamera,
     required this.onDocuments,
     required this.onGallery,
-    required this.onScanner,
+    this.onScanner,
   });
 
   final VoidCallback onCamera;
   final VoidCallback onDocuments;
   final VoidCallback onGallery;
-  final VoidCallback onScanner;
+  final VoidCallback? onScanner;
 
   static const Color _iconColor = Color(0xFF450095);
 
@@ -46,13 +46,14 @@ class SecondarySalesUploadSourceSheet extends StatelessWidget {
             subtitle: kSecondarySalesGalleryOptionSubtitle,
             onTap: onGallery,
           ),
-          _option(
-            context,
-            icon: Icons.document_scanner,
-            title: kSecondarySalesScannerOptionTitle,
-            subtitle: kSecondarySalesScannerOptionSubtitle,
-            onTap: onScanner,
-          ),
+          // Scanner option commented out:
+          // _option(
+          //   context,
+          //   icon: Icons.document_scanner,
+          //   title: kSecondarySalesScannerOptionTitle,
+          //   subtitle: kSecondarySalesScannerOptionSubtitle,
+          //   onTap: onScanner ?? () {},
+          // ),
         ],
       ),
     );

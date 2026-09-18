@@ -16,8 +16,10 @@
 // ============================================================
 import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
+// TODO [iOS]: firebase_messaging temporarily disabled until GoogleService-Info.plist is added.
+// import 'package:firebase_messaging/firebase_messaging.dart';
+// TODO [iOS]: firebase_analytics temporarily disabled until GoogleService-Info.plist is added.
+// import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -26,8 +28,10 @@ class FirebaseService {
   factory FirebaseService() => _instance;
   FirebaseService._internal();
 
-  FirebaseMessaging? _messaging;
-  FirebaseAnalytics? _analytics;
+  // TODO [iOS]: Types changed from FirebaseMessaging?/FirebaseAnalytics? to dynamic
+  // until firebase_messaging/firebase_analytics imports are restored.
+  dynamic _messaging;
+  dynamic _analytics;
   FlutterLocalNotificationsPlugin? _localNotifications;
   String? _fcmToken;
 
@@ -44,8 +48,9 @@ class FirebaseService {
         return;
       }
 
-      _analytics = FirebaseAnalytics.instance;
-      _messaging = FirebaseMessaging.instance;
+      // TODO [iOS]: Restore these two lines after re-enabling firebase imports:
+      // _analytics = FirebaseAnalytics.instance;
+      // _messaging = FirebaseMessaging.instance;
 
       await _initializeLocalNotifications();
       await _requestNotificationPermissions();
@@ -114,24 +119,28 @@ class FirebaseService {
   // Foreground handler only — never register onBackgroundMessage here.
   // SFA FcmNotificationService owns the background handler.
   void _setupForegroundMessageHandler() {
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-    FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
-    _messaging?.getInitialMessage().then((msg) {
-      if (msg != null) _handleNotificationTap(msg);
-    });
+    // TODO [iOS]: Restore after re-enabling firebase_messaging import:
+    // FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    // FirebaseMessaging.onMessageOpenedApp.listen(_handleNotificationTap);
+    // _messaging?.getInitialMessage().then((msg) {
+    //   if (msg != null) _handleNotificationTap(msg);
+    // });
   }
 
-  void _handleForegroundMessage(RemoteMessage message) {
+  // TODO [iOS]: Parameter was RemoteMessage — changed to dynamic until Firebase re-enabled.
+  void _handleForegroundMessage(dynamic message) {
     if (kDebugMode) print('[FirebaseService] Foreground: ${message.messageId}');
     _showLocalNotification(message);
   }
 
-  void _handleNotificationTap(RemoteMessage message) {
+  // TODO [iOS]: Parameter was RemoteMessage — changed to dynamic until Firebase re-enabled.
+  void _handleNotificationTap(dynamic message) {
     if (kDebugMode) print('[FirebaseService] Tapped: ${message.messageId}');
     _navigateFromNotification(message);
   }
 
-  void _showLocalNotification(RemoteMessage message) async {
+  // TODO [iOS]: Parameter was RemoteMessage — changed to dynamic until Firebase re-enabled.
+  void _showLocalNotification(dynamic message) async {
     if (message.notification == null) return;
     await _localNotifications?.show(
       message.hashCode,
@@ -156,7 +165,8 @@ class FirebaseService {
     );
   }
 
-  void _navigateFromNotification(RemoteMessage message) {
+  // TODO [iOS]: Parameter was RemoteMessage — changed to dynamic until Firebase re-enabled.
+  void _navigateFromNotification(dynamic message) {
     final screen = message.data['screen'];
     if (screen != null && kDebugMode) print('[FirebaseService] Navigate to: $screen');
   }
@@ -167,17 +177,15 @@ class FirebaseService {
         final granted = await _localNotifications
             ?.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
             ?.requestNotificationsPermission();
-        final settings = await _messaging?.requestPermission(
-          alert: true, badge: true, sound: true,
-          announcement: false, carPlay: false, criticalAlert: false, provisional: false,
-        );
-        return (granted == true) && (settings?.authorizationStatus == AuthorizationStatus.authorized);
+        // TODO [iOS]: Restore after re-enabling firebase_messaging:
+        // final settings = await _messaging?.requestPermission(...);
+        // return (granted == true) && (settings?.authorizationStatus == AuthorizationStatus.authorized);
+        return granted == true;
       } else if (Platform.isIOS) {
-        final settings = await _messaging?.requestPermission(
-          alert: true, badge: true, sound: true,
-          announcement: false, carPlay: false, criticalAlert: false, provisional: false,
-        );
-        return settings?.authorizationStatus == AuthorizationStatus.authorized;
+        // TODO [iOS]: Restore after re-enabling firebase_messaging:
+        // final settings = await _messaging?.requestPermission(...);
+        // return settings?.authorizationStatus == AuthorizationStatus.authorized;
+        return false;
       }
       return false;
     } catch (e) {
@@ -191,7 +199,8 @@ class FirebaseService {
   }
 
   String? get fcmToken => _fcmToken;
-  FirebaseAnalytics? get analytics => _analytics;
+  // TODO [iOS]: Return type was FirebaseAnalytics? — changed to dynamic until re-enabled.
+  dynamic get analytics => _analytics;
 
   Future<void> logEvent(String name, Map<String, Object> parameters) async {
     await _analytics?.logEvent(name: name, parameters: parameters);

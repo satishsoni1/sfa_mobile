@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:firebase_messaging/firebase_messaging.dart';
+// TODO [iOS]: firebase_messaging temporarily disabled until GoogleService-Info.plist is added.
+// import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,7 +54,8 @@ class FcmNotificationService {
   Future<void> initializeAfterLogin({
     required String authToken,
     required String employeeCode,
-    void Function(RemoteMessage message)? onForegroundMessage,
+    // TODO [iOS]: was void Function(RemoteMessage message)? — changed to dynamic
+    void Function(dynamic message)? onForegroundMessage,
   }) async {
     
 
@@ -124,58 +126,45 @@ class FcmNotificationService {
   // PRIVATE IMPLEMENTATION
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Requests browser notification permission.
-  /// Returns true if granted, false otherwise.
+  /// Requests browser/device notification permission.
   Future<bool> _requestPermission() async {
     try {
-      final settings = await FirebaseMessaging.instance.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-
-      final status = settings.authorizationStatus;
-      debugPrint('[FCM] Permission status: $status');
-
-      return status == AuthorizationStatus.authorized ||
-          status == AuthorizationStatus.provisional;
+      // TODO [iOS]: Restore after re-enabling firebase_messaging import:
+      // final settings = await FirebaseMessaging.instance.requestPermission(
+      //   alert: true, badge: true, sound: true,
+      // );
+      // final status = settings.authorizationStatus;
+      // return status == AuthorizationStatus.authorized || status == AuthorizationStatus.provisional;
+      debugPrint('[FCM] _requestPermission: Firebase disabled — returning false on native.');
+      return false;
     } catch (e) {
       debugPrint('[FCM] Permission request error: $e');
       return false;
     }
   }
 
-  /// Generates the FCM Web token using the VAPID public key.
-  /// Returns null if token generation fails.
+  /// Generates the FCM token.
   Future<String?> _getToken() async {
     try {
-      final token = await FirebaseMessaging.instance.getToken(
-        vapidKey: kIsWeb ? _kWebVapidPublicKey : null,
-      );
-
-      if (token == null || token.isEmpty) {
-        debugPrint('[FCM] Token is null or empty — check VAPID key and browser support.');
-        return null;
-      }
-
-      debugPrint('[FCM] Token generated: ${token.substring(0, 20)}...');
-      return token;
+      // TODO [iOS]: Restore after re-enabling firebase_messaging import:
+      // final token = await FirebaseMessaging.instance.getToken(
+      //   vapidKey: kIsWeb ? _kWebVapidPublicKey : null,
+      // );
+      // return token;
+      debugPrint('[FCM] _getToken: Firebase disabled — returning null on native.');
+      return null;
     } catch (e) {
       debugPrint('[FCM] Token generation error: $e');
       return null;
     }
   }
 
-  /// Registers the FCM token with the backend.
-  /// Skips registration if the token has not changed since last registration.
   Future<void> _registerTokenWithBackend({
     required String fcmToken,
     required String authToken,
     required String employeeCode,
   }) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-
       debugPrint('[FCM] Registering token with server');
       final response = await http.post(
         Uri.parse('${ApiService.baseUrl}/device/fcm-token'),
@@ -192,20 +181,17 @@ class FcmNotificationService {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        // Cache the token so we don't re-register on subsequent app starts.
+        final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_kFcmTokenCacheKey, fcmToken);
         debugPrint('[FCM] Token registered successfully with backend.');
       } else {
-        debugPrint(
-            '[FCM] Backend registration failed: ${response.statusCode} ${response.body}');
+        debugPrint('[FCM] Backend registration failed: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
-      // Backend failure must not crash the app.
       debugPrint('[FCM] Backend registration error: $e');
     }
   }
 
-  /// Refreshes the token on the backend when FCM rotates it.
   Future<void> _refreshTokenOnBackend({
     required String newToken,
     required String authToken,
@@ -232,15 +218,13 @@ class FcmNotificationService {
         await prefs.setString(_kFcmTokenCacheKey, newToken);
         debugPrint('[FCM] Token refreshed successfully on backend.');
       } else {
-        debugPrint(
-            '[FCM] Token refresh failed: ${response.statusCode} ${response.body}');
+        debugPrint('[FCM] Token refresh failed: ${response.statusCode} ${response.body}');
       }
     } catch (e) {
       debugPrint('[FCM] Token refresh error: $e');
     }
   }
 
-  /// Deletes the token from the backend on logout.
   Future<void> _deleteTokenFromBackend({
     required String fcmToken,
     required String authToken,
@@ -255,53 +239,34 @@ class FcmNotificationService {
         },
         body: jsonEncode({'fcm_token': fcmToken, 'platform': 'web'}),
       );
-
       debugPrint('[FCM] Token deletion response: ${response.statusCode}');
     } catch (e) {
       debugPrint('[FCM] Token deletion error: $e');
     }
   }
 
-  /// Listens for FCM token refresh events.
-  /// Re-registers the new token with the backend automatically.
   void _listenForTokenRefresh({
     required String authToken,
     required String employeeCode,
   }) {
-    FirebaseMessaging.instance.onTokenRefresh.listen(
-      (newToken) async {
-        debugPrint('[FCM] Token refreshed by FCM.');
-        await _refreshTokenOnBackend(
-          newToken: newToken,
-          authToken: authToken,
-          employeeCode: employeeCode,
-        );
-      },
-      onError: (e) {
-        debugPrint('[FCM] Token refresh stream error: $e');
-      },
-    );
+    // TODO [iOS]: Restore after re-enabling firebase_messaging import:
+    // FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+    //   await _refreshTokenOnBackend(newToken: newToken, authToken: authToken, employeeCode: employeeCode);
+    // });
+    debugPrint('[FCM] _listenForTokenRefresh: Firebase disabled — skipping on native.');
   }
 
-  /// Listens for foreground messages (app tab is open and focused).
-  /// Background messages are handled by the Firebase Messaging Service Worker.
+  /// Listens for foreground messages.
   void _listenForForegroundMessages(
-    void Function(RemoteMessage message)? onMessage,
+    // TODO [iOS]: was void Function(RemoteMessage)? — changed to dynamic
+    void Function(dynamic message)? onMessage,
   ) {
-    FirebaseMessaging.onMessage.listen(
-      (RemoteMessage message) {
-        debugPrint(
-          '[FCM] Foreground message received. '
-          'Title: ${message.notification?.title} '
-          'Body: ${message.notification?.body} '
-          'Data: ${message.data}',
-        );
-        // Invoke the caller-supplied callback (typically shows an in-app snackbar/dialog).
-        onMessage?.call(message);
-      },
-      onError: (e) {
-        debugPrint('[FCM] Foreground message stream error: $e');
-      },
-    );
+    // TODO [iOS]: Restore after re-enabling firebase_messaging import:
+    // FirebaseMessaging.onMessage.listen((dynamic message) {
+    //   debugPrint('[FCM] Foreground message received: ${message.notification?.title}');
+    //   onMessage?.call(message);
+    // });
+    debugPrint('[FCM] _listenForForegroundMessages: Firebase disabled — skipping on native.');
   }
+
 }

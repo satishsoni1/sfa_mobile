@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+// TODO [iOS]: firebase_messaging temporarily disabled until GoogleService-Info.plist is added.
+// import 'package:firebase_messaging/firebase_messaging.dart';
 import '../services/firebase_service.dart';
+// Conditional Firebase check
+import 'package:firebase_core/firebase_core.dart' show Firebase;
 
 class NotificationHandler extends StatefulWidget {
   final Widget child;
@@ -25,13 +28,21 @@ class _NotificationHandlerState extends State<NotificationHandler> {
   }
 
   void _setupNotificationListener() {
-    // Listen for foreground messages
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-      _showNotificationOverlay(message);
-    });
+    // Only set up Firebase listener if Firebase is actually initialized.
+    // On iOS (before GoogleService-Info.plist is added), Firebase is disabled
+    // so Firebase.apps will be empty and we skip the listener safely.
+    if (Firebase.apps.isEmpty) {
+      debugPrint('[NotificationHandler] Firebase not initialized — skipping FCM listener.');
+      return;
+    }
+    // TODO [iOS]: Re-enable this block after adding GoogleService-Info.plist:
+    // FirebaseMessaging.onMessage.listen((dynamic message) {
+    //   _showNotificationOverlay(message);
+    // });
   }
 
-  void _showNotificationOverlay(RemoteMessage message) {
+
+  void _showNotificationOverlay(dynamic message) {
     // Check if widget is still mounted
     if (!mounted) return;
     
@@ -55,7 +66,7 @@ class _NotificationHandlerState extends State<NotificationHandler> {
     });
   }
 
-  Widget _buildNotificationCard(RemoteMessage message) {
+  Widget _buildNotificationCard(dynamic message) {
     return Positioned(
       top: MediaQuery.of(context).padding.top + 10,
       left: 16,

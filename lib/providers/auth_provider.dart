@@ -1,8 +1,11 @@
-import 'package:firebase_messaging/firebase_messaging.dart';
+// TODO [iOS]: firebase_messaging import temporarily disabled.
+// Re-enable after adding GoogleService-Info.plist and iOS Firebase config.
+// import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../data/services/api_service.dart';
-import '../data/services/fcm_notification_service.dart';
+// TODO [iOS]: FCM notification service temporarily disabled.
+// import '../data/services/fcm_notification_service.dart';
 import '../data/models/user_model.dart';
 
 class AuthProvider with ChangeNotifier {
@@ -17,7 +20,8 @@ class AuthProvider with ChangeNotifier {
   User? get user => _currentUser;
 
   // Callback for showing in-app foreground notification UI (set by DashboardScreen).
-  void Function(RemoteMessage)? onForegroundMessage;
+  // TODO [iOS]: Type was RemoteMessage — changed to dynamic until Firebase re-enabled.
+  void Function(dynamic message)? onForegroundMessage;
 
   // 1. CHECK LOGIN STATUS (Run on App Start)
   Future<void> checkLoginStatus() async {
@@ -28,8 +32,8 @@ class AuthProvider with ChangeNotifier {
       _currentUser = user;
       _isAuthenticated = true;
 
-      // Re-initialize FCM for already-logged-in users on page refresh.
-      await _initFcm(authToken: token, user: user);
+      // TODO [iOS]: FCM init temporarily disabled. Re-enable after iOS Firebase config is added.
+      // await _initFcm(authToken: token, user: user);
     } else {
       _isAuthenticated = false;
     }
@@ -51,15 +55,15 @@ class AuthProvider with ChangeNotifier {
       _isAuthenticated = true;
       notifyListeners();
 
-      // Initialize FCM after a successful login on Web.
-      await _initFcm(authToken: token, user: user);
+      // TODO [iOS]: FCM init temporarily disabled. Re-enable after iOS Firebase config is added.
+      // await _initFcm(authToken: token, user: user);
 
       if (user.isFirstLogin) {
         return 'FIRST_LOGIN';
       }
       return 'SUCCESS';
     } catch (e) {
-      print('Login Error: $e');
+      debugPrint('Login Error: $e');
       String msg = e.toString();
       if (msg.startsWith('Exception: ')) {
         msg = msg.substring(11);
@@ -70,11 +74,11 @@ class AuthProvider with ChangeNotifier {
 
   // 3. LOGOUT ACTION
   Future<void> logout() async {
-    // Disassociate FCM token from this user before clearing session.
-    final authToken = await _apiService.getToken();
-    if (authToken != null) {
-      await FcmNotificationService.instance.onLogout(authToken: authToken);
-    }
+    // TODO [iOS]: FCM token cleanup disabled. Re-enable after iOS Firebase config is added.
+    // final authToken = await _apiService.getToken();
+    // if (authToken != null) {
+    //   await FcmNotificationService.instance.onLogout(authToken: authToken);
+    // }
 
     await _apiService.clearSession();
     _currentUser = null;
@@ -84,19 +88,18 @@ class AuthProvider with ChangeNotifier {
 
   // ─── Private ───────────────────────────────────────────────────────────────
 
-  /// Initializes the FCM service for a logged-in user.
-  /// Safe to call multiple times — the service guards against re-initialization.
-  Future<void> _initFcm({
-    required String authToken,
-    required User user,
-  }) async {
-    await FcmNotificationService.instance.initializeAfterLogin(
-      authToken: authToken,
-      employeeCode: user.employeeCode,
-      onForegroundMessage: (message) {
-        // Invoke the callback registered by the UI layer (DashboardScreen).
-        onForegroundMessage?.call(message);
-      },
-    );
-  }
+  // TODO [iOS]: _initFcm temporarily disabled. Restore after adding GoogleService-Info.plist.
+  // Future<void> _initFcm({
+  //   required String authToken,
+  //   required User user,
+  // }) async {
+  //   await FcmNotificationService.instance.initializeAfterLogin(
+  //     authToken: authToken,
+  //     employeeCode: user.employeeCode,
+  //     onForegroundMessage: (message) {
+  //       onForegroundMessage?.call(message);
+  //     },
+  //   );
+  // }
 }
+

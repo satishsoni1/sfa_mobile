@@ -841,6 +841,16 @@ class _PODUploadScreenState extends State<PODUploadScreen>
   Future<void> _scanDocument() async {
     if (_isBusy) return;
 
+    // ── iOS Guard ────────────────────────────────────────────────────────────
+    // google_mlkit_document_scanner is Android-only (requires Google Play Services).
+    // On iOS we fall back to the standard camera via _useRegularCamera().
+    if (!Platform.isAndroid) {
+      debugPrint('[SCANNER] MLKit not available on this platform — using regular camera.');
+      await _useRegularCamera();
+      return;
+    }
+    // ── Android-only MLKit path below ────────────────────────────────────────
+
     setState(() {
       _isProcessingDocuments = true;
       _currentProcessingMessage = 'Initializing scanner...';
@@ -853,6 +863,8 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       });
 
       // Initialize ML Kit Document Scanner
+      // TODO [iOS]: google_mlkit_document_scanner is Android-only.
+      // On iOS, _useRegularCamera() is used instead (see Platform check above).
       final options = DocumentScannerOptions(
         // documentFormat removed — not a valid parameter in google_mlkit_document_scanner ^0.4.x
         mode: ScannerMode.full,

@@ -4,7 +4,8 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+// TODO [iOS]: firebase_messaging temporarily disabled until GoogleService-Info.plist is added.
+// import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:intl/intl.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -391,7 +392,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
 
-  void _showFcmForegroundSnackbar(RemoteMessage message) {
+  // TODO [iOS]: Parameter was RemoteMessage — changed to dynamic until Firebase re-enabled.
+  void _showFcmForegroundSnackbar(dynamic message) {
     if (!mounted) return;
     
     final title = message.notification?.title ?? 'New Notification';

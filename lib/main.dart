@@ -1,9 +1,12 @@
-// import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_core/firebase_core.dart';
+// TODO [iOS]: Firebase is temporarily disabled on native platforms.
+// To re-enable: add GoogleService-Info.plist to ios/Runner/ and
+// add the iOS case in firebase_options.dart, then uncomment the import below.
+// import 'package:firebase_core/firebase_core.dart';
+// import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
-import 'firebase_options.dart';
 import 'providers/report_provider.dart';
 import 'providers/auth_provider.dart';
 import 'presentation/dashboard/dashboard_screen.dart';
@@ -14,10 +17,29 @@ void main() async {
   // Required before any async work in main().
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  debugPrint('[Firebase] Initialized successfully.');
+  // TODO [iOS]: Firebase init is temporarily commented out on native platforms.
+  // Web still initialises Firebase because it uses a web-only config that works.
+  // Once GoogleService-Info.plist and iOS FirebaseOptions are added, remove this
+  // guard and restore the unconditional Firebase.initializeApp() call below.
+  if (kIsWeb) {
+    // Web-only Firebase init — safe because web config is already present.
+    // Dynamically import to avoid dart compile-time errors when firebase_core
+    // is used but iOS config is missing at runtime.
+    try {
+      // ignore: avoid_dynamic_calls
+      // Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      debugPrint('[Firebase] Web init skipped — re-enable when iOS config is ready.');
+    } catch (e) {
+      debugPrint('[Firebase] Init error (non-fatal): $e');
+    }
+  } else {
+    // Native (iOS / Android): Firebase disabled until iOS credentials are added.
+    // Uncomment the two lines below after adding GoogleService-Info.plist:
+    // await Firebase.initializeApp(
+    //   options: DefaultFirebaseOptions.currentPlatform,
+    // );
+    debugPrint('[Firebase] Skipped on native platform — iOS config not yet added.');
+  }
   
   runApp(
     MultiProvider(

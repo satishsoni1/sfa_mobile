@@ -4,6 +4,14 @@
 <dict>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Voice notes are recorded to capture key call observations after doctor detailing.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera is used to scan and photograph documents, QR codes, and invoices for upload.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to select and upload document images and invoices.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Scanned documents may be saved to your photo library for record keeping.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition is used to transcribe voice notes into text after a doctor call.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location is used to verify you are within 50 m of the doctor before starting a detailing session.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
