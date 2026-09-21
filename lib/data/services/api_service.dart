@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -1267,9 +1267,37 @@ Future<void> submitFullMonth(int month, int year) async {
       if (response.statusCode == 200) {
         final body = json.decode(response.body);
         final list = body['data'] ?? body;
-        return {
-          'routes': List<Map<String, dynamic>>.from(list is List ? list : []),
-          'hq_location':           body['hq_location']?.toString(),
+        // Determine HQ from is_hq flag logic:
+          // 1. Collect all routes where is_hq == 1 (can be multiple)
+          // 2. Among those, find the one where from_town_code matches hq
+          // 3. That entry's from_town_code is the real HQ of this user
+          // Note: body['hq_location'] is now always "" — kept below as comment only
+          String? resolvedHq;
+          if (list is List) {
+            final isHqRows = list.where(
+              (r) => r is Map && (r['is_hq'] == 1 || r['is_hq'] == '1')
+            ).toList();
+            for (final row in isHqRows) {
+              final fromTown = row['from_town_code']?.toString().trim().toUpperCase() ?? '';
+              final hq       = row['hq']?.toString().trim().toUpperCase() ?? '';
+              if (fromTown.isNotEmpty && hq.isNotEmpty && fromTown == hq) {
+                resolvedHq = row['from_town_code']?.toString().trim();
+                break;
+              }
+            }
+            // Fallback: if no exact match found, take first is_hq=1 row's hq field
+            if (resolvedHq == null && isHqRows.isNotEmpty) {
+              resolvedHq = isHqRows.first['hq']?.toString().trim();
+            }
+          }
+          // Final fallback to empty (body['hq_location'] is now always "")
+          // resolvedHq will be null if backend sends no is_hq=1 row at all
+
+          return {
+          'routes': List<Map<String, dynamic>>.from(list is List ? list : [])
+              ..removeWhere((r) => r['is_hq'] == 1 || r['is_hq'] == '1'),
+          // 'hq_location': body['hq_location'],  
+          'hq_location': resolvedHq,  
           'has_own_policy':        body['has_own_policy'] == true || body['has_own_policy'] == 1,
           'subordinate_locations': List<String>.from(body['subordinate_locations'] ?? []),
           'allow_da_selection':    body['allow_da_selection'],
@@ -2456,7 +2484,7 @@ Future<void> submitFullMonth(int month, int year) async {
     try {
       final response = await http.post(
         Uri.parse(
-          '$baseUrl/app/chemists/add',
+          '$baseUrl/chemists/add-chemist',
         ), // Adjust endpoint to match Laravel
         headers: await _getHeaders(),
         body: json.encode(payload),
@@ -2829,7 +2857,14 @@ Future<void> submitFullMonth(int month, int year) async {
     if (response.statusCode == 200) {
       return List<Map<String, dynamic>>.from(json.decode(response.body)['data'] ?? []);
     }
-    throw Exception('Failed to load BBA doctor list');
+    try {
+      final errBody = json.decode(response.body);
+      final msg = errBody['message']?.toString() ?? errBody['error']?.toString();
+      if (msg != null && msg.isNotEmpty) throw Exception(msg);
+    } catch (parseErr) {
+      if (parseErr is Exception) rethrow;
+    }
+    throw Exception('Failed to load doctor list (HTTP ${response.statusCode})');
   }
 
   Future<List<Map<String, dynamic>>> getDoctorBbaBrandSummary({int? userId}) async {
@@ -2851,5 +2886,309 @@ Future<void> submitFullMonth(int month, int year) async {
       debugPrint('Error fetching BBA doctor brand summary: $e');
     }
     return [];
+  }
+
+  // CHEMIST SELECTION — Field Operations
+  /// GET /chemists/categories
+  Future<Map<String, dynamic>> getChemistCategoryList({int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final id = employeeId ?? user?.employeeId;
+    final url = '$baseUrl/chemists/categories${id != null ? '?employee_id=$id' : ''}';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return Map<String, dynamic>.from(body['data'] ?? {});
+    }
+    throw Exception('Failed to load chemist categories');
+  }
+
+  /// GET /chemists/master
+  Future<Map<String, dynamic>> getChemistMasterList({int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final id = employeeId ?? user?.employeeId;
+    final url = '$baseUrl/chemists/master${id != null ? '?employee_id=$id' : ''}';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return Map<String, dynamic>.from(body['data'] ?? {});
+    }
+    throw Exception('Failed to load chemist master list');
+  }
+
+  /// GET /chemists/my-list
+  Future<List<Map<String, dynamic>>> getMySelectedChemistList({int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final id = employeeId ?? user?.employeeId;
+    final url = '$baseUrl/chemists/my-list${id != null ? '?employee_id=$id' : ''}';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    }
+    throw Exception('Failed to load my chemist list');
+  }
+
+  /// POST /chemists/save-draft
+
+  Future<void> saveChemistDraft(
+    List<Map<String, dynamic>> chemists, {
+    int? employeeId,
+    String? monthCycle,
+  }) async {
+    final token = await getToken();
+    final user = await getUser();
+    final id = employeeId ?? user?.employeeId;
+
+    final bodyData = <String, dynamic>{
+      'chemists': chemists.map((c) => {
+        'chemist_id': c['chemist_id'],
+        'source': c['source'],
+        if (c['category'] != null) 'category': c['category'],
+        'is_selected': c['is_selected'] ?? true,
+      }).toList(),
+    };
+    if (monthCycle != null) bodyData['month_cycle'] = monthCycle;
+    if (id != null) bodyData['employee_id'] = id;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/chemists/save-draft'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(bodyData),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to save draft');
+    }
+  }
+
+  /// POST /chemists/submit
+
+  Future<void> submitChemistListForApproval(
+    List<Map<String, dynamic>> chemists, {
+    int? employeeId,
+    String? monthCycle,
+  }) async {
+    final token = await getToken();
+    final user = await getUser();
+    final id = employeeId ?? user?.employeeId;
+
+    final bodyData = <String, dynamic>{
+      'chemists': chemists.map((c) => {
+        'chemist_id': c['chemist_id'],
+        'name': c['name'],
+        'source': c['source'],
+        'category': c['category'],
+        'is_selected': c['is_selected'] ?? true,
+      }).toList(),
+    };
+    if (monthCycle != null) bodyData['month_cycle'] = monthCycle;
+    if (id != null) bodyData['employee_id'] = id;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/chemists/submit'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(bodyData),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to submit chemist list');
+    }
+  }
+
+  /// GET /chemists/status
+  Future<Map<String, dynamic>> getChemistApprovalStatus({int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final id = employeeId ?? user?.employeeId;
+    final url = '$baseUrl/chemists/status${id != null ? '?employee_id=$id' : ''}';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return Map<String, dynamic>.from(body['data'] ?? {});
+    }
+    throw Exception('Failed to load chemist status');
+  }
+
+  /// GET /chemists/approvals
+  Future<List<Map<String, dynamic>>> getChemistApprovalRequests({int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final id = employeeId ?? user?.employeeId;
+    final url = '$baseUrl/chemists/approvals${id != null ? '?employee_id=$id' : ''}';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      final raw = body['data'];
+      if (raw is List) {
+        return List<Map<String, dynamic>>.from(raw);
+      }
+      // Some backends wrap list in a key
+      if (raw is Map && raw['requests'] is List) {
+        return List<Map<String, dynamic>>.from(raw['requests']);
+      }
+      return [];
+    }
+    throw Exception('Failed to load chemist approval requests');
+  }
+
+  /// GET /chemists/approvals/{id}
+  Future<Map<String, dynamic>> getChemistApprovalRequestDetail(int id, {int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final empId = employeeId ?? user?.employeeId;
+    final url = '$baseUrl/chemists/approvals/$id${empId != null ? '?employee_id=$empId' : ''}';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      final raw = body['data'];
+      if (raw is Map) return Map<String, dynamic>.from(raw);
+      return Map<String, dynamic>.from(body);
+    }
+    throw Exception('Failed to load approval detail');
+  }
+
+  /// POST /chemists/approvals/{id}/action
+  Future<void> processChemistApprovalAction(
+    int id,
+    String action, {
+    String? reason,
+    int? employeeId,
+  }) async {
+    final token = await getToken();
+    final user = await getUser();
+    final empId = employeeId ?? user?.employeeId;
+    final bodyData = <String, dynamic>{'action': action};
+    if (reason != null && reason.isNotEmpty) bodyData['reason'] = reason;
+    if (empId != null) bodyData['employee_id'] = empId;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/chemists/approvals/$id/action'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(bodyData),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to process approval action');
+    }
+  }
+
+  /// GET /chemists/approvals?employee_id={subId}
+  Future<Map<String, dynamic>> getChemistApprovalByEmployee(int employeeId) async {
+    final token = await getToken();
+    final url = '$baseUrl/chemists/approvals?employee_id=$employeeId';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      final raw = body['data'];
+      if (raw is Map) return Map<String, dynamic>.from(raw);
+      return Map<String, dynamic>.from(body);
+    }
+    throw Exception('Failed to load employee approval: ${response.statusCode}');
+  }
+
+  /// POST /chemists/approvals/{requestId}/approve
+  Future<void> approveChemistRequest(int requestId, {int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final bodyData = <String, dynamic>{};
+    final empId = employeeId ?? user?.employeeId;
+    if (empId != null) bodyData['employee_id'] = empId;
+    if (user?.employeeId != null) bodyData['approver_id'] = user!.employeeId;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/chemists/approvals/$requestId/approve'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(bodyData),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to approve chemist list');
+    }
+  }
+
+  /// POST /chemists/approvals/{requestId}/reject
+  Future<void> rejectChemistRequest(int requestId, {String? reason, int? employeeId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    final bodyData = <String, dynamic>{};
+    if (reason != null && reason.isNotEmpty) bodyData['reason'] = reason;
+    final empId = employeeId ?? user?.employeeId;
+    if (empId != null) bodyData['employee_id'] = empId;
+    if (user?.employeeId != null) bodyData['approver_id'] = user!.employeeId;
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/chemists/approvals/$requestId/reject'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(bodyData),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['message'] ?? 'Failed to reject chemist list');
+    }
   }
 }

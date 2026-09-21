@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -25,6 +25,8 @@ import 'package:zforce/presentation/support/support_screen.dart';
 import 'package:zforce/presentation/login/change_password_screen.dart';
 import 'package:zforce/presentation/login/login_screen.dart';
 import '../bba/bba_main_screen.dart';
+import '../chemist/chemist_main_screen.dart';
+
 import '../campaign/campaign_list_screen.dart';
 import '../doctor_list/doctor_list_screen.dart';
 import '../doctor_list/add_doctor_screen.dart';
@@ -127,8 +129,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Re-construct a mock request map to reuse our handler
             final mockRequest = {
               'request_type': reqType,
-              'employee_id': empId,
-            };
+              'employee_id': empId
+               };
             _handleRequestClick(mockRequest);
           }
         }
@@ -210,7 +212,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       offset: const Offset(0, 4),
                     ),
                   ],
-                  border: Border.all(color: const Color(0xFF4A148C).withOpacity(0.2)),
+                  border: Border.all(
+                    color: const Color(0xFF4A148C).withOpacity(0.2),
+                  ),
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(16),
@@ -218,10 +222,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Container(
-                          width: 4,
-                          color: const Color(0xFF4A148C),
-                        ),
+                        Container(width: 4, color: const Color(0xFF4A148C)),
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.all(12),
@@ -231,19 +232,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               children: [
                                 Row(
                                   children: [
-                                    const Icon(Icons.notifications_active, color: Color(0xFF4A148C), size: 18),
+                                    const Icon(
+                                      Icons.notifications_active,
+                                      color: Color(0xFF4A148C),
+                                      size: 18,
+                                    ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
                                         title,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.black87),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                          color: Colors.black87,
+                                        ),
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                     GestureDetector(
                                       onTap: dismiss,
-                                      child: const Icon(Icons.close, size: 18, color: Colors.grey),
+                                      child: const Icon(
+                                        Icons.close,
+                                        size: 18,
+                                        color: Colors.grey,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -251,12 +264,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   const SizedBox(height: 4),
                                   Text(
                                     body,
-                                    style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+                                    style: TextStyle(
+                                      color: Colors.grey.shade700,
+                                      fontSize: 13,
+                                    ),
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
-                                if (imageUrl != null && imageUrl.isNotEmpty) ...[
+                                if (imageUrl != null &&
+                                    imageUrl.isNotEmpty) ...[
                                   const SizedBox(height: 8),
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(8),
@@ -265,7 +282,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       height: 120,
                                       width: double.infinity,
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                      errorBuilder: (_, __, ___) =>
+                                          const SizedBox.shrink(),
                                     ),
                                   ),
                                 ],
@@ -390,11 +408,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final status = statusData['status'];
       final data = statusData['data'];
       final employee = statusData['employee'];
-      final webDcrAllowed = data is Map<String, dynamic> && data.containsKey('is_web_dcr_allowed')
+      final webDcrAllowed =
+          data is Map<String, dynamic> && data.containsKey('is_web_dcr_allowed')
           ? _flagEnabled(data['is_web_dcr_allowed'])
           : (employee is Map<String, dynamic>
-              ? _flagEnabled(employee['is_web_dcr_allowed'])
-              : null);
+                ? _flagEnabled(employee['is_web_dcr_allowed'])
+                : null);
 
       setState(() {
         if (webDcrAllowed != null) {
@@ -432,7 +451,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (user == null) return;
 
       // ── Use the enriched endpoint that now bundles version + dcr_access ──
-      final enriched = await api.fetchDcrRequestsEnriched(employeeId: user.employeeId);
+      final enriched = await api.fetchDcrRequestsEnriched(
+        employeeId: user.employeeId,
+      );
       if (!mounted) return;
 
       // 1. Extract the requests list for the notification badge (unchanged behaviour)
@@ -457,9 +478,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
 
         // 3. Extract version bundled into this response and check for update ──
-        final serverVersion = data['vesion']?.toString() // server typo kept intentionally
-            ?? data['version']?.toString();              // also handle if server fixes typo
-        if (kIsWeb && serverVersion != null && serverVersion != CURRENT_APP_VERSION) {
+        final serverVersion = data['vesion']?.toString()             ??
+            data['version']?.toString();   
+        if (kIsWeb &&
+            serverVersion != null &&
+            serverVersion != CURRENT_APP_VERSION) {
           if (mounted) _showUpdatePopup();
         }
       }
@@ -714,7 +737,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Container(
                 width: double.infinity,
                 height: 70,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6,),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -952,7 +975,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Text(
                     'Notifications',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   if (_isFetchingDcrSheet)
@@ -1070,19 +1094,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         initialSubordinateId: parsedEmpId,
         autoOpenReviewMonth: true,
         initialMonth: planMonth,
-      ));
+      ),
+      );
     } else if (reqType == 'EXP' || reqType == 'EXPENSE') {
       final planMonth = request['plan_month']?.toString();
       _navigateTo(ExpenseManagerScreen(
         initialEmployeeId: parsedEmpId,
         initialMonth: planMonth,
-      ));
+      ),
+      );
     } else if (reqType == 'MCL') {
       _navigateTo(NewDrMasterScreen(initialEmployeeId: parsedEmpId));
     } else if (reqType == 'BRAND') {
       _navigateTo(DoctorBrandScreen(initialEmployeeId: parsedEmpId));
     } else if (reqType == 'DOC_SEL') {
       _navigateTo(BbaMainScreen(initialEmployeeId: parsedEmpId));
+    } else if (reqType == 'CHEMIST_APPROVAL') {
+      _navigateTo(ChemistMainScreen(initialEmployeeId: parsedEmpId));
     } else if (reqType == 'ACTION' || reqType == 'WEB' || reqType == 'TAB') {
       _openActionCenter();
     } else {
@@ -1145,7 +1173,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // } else {
             //   _showSnack("Please Check In first!");
             // }
-          }),
+            },
+          ),
+
+          _MenuAction(
+            Icons.local_pharmacy_outlined,
+            "Chemist Master List",
+            Colors.teal,
+            () => _navigateTo(const ChemistMainScreen()),
+          ),
 
           if (canUseWebDcr)
             _MenuAction(
@@ -1165,6 +1201,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "DCR Unlock\nRequest",
             Colors.redAccent,
             () => _navigateTo(const DcrUnlockRequestScreen()),
+          ),
+          _MenuAction(
+            Icons.analytics_outlined,
+            "Edetailing\nReport",
+            Colors.indigo,
+            () {
+              final employeeCode = user?.employeeCode.trim();
+              if (employeeCode == null || employeeCode.isEmpty) {
+                _showSnack("Employee code not available.");
+                return;
+              }
+              final url =
+                  'https://zorvia.globalspace.in/reports/edetailing/shared-analytics?employee_code=${Uri.encodeComponent(employeeCode)}';
+              Navigator.pushNamed(
+                context,
+                InternalWebViewScreen.routeName,
+                arguments: InternalWebViewArgs(
+                  url: url,
+                  title: 'Edetailing Report',
+                ),
+              );
+            },
           ),
         ]),
         const SizedBox(height: 24),
@@ -1271,6 +1329,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.purple,
             () => _navigateTo(const BbaMainScreen()),
           ),
+
           // _MenuAction(
           //   Icons.business_center,
           //   "Data Upload",
@@ -1447,7 +1506,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               leading: const Icon(Icons.install_mobile),
               title: const Text("Install App"),
               onTap: _showInstallInstructions,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),
@@ -1461,7 +1521,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 leading: const Icon(Icons.support_agent),
                 title: const Text("Help & Support"),
                 onTap: () => _navigateTo(const SupportScreen()),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),
@@ -1475,7 +1536,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 leading: const Icon(Icons.lock_reset),
                 title: const Text("Change Password"),
                 onTap: () => _navigateTo(const ChangePasswordScreen(isForced: false)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),
@@ -1490,9 +1552,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               borderRadius: BorderRadius.circular(8),
               child: ListTile(
                 leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text("Logout", style: TextStyle(color: Colors.red)),
+                title: const Text("Logout", style: TextStyle(color: Colors.red),
+                ),
                 onTap: _handleLogout,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),
@@ -1578,7 +1642,7 @@ class _DcrRequestsSheet extends StatelessWidget {
       final dt = DateTime.parse(iso);
       const months = [
         '', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
       ];
       return '${dt.day} ${months[dt.month]} ${dt.year}';
     } catch (_) {
@@ -1597,7 +1661,7 @@ class _DcrRequestsSheet extends StatelessWidget {
     for (final req in requests) {
       final cat = req['category']?.toString().toUpperCase() ?? '';
       final reqType = req['request_type']?.toString().toUpperCase() ?? '';
-      
+
       if (cat == 'DCR' || ['ACTION', 'WEB', 'TAB'].contains(reqType)) {
         dcrReqs.add(req);
       } else if (cat == 'TP' || ['TP', 'TOUR_PLAN'].contains(reqType)) {
@@ -1626,7 +1690,10 @@ class _DcrRequestsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildSection(String title, List<Map<String, dynamic>> sectionRequests) {
+  Widget _buildSection(
+    String title,
+    List<Map<String, dynamic>> sectionRequests,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1761,7 +1828,8 @@ class _DcrRequestsSheet extends StatelessWidget {
                     child: Column(
                       children: [
                         Icon(Icons.notifications_none,
-                            size: 52, color: Colors.grey.shade300),
+                          size: 52, color: Colors.grey.shade300,
+                        ),
                         const SizedBox(height: 12),
                         Text(
                           'No pending notifications',
@@ -1849,7 +1917,8 @@ class _DcrRequestCard extends StatelessWidget {
     }
 
     final reason      = _str('request_reason', '—');
-    final requestedAt = formatDateTime(_str('requested_at').isEmpty ? null : _str('requested_at'));
+    final requestedAt = formatDateTime(_str('requested_at').isEmpty ? null : _str('requested_at'),
+    );
 
     final rawFrom = _str('from_date');
     final rawTo   = _str('to_date');
@@ -1879,7 +1948,8 @@ class _DcrRequestCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: primaryColor.withOpacity(0.04),
                 borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16)),
+                   const BorderRadius.vertical(top: Radius.circular(16),
+                ),
               ),
               child: Row(
                 children: [
@@ -1911,7 +1981,9 @@ class _DcrRequestCard extends StatelessWidget {
                   // Type badge
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: typeBg,
                       borderRadius: BorderRadius.circular(20),

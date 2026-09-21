@@ -66,6 +66,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   List<String> _remoteAttachments = [];
   double _displayTotal = 0.0;
   bool _isLocked = false;
+  // Auth token for loading protected image URLs from the backend.
+  // Loaded once in initState and passed to every getCorsImage call.
+  String? _authToken;
 
   // Travel details
   String _modeOfTravel = 'Bike';
@@ -165,6 +168,9 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     _manualTaController.addListener(_recalculateTotal);
     _loadTaRoutes();
     _fetchCalculation();
+    ApiService().getToken().then((t) {
+      if (mounted) setState(() => _authToken = t);
+    });
   }
 
   /// Restores all saved expense fields into state. Called on init (edit mode)
@@ -289,24 +295,31 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       }
     }
 
-    // Restore remote attachments
-    if (_remoteAttachments.isEmpty && d['attachment_path'] != null) {
-      try {
-        final val = d['attachment_path'];
-        if (val is List) {
-          _remoteAttachments = val.map((e) => e.toString()).toList();
-        } else if (val is String) {
-          if (val.startsWith('[')) {
-            final decoded = jsonDecode(val) as List;
-            _remoteAttachments = decoded.map((e) => e.toString()).toList();
-          } else if (val.isNotEmpty && val != 'null') {
-            _remoteAttachments = [val];
+    // Restore remote attachments.
+    // The backend may send the bill under 'attachment_path' (array/JSON) or
+    // 'bill_path' (single URL string).  We try 'attachment_path' first for
+    // backwards-compatibility, then fall back to 'bill_path'.
+    if (_remoteAttachments.isEmpty) {
+      final rawVal = d['attachment_path'] ?? d['bill_path'];
+      if (rawVal != null) {
+        try {
+          final val = rawVal;
+          if (val is List) {
+            _remoteAttachments = val.map((e) => e.toString()).toList();
+          } else if (val is String) {
+            if (val.startsWith('[')) {
+              final decoded = jsonDecode(val) as List;
+              _remoteAttachments = decoded.map((e) => e.toString()).toList();
+            } else if (val.isNotEmpty && val != 'null') {
+              _remoteAttachments = [val];
+            }
           }
+        } catch (e) {
+          print('Failed to parse remote attachments: $e');
         }
-      } catch (e) {
-        print('Failed to parse remote attachments: $e');
       }
     }
+
   }
 
   @override
@@ -328,6 +341,28 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       _otherExpenses.fold(0.0, (sum, e) => sum + e.amount);
 
   void _recalculateTotal() {
+    // ── Locked mode: use the saved snapshot exactly as the summary screen does ──
+    // This guarantees the Total Claim in the bottom bar always matches the
+    // daily card total shown in ExpenseSummaryScreen and the PDF export.
+    if (_isLocked && widget.editData != null) {
+      final d = widget.editData!;
+      final da     = _toDouble(d['da_amount']);
+      final ta     = _toDouble(d['ta_amount']);
+      final other  = _toDouble(d['other_amount']);
+      final pocket = _toDouble(d['pocket_allowance']);
+      final hotel  = _toDouble(d['hotel_amount']);
+      final meal   = _toDouble(d['meal_amount']);
+      // Prefer the backend's own total_amount if it exists, otherwise sum parts.
+      final savedTotal = _toDouble(d['total_amount']);
+      setState(() {
+        _displayTotal = savedTotal > 0
+            ? savedTotal
+            : (da + ta + other + pocket + hotel + meal);
+      });
+      return;
+    }
+
+    // ── Live recalculation for new / editable / rejected expenses ─────────────
     double da = 0, ta = 0;
     if (_expenseMode == 'FIELD' && _calcData != null) {
       if (_isOsReturn) {
@@ -352,10 +387,16 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Future<void> _fetchCalculation() async {
+    // ── Locked: skip live DCR call — use the saved snapshot from _restoreEditData ──
+    // The expense has been submitted and locked. Re-running calculateExpense
+    // against today's DCR data would overwrite the saved state with live values
+    // that may differ if visits were changed after submission.
+
     if (_expenseMode == 'NFW' || _expenseMode == 'TRANSIT') {
       _recalculateTotal();
       return;
     }
+
     setState(() {
       _isLoading = true;
       _calcData = null;
@@ -398,13 +439,18 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             _hotelBillClaimed = d['hotel_bill_claimed'] == 1 || d['hotel_bill_claimed'] == '1';
             _hotelAmount    = _toDouble(d['hotel_amount']);
             _mealAmount     = _toDouble(d['meal_amount']);
-            // _hotelBillFlag above (line ~329) reflects a freshly re-resolved
-            // da_type off today's DCR data, which can disagree with what was
-            // actually saved (routes/visits can change after submission).
-            // Trust the saved da_type instead so the hotel/meal toggle still
-            // renders for an expense that was OS/EX_OS at save time.
+            _pocketAllowance = _toDouble(d['pocket_allowance']);
+            if (d.containsKey('os_return_amount')) {
+              _osReturnAmount = _toDouble(d['os_return_amount']);
+            }
+            
+            // _hotelBillFlag reflects a freshly re-resolved da_type off today's DCR data,
+            // which can disagree with what was actually saved.
+            // Trust the saved da_type instead so the hotel/meal toggle still renders.
             if (_serverDaType == 'OS' || _serverDaType == 'EX_OS') {
               _hotelBillFlag = true;
+            } else if (d.containsKey('hotel_bill_flag')) {
+              _hotelBillFlag = d['hotel_bill_flag'] == 1 || d['hotel_bill_flag'] == '1' || d['hotel_bill_flag'] == true;
             }
           }
         } else {
@@ -501,24 +547,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     ] else
                       _buildSelectBothLocationsHint(),
                     const SizedBox(height: 14),
-                    if (!_isLocked)
-                      _buildManualInputCard()
-                    else
-                      _buildLockedDetailsCard(),
+                    _buildManualInputCard(),
                   ] else if (_expenseMode == 'NFW') ...[
                     _buildNfwBanner(),
                     const SizedBox(height: 14),
-                    if (!_isLocked)
-                      _buildNfwInputCard()
-                    else
-                      _buildLockedDetailsCard(),
+                    _buildNfwInputCard(),
                   ] else if (_expenseMode == 'TRANSIT') ...[
                     _buildTransitBanner(),
                     const SizedBox(height: 14),
-                    if (!_isLocked)
-                      _buildTransitInputCard()
-                    else
-                      _buildLockedDetailsCard(),
+                    _buildTransitInputCard(),
                   ] else
                     _buildExpenseTypeSelector(),
                 ],
@@ -2357,22 +2394,27 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // When the employee has no own policy routes, subordinate town codes fill the
   // dropdown so they can still pick from/to for the "Add Route" flow.
   List<String> _allLocations() {
-    final locs = <String>{};
-    if (_userHq != null && _userHq!.isNotEmpty) locs.add(_userHq!);
+    final seen = <String>{};
+    final locs = <String>[];
+    void addLoc(String? loc) {
+      final val = loc?.toString().trim() ?? '';
+      if (val.isNotEmpty && seen.add(val.toUpperCase())) {
+        locs.add(val);
+      }
+    }
+    addLoc(_userHq);
     for (final r in _taRoutes) {
-      final f = r['from_town_code']?.toString() ?? '';
-      final t = r['to_town_code']?.toString() ?? '';
-      if (f.isNotEmpty) locs.add(f);
-      if (t.isNotEmpty) locs.add(t);
+      addLoc(r['from_town_code']);
+      addLoc(r['to_town_code']);
     }
     // When no own policy routes, supplement with subordinate locations so managers
     // and employees without personal routes can still select from/to in dropdowns.
     if (!_hasOwnPolicy || _taRoutes.isEmpty) {
       for (final loc in _subordinateLocations) {
-        if (loc.isNotEmpty) locs.add(loc);
+        addLoc(loc);
       }
     }
-    return locs.toList()..sort();
+    return locs..sort();
   }
 
   Future<String?> _showLocationSearch(List<String> locations, String? current) =>
@@ -3612,14 +3654,36 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             InteractiveViewer(
               child: localBytes != null
                   ? Image.memory(localBytes, fit: BoxFit.contain)
-                  : getCorsImage(remoteUrl!, fit: BoxFit.contain),
+                  : getCorsImage(remoteUrl!, fit: BoxFit.contain,
+                      headers: _authToken != null
+                          ? {'Authorization': 'Bearer $_authToken'}
+                          : null),
             ),
+            // Top-right button row: Download (remote only) + Close
             Positioned(
               top: 10,
               right: 10,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                onPressed: () => Navigator.of(context).pop(),
+              child: Row(
+                children: [
+                  // Download button — only meaningful for remote (saved) files
+                  if (remoteUrl != null)
+                    IconButton(
+                      icon: const Icon(Icons.download_rounded,
+                          color: Colors.white, size: 28),
+                      tooltip: 'Download',
+                      onPressed: () async {
+                        final uri = Uri.tryParse(remoteUrl);
+                        if (uri != null && await canLaunchUrl(uri)) {
+                          await launchUrl(uri,
+                              mode: LaunchMode.externalApplication);
+                        }
+                      },
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
               ),
             ),
           ],
@@ -3642,56 +3706,86 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(10),
-        child: Row(
-          children: [
-            GestureDetector(
-              onTap: () {
-                if (isImage) _showImagePreview(remoteUrl: path);
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: isImage
-                    ? getCorsImage(path, width: 48, height: 48, fit: BoxFit.cover)
-                    : Container(
-                        width: 48,
-                        height: 48,
-                        color: Colors.grey.shade100,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.picture_as_pdf,
-                                color: Colors.red.shade400, size: 22),
-                            Text(ext.toUpperCase(),
-                                style: TextStyle(
-                                    fontSize: 8, color: Colors.grey.shade600)),
-                          ],
-                        ),
+      // Clip so InkWell ripple is contained within the rounded border.
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            // Tap anywhere on the card to open the preview.
+            // If it's an image, open the built-in fullscreen preview dialog.
+            // If it's a PDF or unknown extension, open the URL in the external browser.
+            onTap: () async {
+              if (isImage) {
+                _showImagePreview(remoteUrl: path);
+              } else {
+                final uri = Uri.tryParse(path);
+                if (uri != null && await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                } else {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Could not open the file.')),
+                    );
+                  }
+                }
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  // Thumbnail — just visual, tap is now on the whole row
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: isImage
+                        ? getCorsImage(path, width: 48, height: 48, fit: BoxFit.cover,
+                            headers: _authToken != null
+                                ? {'Authorization': 'Bearer $_authToken'}
+                                : null)
+                        : Container(
+                            width: 48,
+                            height: 48,
+                            color: Colors.grey.shade100,
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.picture_as_pdf,
+                                    color: Colors.red.shade400, size: 22),
+                                Text(ext.toUpperCase(),
+                                    style: TextStyle(
+                                        fontSize: 8,
+                                        color: Colors.grey.shade600)),
+                              ],
+                            ),
+                          ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(name,
+                        style: const TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  // Delete button — kept as its own GestureDetector so it wins
+                  // over the parent InkWell in Flutter's gesture arena.
+                  if (!_isLocked) ...{
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _remoteAttachments.removeAt(i);
+                      }),
+                      child: Container(
+                        padding: const EdgeInsets.all(2),
+                        decoration: const BoxDecoration(
+                            color: Colors.red, shape: BoxShape.circle),
+                        child: const Icon(Icons.close, size: 12, color: Colors.white),
                       ),
+                    ),
+                  },
+                ],
               ),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(name,
-                  style: const TextStyle(fontSize: 12),
-                  overflow: TextOverflow.ellipsis),
-            ),
-            if (!_isLocked) ...[
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: () => setState(() {
-                  _remoteAttachments.removeAt(i);
-                }),
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: const BoxDecoration(
-                      color: Colors.red, shape: BoxShape.circle),
-                  child: const Icon(Icons.close, size: 12, color: Colors.white),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -3713,44 +3807,53 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ),
       child: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              children: [
-                GestureDetector(
-                  onTap: () {
-                    if (isImage && file.bytes != null) {
-                      _showImagePreview(localBytes: file.bytes);
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  if (isImage && file.bytes != null) {
+                    _showImagePreview(localBytes: file.bytes);
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Preview not available for this file type.')),
+                      );
                     }
-                  },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: isImage && file.bytes != null
-                        ? Image.memory(file.bytes!, width: 48, height: 48, fit: BoxFit.cover)
-                      : Container(
-                          width: 48,
-                          height: 48,
-                          color: Colors.grey.shade100,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.picture_as_pdf,
-                                  color: Colors.red.shade400, size: 22),
-                              Text(ext.toUpperCase(),
-                                  style: TextStyle(
-                                      fontSize: 8, color: Colors.grey.shade600)),
-                            ],
-                          ),
-                        ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(file.name,
-                      style: const TextStyle(fontSize: 12),
-                      overflow: TextOverflow.ellipsis),
-                ),
-                if (!_isLocked) ...[
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: isImage && file.bytes != null
+                            ? Image.memory(file.bytes!, width: 48, height: 48, fit: BoxFit.cover)
+                            : Container(
+                                width: 48,
+                                height: 48,
+                                color: Colors.grey.shade100,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.picture_as_pdf,
+                                        color: Colors.red.shade400, size: 22),
+                                    Text(ext.toUpperCase(),
+                                        style: TextStyle(
+                                            fontSize: 8, color: Colors.grey.shade600)),
+                                  ],
+                                ),
+                              ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(file.name,
+                            style: const TextStyle(fontSize: 12),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      if (!_isLocked) ...[
                   GestureDetector(
                     onTap: () => _showGstSheet(i),
                     child: Container(
@@ -3804,11 +3907,14 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                       child: const Icon(Icons.close, size: 12, color: Colors.white),
                     ),
                   ),
-                ],
-              ],
-            ),
-          ),
-          if (meta.isGst)
+                ], 
+              ], 
+            ), 
+          ), 
+        ), 
+      ), 
+    ), 
+      if (meta.isGst)
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
               child: Row(
@@ -3948,91 +4054,211 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
-  Widget _buildOtherExpenseRow(int index, OtherExpenseItem item) {
+ Widget _buildOtherExpenseRow(int index, OtherExpenseItem item) {
+    // Determine whether there is a bill (local pick or remote saved).
+    final bool hasLocalBill = item.bill != null && item.bill!.bytes != null;
+    final bool hasRemoteBill =
+        item.remoteBillPath != null && item.remoteBillPath!.isNotEmpty;
+    final bool hasBill = hasLocalBill || hasRemoteBill;
+
+    // Compute remote ext once — used for both thumbnail and tap handling.
+    final String remoteExt = hasRemoteBill
+        ? (item.remoteBillPath!.split('.').last.split('?').first.toLowerCase())
+        : '';
+    final bool remoteIsImage =
+        ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(remoteExt);
+
+    // Local bill ext.
+    final String localExt =
+        hasLocalBill ? (item.bill!.extension?.toLowerCase() ?? '') : '';
+    final bool localIsImage =
+        ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(localExt);
+
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEDE7F6),
-              borderRadius: BorderRadius.circular(6),
+          // ── Row 1: Type badge | Amount field | Delete button ──────────────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Type badge
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEDE7F6),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    item.type,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF4A148C),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Amount field — Expanded is safe here because the bill
+                // thumbnail has been moved to Row 2 below.
+                Expanded(
+                  child: TextField(
+                    controller: item.amountController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    enabled: !_isLocked,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    decoration: const InputDecoration(
+                      prefixText: '₹ ',
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+                // Delete button
+                if (!_isLocked) ...{
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      item.dispose();
+                      setState(() => _otherExpenses.removeAt(index));
+                      _recalculateTotal();
+                    },
+                    child: Container(
+                      width: 24,
+                      height: 24,
+                      padding: const EdgeInsets.all(2),
+                      decoration: const BoxDecoration(
+                        color: Colors.red,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                },
+              ],
             ),
-            child: Text(item.type,
-                style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF4A148C))),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: TextField(
-              controller: item.amountController,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              enabled: !_isLocked,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-              decoration: const InputDecoration(
-                prefixText: '₹ ',
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-              ),
-            ),
-          ),
-          if (item.bill != null && item.bill!.bytes != null) ...[
-            const SizedBox(width: 6),
+
+          // ── Row 2: Bill thumbnail strip (only when a bill is attached) ────
+          // Completely separate from the Expanded TextField above, so
+          if (hasBill)
             GestureDetector(
+              behavior: HitTestBehavior.opaque,
               onTap: () {
-                final ext = item.bill!.extension?.toLowerCase() ?? '';
-                final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
-                if (isImage) {
-                  _showImagePreview(localBytes: item.bill!.bytes);
+                if (hasLocalBill) {
+                  if (localIsImage) {
+                    _showImagePreview(localBytes: item.bill!.bytes);
+                  }
+                } else if (hasRemoteBill) {
+                  if (remoteIsImage) {
+                    _showImagePreview(remoteUrl: item.remoteBillPath);
+                  } else {
+                    // Non-image (PDF etc.) — open in browser.
+                    final uri = Uri.tryParse(item.remoteBillPath!);
+                    if (uri != null) {
+                      canLaunchUrl(uri).then((ok) {
+                        if (ok) launchUrl(uri, mode: LaunchMode.externalApplication);
+                      });
+                    }
+                  }
                 }
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: Image.memory(item.bill!.bytes!, width: 30, height: 30, fit: BoxFit.cover),
-              ),
-            ),
-          ] else if (item.remoteBillPath != null && item.remoteBillPath!.isNotEmpty) ...[
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: () {
-                final ext = item.remoteBillPath!.split('.').last.split('?').first.toLowerCase();
-                final isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].contains(ext);
-                if (isImage) {
-                  _showImagePreview(remoteUrl: item.remoteBillPath);
-                }
-              },
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(6),
-                child: getCorsImage(item.remoteBillPath!, width: 30, height: 30, fit: BoxFit.cover),
-              ),
-            ),
-          ],
-          if (!_isLocked) ...[
-            const SizedBox(width: 6),
-            GestureDetector(
-              onTap: () {
-                item.dispose();
-                setState(() => _otherExpenses.removeAt(index));
-                _recalculateTotal();
               },
               child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration:
-                    const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
-                child: const Icon(Icons.close, size: 12, color: Colors.white),
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(10),
+                    bottomRight: Radius.circular(10),
+                  ),
+                  border: Border(
+                      top: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: Row(
+                  children: [
+                    // Thumbnail
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: hasLocalBill
+                          ? (localIsImage
+                              ? Image.memory(
+                                  item.bill!.bytes!,
+                                  width: 36,
+                                  height: 36,
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  width: 36,
+                                  height: 36,
+                                  color: Colors.grey.shade200,
+                                  child: Icon(Icons.picture_as_pdf,
+                                      color: Colors.red.shade400, size: 20),
+                                ))
+                          : (remoteIsImage
+                              ? getCorsImage(
+                                  item.remoteBillPath!,
+                                  width: 36,
+                                  height: 36,
+                                  fit: BoxFit.cover,
+                                  headers: _authToken != null
+                                      ? {'Authorization': 'Bearer $_authToken'}
+                                      : null,
+                                )
+                              : Container(
+                                  width: 36,
+                                  height: 36,
+                                  color: Colors.grey.shade200,
+                                  child: Icon(Icons.picture_as_pdf,
+                                      color: Colors.red.shade400, size: 20),
+                                )),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        hasLocalBill
+                            ? (item.bill!.name)
+                            : (item.remoteBillPath!
+                                .split('/')
+                                .last
+                                .split('?')
+                                .first),
+                        style: TextStyle(
+                            fontSize: 11, color: Colors.grey.shade600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Icon(Icons.open_in_new,
+                        size: 14, color: Colors.grey.shade400),
+                  ],
+                ),
               ),
             ),
-          ],
         ],
       ),
     );
@@ -4055,6 +4281,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     );
   }
 
+  // ─── Locked Details Card ──────────────────────────────────────────────────────
+
   Future<void> _pickAttachment() async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: true,
@@ -4070,7 +4298,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     }
   }
 
-  // ─── Locked Details Card ──────────────────────────────────────────────────────
+  /*
+   // ─── Locked Details Card ──────────────────────────────────────────────────────
 
   Widget _buildLockedDetailsCard() {
     final d = widget.editData!;
@@ -4135,6 +4364,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
       ),
     );
   }
+
+*/ 
 
   // ─── Bottom Bar ───────────────────────────────────────────────────────────────
 

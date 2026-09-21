@@ -485,6 +485,7 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
   final Set<int> _selected = {};
   bool _isLoading = true;
   bool _isSaving = false;
+  String? _errorMessage;
   final _searchCtrl = TextEditingController();
   final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 
@@ -502,6 +503,7 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _errorMessage = null);
     try {
       final docs = await ApiService().getMyBbaDoctorList(brandId: widget.brandId, isCampaign: widget.isCampaign);
       if (mounted) {
@@ -514,11 +516,17 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
           _filtered = _allDoctors;
         });
       }
-    } catch (_) {
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll('Exception: ', '');
+        });
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
+
 
   void _filter() {
     final q = _searchCtrl.text.toLowerCase();
@@ -646,67 +654,104 @@ class _AddDoctorSheetState extends State<_AddDoctorSheet> {
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
-                  : _filtered.isEmpty
+                  : _errorMessage != null
                       ? Center(
-                          child: Text('No doctors available',
-                              style:
-                                  TextStyle(color: Colors.grey.shade400)))
-                      : ListView.separated(
-                          controller: scrollCtrl,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 4),
-                          itemCount: _filtered.length,
-                          separatorBuilder: (context, index) =>
-                              const Divider(height: 1),
-                          itemBuilder: (_, i) {
-                            final doc = _filtered[i];
-                            final id = int.tryParse(
-                                    doc['id']?.toString() ?? '0') ??
-                                0;
-                            final name =
-                                doc['doctor_name']?.toString() ?? '';
-                            final sp =
-                                doc['specialty_practice_type']
-                                        ?.toString() ??
-                                    '';
-                            final area = doc['area']?.toString() ?? '';
-                            final sel = _selected.contains(id);
-
-                            return CheckboxListTile(
-                              value: sel,
-                              activeColor: const Color(0xFF4A148C),
-                              onChanged: (v) {
-                                // Prevent selecting more doctors than the remaining brand quota.
-                                if (v == true &&
-                                    widget.quotaRemaining != null &&
-                                    _selected.length >= widget.quotaRemaining!) {
-                                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                                    content: Text('Brand quota allows only ${widget.quotaRemaining} more doctor(s).'),
-                                    backgroundColor: Colors.orange,
-                                  ));
-                                  return;
-                                }
-                                setState(() {
-                                  if (v == true) {
-                                    _selected.add(id);
-                                  } else {
-                                    _selected.remove(id);
-                                  }
-                                });
-                              },
-                              title: Text(name,
-                                  style: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500)),
-                              subtitle: Text('$sp${area.isNotEmpty ? ' • $area' : ''}',
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.error_outline,
+                                    color: Colors.red.shade400, size: 40),
+                                const SizedBox(height: 12),
+                                Text(
+                                  _errorMessage!,
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500)),
-                              contentPadding: EdgeInsets.zero,
-                              dense: true,
-                            );
-                          },
-                        ),
+                                      color: Colors.red.shade700,
+                                      fontSize: 13,
+                                      height: 1.4),
+                                ),
+                                const SizedBox(height: 16),
+                                OutlinedButton.icon(
+                                  onPressed: () {
+                                    setState(() => _isLoading = true);
+                                    _load();
+                                  },
+                                  icon: const Icon(Icons.refresh, size: 16),
+                                  label: const Text('Retry'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF4A148C),
+                                    side: const BorderSide(
+                                        color: Color(0xFF4A148C)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : _filtered.isEmpty
+                          ? Center(
+                              child: Text('No doctors available',
+                                  style:
+                                      TextStyle(color: Colors.grey.shade400)))
+                          : ListView.separated(
+                              controller: scrollCtrl,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 4),
+                              itemCount: _filtered.length,
+                              separatorBuilder: (context, index) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (_, i) {
+                                final doc = _filtered[i];
+                                final id = int.tryParse(
+                                        doc['id']?.toString() ?? '0') ??
+                                    0;
+                                final name =
+                                    doc['doctor_name']?.toString() ?? '';
+                                final sp =
+                                    doc['specialty_practice_type']
+                                            ?.toString() ??
+                                        '';
+                                final area = doc['area']?.toString() ?? '';
+                                final sel = _selected.contains(id);
+
+                                return CheckboxListTile(
+                                  value: sel,
+                                  activeColor: const Color(0xFF4A148C),
+                                  onChanged: (v) {
+                                    // Prevent selecting more doctors than the remaining brand quota.
+                                    if (v == true &&
+                                        widget.quotaRemaining != null &&
+                                        _selected.length >= widget.quotaRemaining!) {
+                                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                        content: Text('Brand quota allows only ${widget.quotaRemaining} more doctor(s).'),
+                                        backgroundColor: Colors.orange,
+                                      ));
+                                      return;
+                                    }
+                                    setState(() {
+                                      if (v == true) {
+                                        _selected.add(id);
+                                      } else {
+                                        _selected.remove(id);
+                                      }
+                                    });
+                                  },
+                                  title: Text(name,
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w500)),
+                                  subtitle: Text('$sp${area.isNotEmpty ? ' • $area' : ''}',
+                                      style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade500)),
+                                  contentPadding: EdgeInsets.zero,
+                                  dense: true,
+                                );
+                              },
+                            ),
+
             ),
             // Save button
             Padding(

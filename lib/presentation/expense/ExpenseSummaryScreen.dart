@@ -7,8 +7,10 @@ import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/models/user_model.dart';
 import '../../data/services/api_service.dart';
+import '../../utils/cors_image.dart';
 import 'ExpenseCalendarScreen.dart';
 import 'ExpenseScreen.dart';
 
@@ -31,12 +33,16 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
   bool _hasPendingAdminChanges = false;
   String? _approvalStatus;
   String? _rejectionReason;
+  String? _authToken;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadData();
+    ApiService().getToken().then((t) {
+      if (mounted) setState(() => _authToken = t);
+    });
   }
 
   @override
@@ -418,7 +424,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: isLocked ? null : () => _openDailyExpense(item),
+        onTap: () => _openDailyExpense(item),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -607,10 +613,61 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     }
   }
 
+  /// Provides a Download button (opens the URL in the external browser / download
+  /// manager) and a Close button. Only called when [imageUrl] is not null.
+  void _showClaimImagePreview(String imageUrl) {
+    // Normalise the URL just like ExpenseScreen does for remote attachments.
+    final url = imageUrl.replaceAll('\\/', '/').replaceAll('"', '').trim();
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(10),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            InteractiveViewer(
+              child: getCorsImage(url, fit: BoxFit.contain,
+                  headers: _authToken != null
+                      ? {'Authorization': 'Bearer $_authToken'}
+                      : null),
+            ),
+            // Top-right: Download + Close
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.download_rounded,
+                        color: Colors.white, size: 28),
+                    tooltip: 'Download',
+                    onPressed: () async {
+                      final uri = Uri.tryParse(url);
+                      if (uri != null && await canLaunchUrl(uri)) {
+                        await launchUrl(uri,
+                            mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _daBadge(String type) {
     final map = {
       'OS': [Colors.red.shade50, Colors.red.shade700],
       'EX': [Colors.orange.shade50, Colors.orange.shade700],
+
       'HQ': [const Color(0xFFEDE7F6), const Color(0xFF4A148C)],
     };
     final colors = map[type] ?? [Colors.grey.shade100, Colors.grey.shade600];
@@ -815,10 +872,32 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
             ),
             title: Text(type,
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-            subtitle: Text(
-              claim['bill_attachment'] != null ? 'Bill attached' : 'No bill uploaded',
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-            ),
+            subtitle: claim['bill_attachment'] != null
+                // Bill exists
+                ? GestureDetector(
+                    onTap: () => _showClaimImagePreview(
+                        claim['bill_attachment'].toString()),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.attach_file,
+                            size: 12, color: Colors.green.shade600),
+                        const SizedBox(width: 3),
+                        Text(
+                          'Bill attached — tap to view',
+                          style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.green.shade600,
+                              decoration: TextDecoration.underline),
+                        ),
+                      ],
+                    ),
+                  )
+                : Text(
+                    'No bill uploaded',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                  ),
+
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1154,7 +1233,30 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       }
     }
 
+    final Map<int, String> dayTypeMap = {};
+    try {
+      final calData = await ApiService().getCalendarStatus(
+          _selectedMonth.month, _selectedMonth.year);
+      final daysList = calData['days'] as List? ?? [];
+      for (final d in daysList) {
+        final dayNum = d['day'] as int?;
+        final type = (d['type'] ?? '').toString().toLowerCase();
+        final label = (d['label'] ?? '').toString().trim();
+        if (dayNum != null && type != 'open' && type.isNotEmpty) {
+         
+          final displayLabel = label.isNotEmpty
+              ? label
+              : type[0].toUpperCase() + type.substring(1);
+          dayTypeMap[dayNum] = displayLabel;
+        }
+      }
+    } catch (_) {
+      // Non-fatal: continue PDF generation without holiday markers.
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
     final daysInMonth = DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0).day;
+
 
     double colTotalFare = 0;
     double colTotalHq = 0;
@@ -1268,9 +1370,19 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
 
       }
 
+      // ── Holiday / Sunday row detection ─────────────────────────────────────
+      // When the day has no filed expense AND the backend calendar-status marks
+      // it as non-open (e.g. type = "sunday" or "holiday"), we embed a sentinel
+      // value in row[1] (Town Worked column).  The PDF renderer below reads this
+      // sentinel and draws a distinct coloured banner instead of normal cells.
+      // The sentinel format is:  __HOLIDAY__:<displayLabel>
+      // If the user HAS filed an expense on a sunday/holiday, the normal expense
+      // row is shown (no sentinel — the expense data takes precedence).
+      final holidayLabel = (exp == null) ? dayTypeMap[day] : null;
+
       tableData.add([
         day.toString(),
-        townWorked,
+        holidayLabel != null ? '__HOLIDAY__:$holidayLabel' : townWorked,
         docVisits > 0 ? docVisits.toString() : "",
         chemVisits > 0 ? chemVisits.toString() : "",
         fromTown,
@@ -1460,6 +1572,50 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 ...List.generate(daysInMonth, (index) {
                   final row = tableData[index];
                   final isEven = index % 2 == 0;
+                  final isHolidayRow = row[1].startsWith('__HOLIDAY__:');
+                  if (isHolidayRow) {
+                    final label = row[1].substring('__HOLIDAY__:'.length);
+               
+                    return pw.TableRow(
+                      decoration: const pw.BoxDecoration(
+                        color: PdfColor.fromInt(0xFFFFF8E1), 
+                      ),
+                      children: [
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 2, vertical: 3),
+                          child: pw.Text(
+                            row[0],
+                            style: pw.TextStyle(
+                                fontSize: 7.0,
+                                fontWeight: pw.FontWeight.bold,
+                                color: const PdfColor.fromInt(0xFF795548)),
+                          ),
+                        ),
+                       
+                        pw.Padding(
+                          padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 2, vertical: 3),
+                          child: pw.Text(
+                            label,
+                            style: pw.TextStyle(
+                                fontSize: 7.0,
+                                fontWeight: pw.FontWeight.bold,
+                                fontStyle: pw.FontStyle.italic,
+                                color: const PdfColor.fromInt(0xFFE65100)),
+                          ),
+                        ),
+                        ...List.generate(
+                            16, (_) => pw.Padding(
+                                  padding: const pw.EdgeInsets.symmetric(
+                                      horizontal: 2, vertical: 3),
+                                  child: pw.Text(''),
+                                )),
+                      ],
+                    );
+                  }
+
+                  // ── Normal expense (or blank) row ──────────────────────────
                   return pw.TableRow(
                     decoration: pw.BoxDecoration(
                       color: isEven ? PdfColors.grey50 : PdfColors.white,
@@ -1486,6 +1642,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                     ],
                   );
                 }),
+
                 pw.TableRow(
                   decoration: const pw.BoxDecoration(color: PdfColors.purple50),
                   children: [

@@ -4,7 +4,7 @@ import 'dart:html' as html;
 import 'dart:ui_web' as ui_web;
 import 'package:flutter/material.dart';
 
-Widget getCorsImage(String url, {double? width, double? height, BoxFit fit = BoxFit.cover}) {
+Widget getCorsImage(String url, {double? width, double? height, BoxFit fit = BoxFit.cover, Map<String, String>? headers}) {
   final viewId = 'cors-img-$url-${DateTime.now().millisecondsSinceEpoch}';
   
   ui_web.platformViewRegistry.registerViewFactory(viewId, (int viewId) {

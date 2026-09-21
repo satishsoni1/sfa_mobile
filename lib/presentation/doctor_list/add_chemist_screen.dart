@@ -6,8 +6,13 @@ import '../../data/services/api_service.dart';
 
 class AddChemistScreen extends StatefulWidget {
   final Chemist? chemistToEdit;
+  final bool showAddArea;
 
-  const AddChemistScreen({this.chemistToEdit, super.key});
+  const AddChemistScreen({
+    this.chemistToEdit,
+    this.showAddArea = false,
+    super.key,
+  });
 
   @override
   State<AddChemistScreen> createState() => _AddChemistScreenState();
@@ -30,6 +35,8 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
 
   String? _selectedTerritoryType;
   final List<String> _territoryTypes = ['HQ', 'EX HQ', 'OS', 'EX OS'];
+
+  String _selectedCategory = 'normal';
 
   final Color _primaryColor = const Color(0xFF4A148C); // Chemist Teal Theme
   final Color _bgColor = const Color(0xFFF4F6F9);
@@ -250,6 +257,10 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
 
     setState(() => _isLoading = true);
 
+    try {
+      final api = ApiService();
+      final user = await api.getUser();
+
     final payload = {
       'name': _nameController.text.trim(),
       'area': _selectedArea,
@@ -258,10 +269,9 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
       'pincode': _pincodeController.text.trim(),
       'contact_person': _contactPersonController.text.trim(),
       'mobile': _mobileController.text.trim(),
-    };
-
-    try {
-      final api = ApiService();
+        'category': _selectedCategory,
+        if (user?.employeeId != null) 'employee_id': user!.employeeId,
+      };
       bool success;
 
       if (widget.chemistToEdit != null) {
@@ -393,6 +403,7 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
                                         : null,
                                   ),
                                 ),
+                                if (widget.showAddArea) ...[
                                 const SizedBox(width: 10),
                                 Container(
                                   height: 55,
@@ -413,6 +424,7 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
                                     onPressed: _showAddAreaDialog,
                                   ),
                                 ),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -435,6 +447,31 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
                               validator: (value) => value == null
                                   ? "Territory type is required"
                                   : null,
+                            ),
+                            const SizedBox(height: 12),
+
+                            // DROPDOWN: Category
+                            DropdownButtonFormField<String>(
+                              value: _selectedCategory,
+                              decoration: _inputDecoration(
+                                "Category *",
+                                Icons.category_outlined,
+                              ),
+                              items: const [
+                                DropdownMenuItem(
+                                  value: 'normal',
+                                  child: Text('General'),
+                                ),
+                                DropdownMenuItem(
+                                  value: '4-visit',
+                                  child: Text('4-Visit'),
+                                ),
+                              ],
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => _selectedCategory = val);
+                                }
+                              },
                             ),
 
                             const SizedBox(height: 24),
