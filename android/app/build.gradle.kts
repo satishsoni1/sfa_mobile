@@ -18,7 +18,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.globalspace.himalaya"
+    namespace = "com.globalspace.VodoSales"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -46,7 +46,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.globalspace.himalaya"
+        applicationId = "com.globalspace.VodoSales"
         // POD / SECONDARY SALES: minSdk raised to 30 (Android 11) to support
         // google_mlkit_document_scanner and flutter_doc_scanner.
         minSdk = 30

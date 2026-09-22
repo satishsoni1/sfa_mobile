@@ -1,4 +1,4 @@
-﻿# POD / Secondary Sales — Development Rules
+# POD / Secondary Sales — Development Rules
 
 ## Overview
 
@@ -68,7 +68,7 @@ Both Provider (SFA) and BLoC (POD) coexist. **Do NOT convert one to the other.**
 - Do NOT replace `lib/firebase_options.dart` with POD Firebase config
 - Do NOT modify `lib/providers/auth_provider.dart` without SFA approval
 - Do NOT modify `lib/data/services/api_service.dart` without SFA approval
-- Do NOT change the application ID (`com.globalspace.himalaya`)
+- Do NOT change the application ID (`com.globalspace.VodoSales`)
 - Do NOT modify existing SFA screens
 - Do NOT modify existing SFA menu items
 - Do NOT rewrite POD BLoC to Provider
