@@ -65,6 +65,10 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
             _selectedTerritoryType = widget.chemistToEdit!.territoryType;
           }
 
+          // Restore saved category so editing a 4-visit chemist doesn't
+          // silently reset it to 'normal' on save.
+          _selectedCategory = widget.chemistToEdit!.category ?? 'normal';
+
           // --- FIX: Safely check and assign the Area ---
           String existingArea = widget.chemistToEdit!.area.trim();
 
@@ -464,7 +468,7 @@ class _AddChemistScreenState extends State<AddChemistScreen> {
                                 ),
                                 DropdownMenuItem(
                                   value: '4-visit',
-                                  child: Text('4-Visit'),
+                                  child: Text('Weekly Visit'),
                                 ),
                               ],
                               onChanged: (val) {

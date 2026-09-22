@@ -7,6 +7,7 @@ class Chemist {
   final String? pincode;
   final String? contactPerson;
   final String? mobile;
+  final String? category;
 
   Chemist({
     required this.id,
@@ -17,6 +18,7 @@ class Chemist {
     this.pincode,
     this.contactPerson,
     this.mobile,
+    this.category,
   });
 
   factory Chemist.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class Chemist {
           json['contact_person']?.toString() ??
           json['contactPerson']?.toString(),
       mobile: json['mobile']?.toString(),
+      category: json['category']?.toString(),
     );
   }
 
@@ -48,6 +51,7 @@ class Chemist {
       'pincode': pincode,
       'contact_person': contactPerson,
       'mobile': mobile,
+      'category': category,
     };
   }
 }

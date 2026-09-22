@@ -774,7 +774,7 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
                             _statPill(
                               Icons.repeat_rounded,
                               _isLoadingMaster ? '—' : '$_fourVisitCount',
-                              '4-Visit',
+                              'Weekly Visit',
                             ),
                             const SizedBox(width: 8),
                             _statPill(
@@ -1056,7 +1056,7 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
                         const SizedBox(width: 6),
                         if (_isListLocked)
                           _infoChip(
-                            isFourVisit ? '4-Visit' : 'General',
+                            isFourVisit ? 'Weekly Visit' : 'General',
                             accentColor,
                           )
                         else
@@ -1117,7 +1117,7 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
                                   ),
                                 ),
                                 Text(
-                                  '4-V',
+                                  'W-V',
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: isFourVisit
@@ -1309,7 +1309,7 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
               children: [
                 _filterChip('All', 'All'),
-                _filterChip('4-visit', '4-Visit'),
+                _filterChip('4-visit', 'Weekly Visit'),
                 _filterChip('normal', 'General'),
               ],
             ),
@@ -1435,7 +1435,7 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
             ),
           ),
           const Spacer(),
-          _infoChip('4-Visit: $_fourVisitCount', Colors.orange),
+          _infoChip('Weekly Visit: $_fourVisitCount', Colors.orange),
           const SizedBox(width: 6),
           _infoChip('General: $_generalCount', _purple),
         ],
@@ -1538,7 +1538,7 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
                       _infoChip('Existing', Colors.green),
                     ],
                     const SizedBox(width: 6),
-                    _infoChip(isFourVisit ? '4-Visit' : 'General', accentColor),
+                    _infoChip(isFourVisit ? 'Weekly Visit' : 'General', accentColor),
                   ],
                 ),
                 const SizedBox(height: 6),
@@ -1930,7 +1930,7 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
                     else
                       _infoChip('Added', Colors.blue),
                     const SizedBox(width: 6),
-                    _infoChip(isFourVisit ? '4-Visit' : 'General', accentColor),
+                    _infoChip(isFourVisit ? 'Weekly Visit' : 'General', accentColor),
                   ],
                 ),
                 const SizedBox(height: 6),

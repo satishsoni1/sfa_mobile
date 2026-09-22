@@ -387,10 +387,24 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   }
 
   Future<void> _fetchCalculation() async {
-    // ── Locked: skip live DCR call — use the saved snapshot from _restoreEditData ──
-    // The expense has been submitted and locked. Re-running calculateExpense
-    // against today's DCR data would overwrite the saved state with live values
-    // that may differ if visits were changed after submission.
+    // ── Locked FIELD: skip the live DCR call entirely ─────────────────────────
+    // _restoreEditData() has already loaded all saved amounts into state.
+    // We only need _calcData to be non-null so the FIELD branch in build() renders.
+    // For NFW/TRANSIT the early return below already handles the locked case.
+    if (_isLocked && widget.editData != null) {
+      final daType = (widget.editData!['da_type'] ?? '').toString().toUpperCase();
+      final isField = daType.isNotEmpty &&
+          !['NFW', 'MEETING', 'TRAINING', 'TRANSIT_DA', 'TRANSIT'].contains(daType);
+      if (isField && mounted) {
+        setState(() {
+          _expenseMode    = 'FIELD';
+          _calcData       = const {'route': []};
+          _isDaTypeManual = false;
+        });
+        _recalculateTotal();
+        return;
+      }
+    }
 
     if (_expenseMode == 'NFW' || _expenseMode == 'TRANSIT') {
       _recalculateTotal();
@@ -541,13 +555,19 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                     const SizedBox(height: 14),
                     _buildFieldTravelSection(),
                     const SizedBox(height: 14),
-                    if (_isDaTypeManual || _bothWaypointsReady) ...[
+                    // Locked: always show the DA/TA cards (read-only when locked)
+                    // and the manual input card (all edits disabled by internal guards).
+                    // Unlocked: original flow — hint when locations not ready yet.
+                    if (_isLocked) ...[
                       _buildAllowanceCards(),
                       const SizedBox(height: 14),
+                      _buildManualInputCard(),
+                    ] else if (_isDaTypeManual || _bothWaypointsReady) ...[
+                      _buildAllowanceCards(),
+                      const SizedBox(height: 14),
+                      _buildManualInputCard(),
                     ] else
                       _buildSelectBothLocationsHint(),
-                    const SizedBox(height: 14),
-                    _buildManualInputCard(),
                   ] else if (_expenseMode == 'NFW') ...[
                     _buildNfwBanner(),
                     const SizedBox(height: 14),
@@ -1533,6 +1553,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           TextField(
             controller: _remarkController,
             maxLines: 2,
+            readOnly: _isLocked,
             decoration: InputDecoration(
               labelText: 'Remarks / Activity Description',
               border: OutlineInputBorder(
@@ -1705,6 +1726,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           TextField(
             controller: _remarkController,
             maxLines: 2,
+            readOnly: _isLocked,
             decoration: InputDecoration(
               labelText: 'Remarks',
               border: OutlineInputBorder(
@@ -3562,6 +3584,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           TextField(
             controller: _remarkController,
             maxLines: 2,
+            readOnly: _isLocked,
             decoration: InputDecoration(
               labelText: 'Remarks',
               border: OutlineInputBorder(
