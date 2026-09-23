@@ -229,6 +229,7 @@ class _PODUploadPageState extends State<PODUploadPage> {
           ModernUIComponents.buildInfoCard(
             title: 'Secondary sales Requirements',
             items: [
+              'Supported formats: JPG, JPEG, PNG, PDF, XLS, XLSX, TXT, DOC, DOCX, ZIP',
               'Clear, readable document images',
               'Valid delivery confirmation',
               'Proper customer signatures',
