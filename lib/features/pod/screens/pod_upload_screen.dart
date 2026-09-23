@@ -1185,7 +1185,11 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         for (final f in result.files) {
           if (f.path == null) continue;
 
-          await _processAndAddDocumentFile(File(f.path!), isFromScanner: true);
+          await _processAndAddDocumentFile(
+            File(f.path!),
+            isFromScanner: true,
+            pickerExtension: f.extension,
+          );
 
           added++;
           if (mounted) {
@@ -1219,6 +1223,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
   Future<void> _processAndAddDocumentFile(
     File originalFile, {
     required bool isFromScanner,
+    String? pickerExtension,
   }) async {
     setState(() {
       _isProcessingDocuments = true;
@@ -1227,12 +1232,16 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     });
 
     try {
-      final displayNameBase = p.basenameWithoutExtension(originalFile.path);
-      final extension = p.extension(originalFile.path).toLowerCase();
+      final pathExtension = p.extension(originalFile.path).toLowerCase();
+      final resolvedExtension = isSecondarySalesUpload
+          ? secondarySalesResolvedExtension(
+              pathExtension: pathExtension,
+              pickerExtension: pickerExtension,
+            )
+          : pathExtension.replaceFirst('.', '');
+      final dottedExtension = '.$resolvedExtension';
       final allowed = isSecondarySalesUpload
-          ? kSecondarySalesDocumentExtensions
-              .map((e) => '.$e')
-              .toList()
+          ? kSecondarySalesDocumentExtensions.map((e) => '.$e').toList()
           : const [
               '.pdf',
               '.jpg',
@@ -1243,15 +1252,21 @@ class _PODUploadScreenState extends State<PODUploadScreen>
               '.webp',
             ];
 
-      if (allowed.contains(extension)) {
+      if (allowed.contains(dottedExtension)) {
+        var displayName = p.basename(originalFile.path);
+        if (isSecondarySalesUpload &&
+            secondarySalesNormalizedExtension(p.extension(displayName)) !=
+                resolvedExtension &&
+            resolvedExtension.isNotEmpty) {
+          displayName = '$displayName.$resolvedExtension';
+        }
         setState(() {
-          _currentProcessingMessage =
-              'Adding ${p.basename(originalFile.path)}...';
+          _currentProcessingMessage = 'Adding $displayName...';
         });
 
         final newDoc = DocumentInfo(
           file: originalFile,
-          displayName: p.basename(originalFile.path),
+          displayName: displayName,
           isValid: true,
           qrData: null,
           qrStatus: QRProcessingStatus.completed,
@@ -1268,7 +1283,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('✅ File added: ${p.basename(originalFile.path)}'),
+              content: Text('✅ File added: $displayName'),
               backgroundColor: Colors.green,
               duration: const Duration(seconds: 2),
             ),
@@ -1278,7 +1293,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Unsupported file format: $extension'),
+              content: Text('Unsupported file format: $dottedExtension'),
               backgroundColor: Colors.red,
               duration: const Duration(seconds: 3),
             ),
@@ -1449,8 +1464,16 @@ class _PODUploadScreenState extends State<PODUploadScreen>
 
           // ── Attach files as files[] multipart array ──────────────────────
           for (final d in validDocs) {
-            final filename = p.basename(d.file.path);
-            final contentType = _inferContentTypeFile(d.file);
+            final filename = secondarySales &&
+                    isSecondarySalesDocumentExtension(
+                      p.extension(d.displayName),
+                    )
+                ? d.displayName
+                : p.basename(d.file.path);
+            final contentType = _inferContentTypeFile(
+              d.file,
+              displayName: d.displayName,
+            );
 
             req.files.add(
               await http.MultipartFile.fromPath(
@@ -1762,10 +1785,15 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     return false;
   }
 
-  MediaType _inferContentTypeFile(File file) {
+  MediaType _inferContentTypeFile(File file, {String? displayName}) {
     final ext = p.extension(file.path).toLowerCase();
     if (isSecondarySalesUpload) {
-      return secondarySalesContentTypeForExtension(ext);
+      final resolved = secondarySalesResolvedExtension(
+        pathExtension: ext,
+        pickerExtension:
+            displayName != null ? p.extension(displayName) : null,
+      );
+      return secondarySalesContentTypeForExtension(resolved);
     }
     switch (ext) {
       case '.pdf':
@@ -1999,6 +2027,17 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                               padding: const EdgeInsets.symmetric(vertical: 12),
                             ),
                           ),
+                          if (isSecondarySalesUpload) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              kSecondarySalesSupportedFormatsLabel,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -2432,7 +2471,11 @@ class _PODUploadScreenState extends State<PODUploadScreen>
               children: [
                 Row(
                   children: [
-                    Icon(Icons.description, color: borderColor, size: 20),
+                    Icon(
+                      _documentListIcon(doc),
+                      color: borderColor,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -2546,8 +2589,26 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         false;
   }
 
+  IconData _documentListIcon(DocumentInfo doc) {
+    if (isSecondarySalesExcelExtension(p.extension(doc.displayName))) {
+      return Icons.table_chart;
+    }
+    return Icons.description;
+  }
+
   void _previewDocument(DocumentInfo doc) {
     final extension = p.extension(doc.displayName).toLowerCase();
+    if (isSecondarySalesExcelExtension(extension) ||
+        const ['.txt', '.doc', '.docx', '.zip', '.html', '.htm']
+            .contains(extension)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Preview is not available for this file type'),
+          backgroundColor: Colors.grey,
+        ),
+      );
+      return;
+    }
     final isPdf = extension == '.pdf';
     final isImage = [
       '.jpg',
