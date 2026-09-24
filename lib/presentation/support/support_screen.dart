@@ -1,8 +1,7 @@
-﻿import 'package:flutter/foundation.dart'; // For kIsWeb check
+import 'package:flutter/foundation.dart'; // For kIsWeb check
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:zforce/presentation/webview/internal_webview_screen.dart';
 
 class SupportScreen extends StatelessWidget {
   const SupportScreen({super.key});
@@ -140,17 +139,6 @@ class SupportScreen extends StatelessWidget {
                   color: Colors.blue,
                   onTap: () => _launchAction(context, Uri.parse("https://zorvia.globalspace.in/help")),
                 ),
-                const SizedBox(height: 16),
-
-                // 5. POLICIES 
-                _buildContactCard(
-                  icon: Icons.policy_outlined,
-                  title: "Policies",
-                  subtitle: "View company policies and guidelines",
-                  actionText: "View",
-                  color: Colors.teal,
-                  onTap: () => _openInAppUrl(context),
-                ),
                 const SizedBox(height: 40),
 
                 // Footer Info
@@ -179,27 +167,6 @@ class SupportScreen extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  void _openInAppUrl(BuildContext context) {
-    const String policiesUrl = 'https://zorvia.globalspace.in/policies/';
-    if (policiesUrl.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Policies URL is not configured yet.'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
-    Navigator.pushNamed(
-      context,
-      InternalWebViewScreen.routeName,
-      arguments: InternalWebViewArgs(
-        url: policiesUrl,
-        title: 'Policies',
       ),
     );
   }

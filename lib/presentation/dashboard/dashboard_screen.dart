@@ -71,7 +71,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.68";
+  static const String CURRENT_APP_VERSION = "1.0.69";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -609,6 +609,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     _navigateTo(ExternalLinksScreen(employeeCode: employeeCode));
+  }
+
+  void _openPolicies() {
+    const String policiesUrl = 'https://zorvia.globalspace.in/policies/';
+    if (policiesUrl.isEmpty) {
+      _showSnack('Policies URL is not configured yet.');
+      return;
+    }
+    Navigator.pushNamed(
+      context,
+      InternalWebViewScreen.routeName,
+      arguments: const InternalWebViewArgs(
+        url: policiesUrl,
+        title: 'Policies',
+      ),
+    );
   }
 
   String _getZoneLogo(String? division) {
@@ -1348,6 +1364,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           //   Colors.pinkAccent,
           //   () => _navigateTo(const AddDoctorScreen()),
           // ),
+          _MenuAction(
+            Icons.policy_outlined,
+            "Policies",
+            Colors.teal,
+            _openPolicies,
+          ),
           _MenuAction(
             Icons.support_agent,
             "Help & Support",
