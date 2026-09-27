@@ -2187,7 +2187,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             final isLast  = index == _fieldWaypoints.length - 1;
             // For the "From" slot, fall back to HQ when not yet chosen
             final val  = _fieldWaypoints[index] ?? (isFirst ? _userHq : null);
-            final safe = allLocs.contains(val) ? val : null;
+            final safe = (widget.editData != null) ? val : (allLocs.contains(val) ? val : null);
             final icon    = isFirst ? Icons.my_location : isLast ? Icons.location_on : Icons.radio_button_unchecked;
             final iconColor = isFirst ? Colors.green.shade600 : isLast ? Colors.red.shade600 : Colors.blue.shade400;
             final hint    = isFirst ? 'From' : isLast ? 'To' : 'Via';
@@ -2501,8 +2501,11 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (allLocs.isEmpty) return const SizedBox.shrink();
 
     final autoFrom = _selectedFrom ?? _transitFromTown ?? _userHq;
-    final safeFrom = allLocs.contains(autoFrom) ? autoFrom : null;
-    final safeTo = allLocs.contains(_endLocation) ? _endLocation : null;
+    // When editing any existing expense, bypass route-list validation for display.
+    // This covers locked, saved-not-submitted, and rejected expenses.
+    // New expenses (widget.editData == null) still validate normally.
+    final safeFrom = (widget.editData != null) ? autoFrom : (allLocs.contains(autoFrom) ? autoFrom : null);
+    final safeTo = (widget.editData != null) ? _endLocation : (allLocs.contains(_endLocation) ? _endLocation : null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
