@@ -28,6 +28,8 @@ import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen
 import 'package:zforce/features/pod/services/secondary_sales_stockist_list_controller.dart';
 import 'package:zforce/features/pod/services/secondary_sales_stockist_service.dart';
 import 'package:zforce/features/pod/services/upload_record_store.dart';
+import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
+import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
 import 'package:zforce/features/pod/widgets/secondary_sales_stockist_picker.dart';
 import 'package:zforce/features/pod/widgets/secondary_sales_upload_source_sheet.dart';
@@ -1395,10 +1397,17 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
       final stockistId = int.parse(_selectedStockist!.id.trim());
+      final bool secondarySales = isSecondarySalesUpload;
 
       const int maxRetries = 3;
-      const Duration connectTimeout = Duration(minutes: 3);
-      const Duration responseTimeout = Duration(minutes: 5);
+      // Secondary Sales: Laravel accepts quickly and OCR runs in background.
+      // Keep enough headroom for large file transfer, not for OCR duration.
+      final Duration connectTimeout = secondarySales
+          ? const Duration(seconds: 90)
+          : const Duration(minutes: 3);
+      final Duration responseTimeout = secondarySales
+          ? const Duration(seconds: 90)
+          : const Duration(minutes: 5);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1429,7 +1438,6 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       // debugPrint('[UPLOAD] API Endpoint: $uploadUrl (hasNonPdf=$hasNonPdf)');
 
       // Himalaya: Secondary Sales API. Other clients keep the Invoice POD APIs.
-      final bool secondarySales = isSecondarySalesUpload;
       final String uploadUrl;
       if (secondarySales) {
         uploadUrl = API_SECONDARY_SALES_UPLOAD_URL;
@@ -1684,8 +1692,30 @@ class _PODUploadScreenState extends State<PODUploadScreen>
       setState(() {
         _capturedDocuments.clear();
       });
-      // Push (do not replace) so the user can go back and start another upload
-      // while this batch keeps processing on the server.
+
+      if (isSecondarySalesUpload) {
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              '✓ Upload successful\n'
+              'Your statement is being processed in the background.\n'
+              'You can continue using the app.\n'
+              'Batch #${record.batchId}',
+            ),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        // Return to landing so the user can navigate freely while OCR runs.
+        SecondarySalesBackgroundMonitor.instance.ensureStarted();
+        SecondarySalesDataRefresh.notify();
+        Navigator.pop(context);
+        return;
+      }
+
+      // Invoice POD: keep existing status screen navigation.
       Navigator.pushNamed(
         context,
         PodRoutes.uploadStatus,

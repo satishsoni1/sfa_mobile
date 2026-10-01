@@ -39,7 +39,20 @@ class SecondarySalesDashboardService {
         queryParameters: qp,
       ),
     );
-    return SecondarySalesDashboardData.fromJson(_decodeMap(response.body));
+    final data = SecondarySalesDashboardData.fromJson(_decodeMap(response.body));
+    assert(() {
+      final sample = data.visibleStockists.take(5).toList();
+      // ignore: avoid_print
+      print(
+        '[DASHBOARD STOCKISTS] month=$month count=${data.visibleStockists.length} '
+        'perf=${data.stockistPerformance.length} '
+        'breakdown=${data.breakdown.stockist.length} '
+        'sample=${sample.map((s) => '${s.stockistName}:${s.stockistId}'
+            ':stmts=${s.documents}:done=${s.completedStatements}:sales=${s.sales}').join(' | ')}',
+      );
+      return true;
+    }());
+    return data;
   }
 
   Future<SecondarySalesBreakdownPage> fetchBreakdown({
@@ -132,9 +145,30 @@ class SecondarySalesDashboardService {
       ),
       errorMessage: 'Unable to load stockist statements',
     );
-    return SecondarySalesStockistStatementsResponse.fromJson(
+    assert(() {
+      // ignore: avoid_print
+      print(
+        '[STATEMENTS HTTP] '
+        'GET ${secondarySalesStockistStatementsUrl(stockistId)} '
+        'params=$qp status=${response.statusCode}',
+      );
+      return true;
+    }());
+    final parsed = SecondarySalesStockistStatementsResponse.fromJson(
       _decodeMap(response.body),
     );
+    assert(() {
+      final sample = parsed.statements.take(3).toList();
+      // ignore: avoid_print
+      print(
+        '[STATEMENTS PARSE] stockistId=$stockistId month=$month '
+        'count=${parsed.statements.length} '
+        'sample=${sample.map((s) => 'id=${s.id}/doc=${s.documentId}/batch=${s.batchId}'
+            ' status=${s.status} validation=${s.hasValidationIssue}').join(' | ')}',
+      );
+      return true;
+    }());
+    return parsed;
   }
 
   Future<SecondarySalesKamStockistsResponse> fetchKamStockists({

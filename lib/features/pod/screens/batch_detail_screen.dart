@@ -2,11 +2,15 @@
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:zforce/features/pod/models/batch_model.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
+import 'package:zforce/features/pod/navigation/secondary_sales_statement_navigation.dart';
+import 'package:zforce/features/pod/services/api_client.dart';
 import 'package:zforce/features/pod/services/batch_service.dart';
+import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
 
 class BatchDetailScreen extends StatefulWidget {
@@ -25,19 +29,25 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
   bool _isLoading = false;
   bool _hasError = false;
   String _errorMessage = '';
+  bool _dateUpdated = false;
+  bool _updatingDate = false;
 
   List<Map<String, dynamic>> _failed = [];
   final Set<String> _selectedFailed = {};
   bool _failedLoading = false;
   bool _retrying = false;
 
+  static final DateFormat _displayDateFormat = DateFormat('d MMM yyyy');
+
   @override
   void initState() {
     super.initState();
-    // If batch data is provided, use it directly, otherwise fetch from API
+    // If batch data is provided, show it immediately, then refresh from API
+    // so date/validation fields are never stale after a server-side update.
     if (widget.batch != null) {
       _batch = widget.batch;
       _isLoading = false;
+      _loadBatchDetails(quiet: true);
     } else {
       _loadBatchDetails();
     }
@@ -146,33 +156,43 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
     }
   }
 
-  Future<void> _loadBatchDetails() async {
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
+  Future<void> _loadBatchDetails({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+    }
     try {
       final batch = await _batchService.fetchBatchById(widget.batchId);
+      if (!mounted) return;
       setState(() {
         _batch = batch;
+        _hasError = false;
       });
     } catch (e) {
       print('Error loading batch details: $e');
-      setState(() {
-        _hasError = true;
-        _errorMessage = e.toString();
-      });
+      if (!mounted) return;
+      if (!quiet) {
+        setState(() {
+          _hasError = true;
+          _errorMessage = e.toString();
+        });
+      }
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && !quiet) setState(() => _isLoading = false);
     }
   }
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'success':
         return const Color(0xFF4CAF50);
       case 'processing':
       case 'in_progress':
+      case 'pending':
+      case 'queued':
         return const Color(0xFF2196F3);
       case 'failed':
       case 'error':
@@ -187,9 +207,12 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
   IconData _getStatusIcon(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'success':
         return Icons.check_circle_rounded;
       case 'processing':
       case 'in_progress':
+      case 'pending':
+      case 'queued':
         return Icons.hourglass_empty_rounded;
       case 'failed':
       case 'error':
@@ -227,23 +250,191 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
     }
   }
 
+  String _formatStatementDate(DateTime? date) {
+    if (date == null) return 'N/A';
+    return _displayDateFormat.format(date);
+  }
+
+  bool get _canShowChangeDate {
+    if (!isSecondarySalesUpload) return false;
+    final batch = _batch;
+    if (batch == null) return false;
+    return batch.canChangeStatementDate && !_updatingDate;
+  }
+
+  Future<void> _onChangeDatePressed() async {
+    final batch = _batch;
+    if (batch == null || _updatingDate) return;
+    if (!batch.canChangeStatementDate) return;
+
+    final initial = batch.effectiveStatementDate ?? DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      helpText: 'Select statement date',
+    );
+    if (picked == null || !mounted) return;
+
+    final currentDay = DateTime(initial.year, initial.month, initial.day);
+    final newDay = DateTime(picked.year, picked.month, picked.day);
+    if (currentDay == newDay) return;
+
+    final confirmed = await _confirmDateChange(
+      currentDate: currentDay,
+      newDate: newDay,
+    );
+    if (confirmed != true || !mounted) return;
+
+    await _submitDateChange(newDay);
+  }
+
+  Future<bool?> _confirmDateChange({
+    required DateTime currentDate,
+    required DateTime newDate,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: !_updatingDate,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Change statement date?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Current date:\n${_formatStatementDate(currentDate)}'),
+              const SizedBox(height: 12),
+              Text('New date:\n${_formatStatementDate(newDate)}'),
+              const SizedBox(height: 16),
+              Text(
+                'Changing the date will update this existing statement and its '
+                'month grouping. The document will not be re-processed.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF1E88E5),
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Update Date'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _submitDateChange(DateTime newDate) async {
+    if (_updatingDate) return;
+    setState(() => _updatingDate = true);
+
+    // Non-blocking progress hint while the API call runs.
+    if (mounted) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Updating statement date...'),
+          duration: Duration(seconds: 30),
+        ),
+      );
+    }
+
+    try {
+      final updated = await _batchService.updateStatementDate(
+        batchId: widget.batchId,
+        date: newDate,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _batch = updated;
+        _dateUpdated = true;
+        _hasError = false;
+      });
+
+      // Always refetch so validation flags / month fields match Laravel.
+      await _loadBatchDetails(quiet: true);
+      SecondarySalesDataRefresh.notify();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Statement date updated successfully.'),
+          backgroundColor: Color(0xFF2E7D32),
+        ),
+      );
+    } on UnauthorizedException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } on BatchDateUpdateException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      final message = e.toString().replaceFirst('Exception: ', '');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            message.isNotEmpty ? message : 'Unable to update statement date.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _updatingDate = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: ModernUIComponents.buildModernAppBar(
-        title: 'Batch Details',
-        subtitle: 'Batch #${widget.batchId}',
-        icon: Icons.info_outline_rounded,
-        color: const Color(0xFF1E88E5),
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: _loadBatchDetails,
-            icon: const Icon(Icons.refresh_rounded),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.of(context).pop(_dateUpdated);
+      },
+      child: Scaffold(
+        appBar: ModernUIComponents.buildModernAppBar(
+          title: 'Batch Details',
+          subtitle: 'Batch #${widget.batchId}',
+          icon: Icons.info_outline_rounded,
+          color: const Color(0xFF1E88E5),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: _updatingDate ? null : () => _loadBatchDetails(),
+              icon: const Icon(Icons.refresh_rounded),
+            ),
+          ],
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(_dateUpdated),
           ),
-        ],
+        ),
+        body: _buildBody(),
       ),
-      body: _buildBody(),
     );
   }
 
@@ -273,6 +464,10 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildBatchHeader(_batch!),
+            if (isSecondarySalesUpload) ...[
+              const SizedBox(height: 16),
+              _buildViewStatementDetailsButton(_batch!),
+            ],
             const SizedBox(height: 24),
             _buildBatchInfo(_batch!),
             const SizedBox(height: 24),
@@ -484,6 +679,47 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
     );
   }
 
+  Widget _buildViewStatementDetailsButton(Batch batch) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton(
+        onPressed: () => openSecondarySalesBatchStatementDetails(
+          context,
+          batchId: widget.batchId,
+          batch: batch,
+        ),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: const Color(0xFF450095),
+          side: const BorderSide(color: Color(0xFF450095), width: 1.4),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'View Details',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            SizedBox(width: 6),
+            Text(
+              '→',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildBatchHeader(Batch batch) {
     final statusColor = _getStatusColor(batch.status);
     return Container(
@@ -534,7 +770,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        batch.status.toUpperCase(),
+                        batch.displayStatus,
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
@@ -548,6 +784,51 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
               ),
             ],
           ),
+          if (isSecondarySalesUpload) ...[
+            const SizedBox(height: 16),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Date',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _formatStatementDate(batch.effectiveStatementDate),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2C3E50),
+                    ),
+                  ),
+                ),
+                if (_updatingDate)
+                  const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                else if (batch.canChangeStatementDate)
+                  TextButton.icon(
+                    onPressed: _canShowChangeDate ? _onChangeDatePressed : null,
+                    icon: const Icon(Icons.calendar_month_rounded, size: 18),
+                    label: const Text('Change Date'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF1E88E5),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                  ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
           Row(
             children: [
@@ -563,6 +844,61 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                 child: _buildStatBox('Failed', batch.failedFiles.toString(), Icons.error_outline_rounded, Colors.red),
               ),
             ],
+          ),
+          if (batch.showsValidationIssue) ...[
+            const SizedBox(height: 16),
+            _buildValidationIssueCard(batch),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildValidationIssueCard(Batch batch) {
+    final message = (batch.validationMessage ?? '').trim();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFFCC80)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFF57C00),
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Validation Issue',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFE65100),
+                  ),
+                ),
+                if (message.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    message,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF5D4037),
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),
@@ -603,7 +939,77 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
   }
 
   Widget _buildBatchInfo(Batch batch) {
+    return Column(
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Batch Information',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2C3E50),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                'Hospital / Company',
+                batch.hospitalName,
+                Icons.local_hospital_rounded,
+              ),
+              const Divider(height: 24),
+              _buildInfoRow('Stockist', batch.stockistName, Icons.store_rounded),
+              const Divider(height: 24),
+              _buildInfoRow('User', batch.userName, Icons.person_rounded),
+              const Divider(height: 24),
+              _buildInfoRow(
+                'Started At',
+                _formatDate(batch.startedAt),
+                Icons.access_time_rounded,
+              ),
+              const Divider(height: 24),
+              _buildInfoRow(
+                'Completed At',
+                _formatDate(batch.completedAt),
+                Icons.check_circle_outline_rounded,
+              ),
+              const Divider(height: 24),
+              _buildInfoRow(
+                'Duration',
+                _formatDuration(batch.startedAt, batch.completedAt),
+                Icons.timer_rounded,
+              ),
+            ],
+          ),
+        ),
+        if (isSecondarySalesUpload) ...[
+          const SizedBox(height: 16),
+          _buildStatementInfo(batch),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildStatementInfo(Batch batch) {
+    final periodFrom = _formatPeriodDate(batch.periodFrom);
+    final periodTo = _formatPeriodDate(batch.periodTo);
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -620,7 +1026,7 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Batch Information',
+            'Statement Information',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
@@ -628,20 +1034,42 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildInfoRow('Hospital', batch.hospitalName, Icons.local_hospital_rounded),
+          _buildInfoRow(
+            'Statement Date',
+            _formatStatementDate(batch.effectiveStatementDate),
+            Icons.event_rounded,
+          ),
           const Divider(height: 24),
-          _buildInfoRow('Stockist', batch.stockistName, Icons.store_rounded),
+          _buildInfoRow(
+            'Statement Month',
+            batch.displayStatementMonth ?? '—',
+            Icons.calendar_month_rounded,
+          ),
           const Divider(height: 24),
-          _buildInfoRow('User', batch.userName, Icons.person_rounded),
+          _buildInfoRow(
+            'Period From',
+            periodFrom,
+            Icons.date_range_rounded,
+          ),
           const Divider(height: 24),
-          _buildInfoRow('Started At', _formatDate(batch.startedAt), Icons.access_time_rounded),
-          const Divider(height: 24),
-          _buildInfoRow('Completed At', _formatDate(batch.completedAt), Icons.check_circle_outline_rounded),
-          const Divider(height: 24),
-          _buildInfoRow('Duration', _formatDuration(batch.startedAt, batch.completedAt), Icons.timer_rounded),
+          _buildInfoRow(
+            'Period To',
+            periodTo,
+            Icons.date_range_rounded,
+          ),
         ],
       ),
     );
+  }
+
+  String _formatPeriodDate(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return '—';
+    try {
+      final date = DateTime.parse(raw);
+      return _displayDateFormat.format(date);
+    } catch (_) {
+      return raw;
+    }
   }
 
   Widget _buildInfoRow(String label, String value, IconData icon) {

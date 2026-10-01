@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
@@ -7,6 +8,7 @@ import 'package:zforce/features/pod/routes/pod_routes.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen.dart';
 import 'package:zforce/features/pod/services/api_client.dart';
 import 'package:zforce/features/pod/services/secondary_sales_dashboard_service.dart';
+import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 
 class SecondarySalesStockistStatementsScreen extends StatefulWidget {
   const SecondarySalesStockistStatementsScreen({
@@ -53,17 +55,27 @@ class _SecondarySalesStockistStatementsScreenState
   void initState() {
     super.initState();
     _service = widget.service ?? SecondarySalesDashboardService();
-    _month = widget.month;
+    // Prefer the navigation month; never silently fall back to "now".
+    _month = widget.month.trim().isNotEmpty
+        ? widget.month.trim()
+        : widget.month;
     _scroll.addListener(_onScroll);
+    SecondarySalesDataRefresh.tick.addListener(_onSecondarySalesRefresh);
     _load(reset: true);
   }
 
   @override
   void dispose() {
+    SecondarySalesDataRefresh.tick.removeListener(_onSecondarySalesRefresh);
     _debounce?.cancel();
     _search.dispose();
     _scroll.dispose();
     super.dispose();
+  }
+
+  void _onSecondarySalesRefresh() {
+    if (!mounted) return;
+    _load(reset: true);
   }
 
   void _onScroll() {
@@ -101,6 +113,15 @@ class _SecondarySalesStockistStatementsScreenState
 
     final requestPage = reset ? 1 : _nextPage!;
     try {
+      if (kDebugMode) {
+        debugPrint(
+          '[STATEMENTS REQUEST]\n'
+          'endpoint=/secondary-sales/stockist/${widget.stockistId}/statements\n'
+          'parameters: month=$_month page=$requestPage '
+          'per_page=$_perPage stockistId=${widget.stockistId} '
+          'search="${_search.text.trim()}"',
+        );
+      }
       final response = await _service.getStockistStatements(
         stockistId: widget.stockistId,
         month: _month,
@@ -111,6 +132,15 @@ class _SecondarySalesStockistStatementsScreenState
         zoneId: widget.zoneId,
       );
       if (!mounted || token != _loadToken) return;
+
+      if (kDebugMode) {
+        debugPrint(
+          '[STATEMENTS RESPONSE]\n'
+          'recordCount=${response.statements.length} '
+          'month=${response.month} '
+          'stockist=${response.stockist.id}/${response.stockist.name}',
+        );
+      }
 
       final existing = <String>{
         for (final s in _statements)
@@ -131,6 +161,7 @@ class _SecondarySalesStockistStatementsScreenState
         } else {
           _statements.addAll(incoming);
         }
+        SecondarySalesStockistStatement.sortNewestFirst(_statements);
         _nextPage = response.pagination.nextPage;
         _initialLoading = false;
         _loadingMore = false;
@@ -194,9 +225,9 @@ class _SecondarySalesStockistStatementsScreenState
                 color: Color(0xFF2C3E50),
               ),
             ),
-            const Text(
-              'Secondary Sales Statements',
-              style: TextStyle(
+            Text(
+              _monthLabel,
+              style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: Color(0xFF7F8C8D),
@@ -262,10 +293,10 @@ class _SecondarySalesStockistStatementsScreenState
             Icon(Icons.description_outlined,
                 size: 48, color: Colors.grey.shade400),
             const SizedBox(height: 16),
-            const Text(
-              'No data available for the selected month.',
+            Text(
+              'No statements found for ${widget.stockistName} for $_monthLabel.',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF2C3E50),
@@ -273,7 +304,7 @@ class _SecondarySalesStockistStatementsScreenState
             ),
             const SizedBox(height: 8),
             Text(
-              'No statements found for this stockist in $_monthLabel.',
+              'Pull to refresh, or pick another month above.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
             ),
@@ -336,6 +367,19 @@ void openSecondarySalesStatementView(
     );
     return;
   }
+  // Validation-only rows may omit document/pod ids; open batch details instead.
+  if (statement.batchId != null) {
+    Navigator.pushNamed(
+      context,
+      PodRoutes.batchDetail,
+      arguments: {'batchId': statement.batchId},
+    ).then((updated) {
+      if (updated == true) {
+        SecondarySalesDataRefresh.notify();
+      }
+    });
+    return;
+  }
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(
@@ -389,18 +433,22 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
+          Text(
+            monthLabel,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade700,
+            ),
+          ),
+          const SizedBox(height: 2),
           const Text(
-            'Secondary Sales Statements',
+            'Statements',
             style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: Color(0xFF450095),
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            monthLabel,
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -513,6 +561,42 @@ class _StatementCard extends StatelessWidget {
             Text(
               statement.errorMessage!,
               style: TextStyle(fontSize: 12, color: Colors.red.shade600),
+            ),
+          ],
+          if (statement.showsValidationIssue) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFFFCC80)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Validation Issue',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFE65100),
+                    ),
+                  ),
+                  if ((statement.validationMessage ?? '').trim().isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      statement.validationMessage!.trim(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF5D4037),
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
           const SizedBox(height: 8),

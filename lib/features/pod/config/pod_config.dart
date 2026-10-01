@@ -42,6 +42,11 @@ String secondarySalesStockistStatementsUrl(int stockistId) =>
 String secondarySalesKamStockistsUrl(int kamId) =>
     "${API_BASE_URL}secondary-sales/dashboard/kam/$kamId/stockists";
 
+/// Update statement/business date for an already-extracted Secondary Sales batch.
+/// Does NOT re-upload or re-extract — Laravel only re-groups by month.
+String secondarySalesBatchDateUrl(int batchId) =>
+    "${API_BASE_URL}secondary-sales/batches/$batchId/date";
+
 // ──────────────────────────────────────────────────────────────────────────────
 // CLIENT UPLOAD TYPE
 // Himalaya reuses the existing POD upload UI for Secondary Sales.

@@ -1,7 +1,9 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:zforce/features/pod/models/batch_model.dart';
+import 'package:zforce/features/pod/navigation/secondary_sales_statement_navigation.dart';
 import 'package:zforce/features/pod/services/batch_service.dart';
-import 'package:zforce/features/pod/screens/batch_detail_screen.dart';
+import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
 
@@ -22,12 +24,26 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
   String _errorMessage = '';
   int _currentPage = 1;
   bool _hasMore = true;
+  static final DateFormat _dateFmt = DateFormat('d MMM yyyy');
 
   @override
   void initState() {
     super.initState();
     _loadBatches();
     _scrollController.addListener(_onScroll);
+    SecondarySalesDataRefresh.tick.addListener(_onSecondarySalesRefresh);
+  }
+
+  @override
+  void dispose() {
+    SecondarySalesDataRefresh.tick.removeListener(_onSecondarySalesRefresh);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onSecondarySalesRefresh() {
+    if (!mounted) return;
+    _loadBatches();
   }
 
   void _onScroll() {
@@ -80,18 +96,15 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
     }
   }
 
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'success':
         return const Color(0xFF4CAF50);
       case 'processing':
       case 'in_progress':
+      case 'pending':
+      case 'queued':
         return const Color(0xFF2196F3);
       case 'failed':
       case 'error':
@@ -106,9 +119,12 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
   IconData _getStatusIcon(String status) {
     switch (status.toLowerCase()) {
       case 'completed':
+      case 'success':
         return Icons.check_circle_rounded;
       case 'processing':
       case 'in_progress':
+      case 'pending':
+      case 'queued':
         return Icons.hourglass_empty_rounded;
       case 'failed':
       case 'error':
@@ -197,16 +213,7 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
         side: BorderSide(color: statusColor.withOpacity(0.2)),
       ),
       child: InkWell(
-        onTap: () {
-          Navigator.pushNamed(
-            context,
-            PodRoutes.batchDetail,
-            arguments: {
-              'batchId': batch.id,
-              'batch': batch, // Pass the batch data directly
-            },
-          );
-        },
+        onTap: () => _openBatchDetails(batch.id),
         borderRadius: BorderRadius.circular(16),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -240,28 +247,32 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
                             color: Color(0xFF2C3E50),
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          batch.hospitalName,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w500,
+                        if (batch.resolvedHospitalName != null) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            batch.resolvedHospitalName!,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          batch.stockistName,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.grey.shade500,
-                            fontWeight: FontWeight.w400,
+                        ],
+                        if (batch.resolvedStockistName != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            batch.resolvedStockistName!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade500,
+                              fontWeight: FontWeight.w400,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -272,7 +283,7 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      batch.status.toUpperCase(),
+                      batch.displayStatus,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
@@ -283,6 +294,44 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
                   ),
                 ],
               ),
+              if (batch.showsValidationIssue) ...[
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF8E1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFFCC80)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Validation Issue',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFFE65100),
+                        ),
+                      ),
+                      if (batch.validationMessage?.trim().isNotEmpty == true) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          batch.validationMessage!.trim(),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF5D4037),
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Row(
                 children: [
@@ -315,14 +364,32 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.access_time_rounded, size: 14, color: Colors.grey.shade600),
+                  Icon(Icons.event_rounded, size: 14, color: Colors.grey.shade600),
                   const SizedBox(width: 4),
-                  Text(
-                    _formatDate(batch.startedAt),
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  Expanded(
+                    child: Text(
+                      batch.effectiveStatementDate != null
+                          ? _dateFmt.format(batch.effectiveStatementDate!)
+                          : _formatDate(batch.startedAt),
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
                   ),
-                  const Spacer(),
-                  const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+                  TextButton(
+                    onPressed: () => _openStatementDetails(batch),
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF450095),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    child: const Text(
+                      'View Details →',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -330,6 +397,26 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _openStatementDetails(Batch batch) async {
+    await openSecondarySalesBatchStatementDetails(
+      context,
+      batchId: batch.id,
+      batch: batch,
+    );
+  }
+
+  Future<void> _openBatchDetails(int batchId) async {
+    final updated = await Navigator.pushNamed(
+      context,
+      PodRoutes.batchDetail,
+      arguments: {'batchId': batchId},
+    );
+    if (!mounted) return;
+    if (updated == true) {
+      await _loadBatches();
+    }
   }
 
   Widget _buildStatItem(String label, String value, IconData icon, Color color) {

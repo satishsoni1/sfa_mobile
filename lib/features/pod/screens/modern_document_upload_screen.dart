@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/models/upload_record.dart';
@@ -6,6 +8,8 @@ import 'package:zforce/features/pod/screens/notifications_screen.dart';
 import 'package:zforce/features/pod/screens/pod_upload_screen.dart';
 import 'package:zforce/features/pod/screens/e_invoice_data_screen.dart';
 import 'package:zforce/features/pod/screens/batches_list_screen.dart';
+import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
+import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 import 'package:zforce/features/pod/services/secondary_sales_upload_history_sync.dart';
 import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
@@ -145,129 +149,256 @@ class PODUploadPage extends StatefulWidget {
 }
 
 class _PODUploadPageState extends State<PODUploadPage> {
-  List<UploadRecord> _recentUploads = const [];
+  List<UploadRecord> _allRecords = const [];
   final SecondarySalesUploadHistorySync _historySync =
       SecondarySalesUploadHistorySync();
+  bool _isRefreshing = false;
+  Timer? _uiRefreshTimer;
+
+  List<UploadRecord> get _activeBatches =>
+      secondarySalesActiveBatches(_allRecords);
 
   @override
   void initState() {
     super.initState();
+    SecondarySalesDataRefresh.tick.addListener(_onDataRefresh);
     syncHistory();
+    if (isSecondarySalesUpload) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        SecondarySalesBackgroundMonitor.instance
+            .attachMessengerContext(context);
+        SecondarySalesBackgroundMonitor.instance.ensureStarted();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    SecondarySalesDataRefresh.tick.removeListener(_onDataRefresh);
+    _uiRefreshTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onDataRefresh() {
+    if (!mounted) return;
+    _loadRecentUploads();
+  }
+
+  void _syncUiRefreshTimer() {
+    if (!isSecondarySalesUpload || _activeBatches.isEmpty) {
+      _uiRefreshTimer?.cancel();
+      _uiRefreshTimer = null;
+      return;
+    }
+    _uiRefreshTimer ??= Timer.periodic(const Duration(seconds: 5), (_) async {
+      final local = await UploadRecordStore.instance.loadAll();
+      if (!mounted) return;
+      setState(() => _allRecords = local);
+      _syncUiRefreshTimer();
+    });
   }
 
   Future<void> syncHistory() async {
     final local = await UploadRecordStore.instance.loadAll();
     if (mounted) {
       setState(() {
-        _recentUploads = _visibleHistory(local);
+        _allRecords = local;
       });
+      _syncUiRefreshTimer();
     }
     if (!isSecondarySalesUpload) return;
+    SecondarySalesBackgroundMonitor.instance.ensureStarted();
     try {
       final synced = await _historySync.synchronize();
       if (!mounted) return;
       setState(() {
-        _recentUploads = _visibleHistory(synced);
+        _allRecords = synced;
       });
+      _syncUiRefreshTimer();
+      SecondarySalesBackgroundMonitor.instance.ensureStarted();
     } catch (_) {
       // Keep the local list already shown. Network failure is not deletion.
     }
-  }
-
-  List<UploadRecord> _visibleHistory(List<UploadRecord> records) {
-    final filtered = isSecondarySalesUpload
-        ? records.where((r) => r.uploadType == kUploadTypeSecondarySales)
-        : records.where((r) => r.uploadType != kUploadTypeSecondarySales);
-    return filtered.take(5).toList();
   }
 
   Future<void> _loadRecentUploads() => syncHistory();
 
   @override
   Widget build(BuildContext context) {
+    final active = _activeBatches;
     return RefreshIndicator(
       color: const Color(0xFF450095),
-      onRefresh: syncHistory,
+      onRefresh: () async {
+        setState(() => _isRefreshing = true);
+        await syncHistory();
+        if (mounted) setState(() => _isRefreshing = false);
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          // ModernUIComponents.buildPageHeader(
-          //   title: 'Secondary Sales Documents Upload',
-          //   subtitle: 'Upload secondary sales documents',
-          //   icon: Icons.description,
-          //   color: const Color(0xFF450095),
-          // ),
-          // const SizedBox(height: 24),
-          ModernUIComponents.buildUploadCard(
-            title: 'Upload Secondary Sales Documents',
-            subtitle: 'Select and upload your secondary sales files',
-            icon: Icons.upload_file,
-            color: const Color(0xFF450095),
-            onTap: () async {
-              await Navigator.pushNamed(context, PodRoutes.podUpload);
-              await _loadRecentUploads();
-            },
-          ),
-          const SizedBox(height: 16),
-          ModernUIComponents.buildUploadCard(
-            title: 'View Uploaded Batches',
-            subtitle: 'See all your uploaded batch records',
-            icon: Icons.list_alt,
-            color: const Color(0xFF1E88E5),
-            onTap: () {
-              Navigator.pushNamed(context, PodRoutes.batchesList);
-            },
-          ),
-          if (_recentUploads.isNotEmpty) ...[
+            ModernUIComponents.buildUploadCard(
+              title: 'Upload Secondary Sales Documents',
+              subtitle: 'Select and upload your secondary sales files',
+              icon: Icons.upload_file,
+              color: const Color(0xFF450095),
+              onTap: () async {
+                await Navigator.pushNamed(context, PodRoutes.podUpload);
+                await _loadRecentUploads();
+              },
+            ),
             const SizedBox(height: 16),
-            ..._recentUploads.map(_buildRecentUploadCard),
-          ],
-          const SizedBox(height: 16),
-          ModernUIComponents.buildInfoCard(
-            title: 'Secondary sales Requirements',
-            items: [
-              'Supported formats: JPG, JPEG, PNG, PDF, XLS, XLSX, TXT, DOC, DOCX, ZIP',
-              'Clear, readable document images',
-              'Valid delivery confirmation',
-              'Proper customer signatures',
-              'Date and time stamps',
+            ModernUIComponents.buildUploadCard(
+              title: 'View Uploaded Batches',
+              subtitle: 'See all your uploaded batch records',
+              icon: Icons.list_alt,
+              color: const Color(0xFF1E88E5),
+              onTap: () async {
+                await Navigator.pushNamed(context, PodRoutes.batchesList);
+                await _loadRecentUploads();
+              },
+            ),
+            if (_isRefreshing) ...[
+              const SizedBox(height: 12),
+              const LinearProgressIndicator(
+                color: Color(0xFF450095),
+                backgroundColor: Color(0xFFE8EEF2),
+              ),
             ],
-          ),
+            if (active.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'Background Processing',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2C3E50),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ...active.map(_buildActiveProcessingCard),
+            ],
+            const SizedBox(height: 16),
+            ModernUIComponents.buildInfoCard(
+              title: 'Secondary sales Requirements',
+              items: [
+                'Supported formats: JPG, JPEG, PNG, PDF, XLS, XLSX, TXT, DOC, DOCX, ZIP',
+                'Clear, readable document images',
+                'Valid delivery confirmation',
+                'Proper customer signatures',
+                'Date and time stamps',
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildRecentUploadCard(UploadRecord record) {
-    final isSecondary = record.uploadType == kUploadTypeSecondarySales;
+  Widget _buildActiveProcessingCard(UploadRecord record) {
+    final fileHint = record.fileNames.isNotEmpty
+        ? record.fileNames.first
+        : 'Secondary Sales statement';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: ModernUIComponents.buildUploadCard(
-        title: isSecondary
-            ? 'Secondary Sales • ${record.status.toUpperCase()}'
-            : 'Upload • ${record.status.toUpperCase()}',
-        subtitle: record.fileNames.isNotEmpty
-            ? '${record.fileNames.first}  •  Batch ${record.batchId}'
-            : 'Batch ${record.batchId}',
-        icon: Icons.history,
-        color: const Color(0xFF00897B),
-        onTap: () async {
-          await Navigator.pushNamed(
-            context,
-            PodRoutes.uploadStatus,
-            arguments: {
-              'batchId': record.batchId,
-              'totalFiles': record.totalFiles,
-              'fileNames': record.fileNames,
-              'uploadType': record.uploadType,
-            },
-          );
-          await _loadRecentUploads();
-        },
+      child: Material(
+        color: Colors.white,
+        elevation: 2,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            await Navigator.pushNamed(
+              context,
+              PodRoutes.uploadStatus,
+              arguments: {
+                'batchId': record.batchId,
+                'totalFiles': record.totalFiles,
+                'fileNames': record.fileNames,
+                'uploadType': record.uploadType,
+                'uploadData': {
+                  'batch_id': record.batchId,
+                  'batch_db_id': record.batchDbId,
+                  'status': record.status,
+                  'documents': [
+                    for (final id in record.documentIds) {'id': id},
+                  ],
+                },
+              },
+            );
+            await _loadRecentUploads();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF450095).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: Color(0xFF450095),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Secondary Sales',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF2C3E50),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Batch #${record.batchId}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        secondarySalesActiveStatusLabel(record.status),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Color(0xFF450095),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        fileHint,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

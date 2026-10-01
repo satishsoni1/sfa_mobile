@@ -72,6 +72,116 @@ void main() {
       expect(pending.displayStatus, 'Pending');
     });
 
+    test('orders statements newest processed first', () {
+      final response = SecondarySalesStockistStatementsResponse.fromJson({
+        'data': {
+          'stockist': {'id': 1, 'name': 'MEDICINE HOUSE'},
+          'month': '2026-09',
+          'statements': [
+            {
+              'id': 10,
+              'document_id': 10,
+              'batch_id': 450,
+              'file_name': 'older.pdf',
+              'status': 'completed',
+              'created_at': '2026-09-10T10:00:00+05:30',
+            },
+            {
+              'id': 12,
+              'document_id': 12,
+              'batch_id': 461,
+              'file_name': 'newest.pdf',
+              'status': 'completed',
+              'created_at': '2026-09-28T18:00:00+05:30',
+            },
+            {
+              'id': 11,
+              'document_id': 11,
+              'batch_id': 455,
+              'file_name': 'middle.pdf',
+              'status': 'completed',
+              'created_at': '2026-09-20T12:00:00+05:30',
+            },
+          ],
+        },
+        'pagination': {
+          'current_page': 1,
+          'per_page': 20,
+          'total_records': 3,
+          'next_page': null,
+        },
+      });
+      expect(
+        response.statements.map((s) => s.id).toList(),
+        [12, 11, 10],
+      );
+    });
+
+    test('orders undated newest batch above older dated statement', () {
+      final response = SecondarySalesStockistStatementsResponse.fromJson({
+        'data': {
+          'stockist': {'id': 1, 'name': 'MEDICINE HOUSE'},
+          'month': '2026-09',
+          'statements': [
+            {
+              'id': 10,
+              'document_id': 10,
+              'batch_id': 450,
+              'file_name': 'older.pdf',
+              'status': 'completed',
+              'created_at': '2026-09-10T10:00:00+05:30',
+            },
+            {
+              'id': 99,
+              'document_id': 99,
+              'batch_id': 500,
+              'file_name': 'brand-new.pdf',
+              'status': 'completed',
+            },
+          ],
+        },
+        'pagination': {
+          'current_page': 1,
+          'per_page': 20,
+          'total_records': 2,
+          'next_page': null,
+        },
+      });
+      expect(response.statements.map((s) => s.id).toList(), [99, 10]);
+    });
+
+    test('uses uploaded_at when created_at is absent', () {
+      final response = SecondarySalesStockistStatementsResponse.fromJson({
+        'data': {
+          'stockist': {'id': 1, 'name': 'MEDICINE HOUSE'},
+          'month': '2026-09',
+          'statements': [
+            {
+              'id': 1,
+              'batch_id': 1,
+              'file_name': 'a.pdf',
+              'status': 'completed',
+              'uploaded_at': '2026-09-01T10:00:00+05:30',
+            },
+            {
+              'id': 2,
+              'batch_id': 2,
+              'file_name': 'b.pdf',
+              'status': 'completed',
+              'uploaded_at': '2026-09-28T10:00:00+05:30',
+            },
+          ],
+        },
+        'pagination': {
+          'current_page': 1,
+          'per_page': 20,
+          'total_records': 2,
+          'next_page': null,
+        },
+      });
+      expect(response.statements.map((s) => s.id).toList(), [2, 1]);
+    });
+
     test('does not drop statements that share a file name', () {
       final response = SecondarySalesStockistStatementsResponse.fromJson({
         'data': {
@@ -104,7 +214,7 @@ void main() {
         },
       });
       expect(response.statements, hasLength(2));
-      expect(response.statements.map((s) => s.id), [6, 7]);
+      expect(response.statements.map((s) => s.id), [7, 6]);
     });
 
     test('breakdown row uses stockist id, not name', () {
@@ -117,6 +227,27 @@ void main() {
       });
       expect(row.id, 2134);
       expect(row.name, 'KAMAL DRUG DISTRIBUTORS');
+    });
+
+    test('parses nested stockist object and camelCase ids', () {
+      final nested = SecondarySalesStockistPerformance.fromJson({
+        'stockist': {'id': 869, 'name': 'SOUTH DELHI DISTRIBUTORS'},
+        'sales': 1518636.91,
+        'statements': 1,
+        'completed_statements': 1,
+      });
+      expect(nested.stockistId, 869);
+      expect(nested.stockistName, 'SOUTH DELHI DISTRIBUTORS');
+
+      final camel = SecondarySalesStockistPerformance.fromJson({
+        'stockistId': 777,
+        'stockistName': 'AMARJEET MEDICAL HALL',
+        'totalStatements': 2,
+        'completedStatements': 2,
+      });
+      expect(camel.stockistId, 777);
+      expect(camel.stockistName, 'AMARJEET MEDICAL HALL');
+      expect(camel.documents, 2);
     });
   });
 
@@ -172,8 +303,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('KAMAL DRUG DISTRIBUTORS'), findsWidgets);
-      expect(find.text('Secondary Sales Statements'), findsWidgets);
-      expect(find.text('September 2026'), findsOneWidget);
+      expect(find.text('Statements'), findsWidgets);
+      expect(find.text('September 2026'), findsWidgets);
       expect(find.text('VIEW'), findsNWidgets(2));
       expect(find.textContaining('₹1,44,030.00'), findsOneWidget);
       expect(find.textContaining('₹539.00'), findsOneWidget);
@@ -181,6 +312,7 @@ void main() {
       expect(find.text('Completed'), findsNWidgets(2));
       expect(service.statementCalls.single['stockistId'], 2134);
       expect(service.statementCalls.single['month'], '2026-09');
+      expect(service.statementCalls.single['kamId'], isNull);
     });
 
     testWidgets('null sales does not display ₹0.00', (tester) async {
@@ -247,7 +379,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('No data available for the selected month.'), findsOneWidget);
+      expect(
+        find.text('No statements found for KAMAL for September 2026.'),
+        findsOneWidget,
+      );
       expect(find.textContaining('September 2026'), findsWidgets);
     });
 
@@ -899,6 +1034,64 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
       expect(find.byType(SecondarySalesStockistStatementsScreen), findsOneWidget);
       expect(service.statementCalls.first['stockistId'], 2134);
+      expect(service.statementCalls.first['month'], service.dashboardMonths.last);
+      expect(service.statementCalls.first['kamId'], isNull);
+    });
+
+    testWidgets('View Statements keeps selected dashboard month', (tester) async {
+      tester.view.physicalSize = const Size(800, 2200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      final service = _FakeDashboardService(
+        dashboard: SecondarySalesDashboardData.fromJson(adminPayload()),
+        statements: SecondarySalesStockistStatementsResponse.fromJson({
+          'data': {
+            'stockist': {'id': 2134, 'name': 'KAMAL DRUG DISTRIBUTORS'},
+            'month': '2026-08',
+            'statements': [
+              {
+                'id': 6,
+                'document_id': 6,
+                'file_name': 'aug.pdf',
+                'status': 'completed',
+                'sales': 144030.0,
+              },
+            ],
+          },
+          'pagination': {'current_page': 1, 'per_page': 20, 'next_page': null},
+        }),
+      );
+
+      await tester.pumpWidget(
+        _app(SecondarySalesDashboardScreen(service: service)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      await tester.tap(find.byType(DropdownButton<String>));
+      await tester.pumpAndSettle();
+      final now = DateTime.now();
+      final previous = DateTime(now.year, now.month - 1, 1);
+      final previousKey =
+          '${previous.year.toString().padLeft(4, '0')}-${previous.month.toString().padLeft(2, '0')}';
+      final label = DateFormat('MMM yyyy').format(previous);
+      await tester.tap(find.text(label).last);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(service.dashboardMonths.last, previousKey);
+
+      await tester.tap(find.byKey(const ValueKey('ss-tab-stockists')));
+      await tester.pump();
+      await tester.tap(find.text('KAMAL DRUG DISTRIBUTORS'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(find.byType(SecondarySalesStockistStatementsScreen), findsOneWidget);
+      expect(service.statementCalls.single['stockistId'], 2134);
+      expect(service.statementCalls.single['month'], previousKey);
+      expect(service.statementCalls.single['kamId'], isNull);
+      expect(find.text(DateFormat('MMMM yyyy').format(previous)), findsWidgets);
     });
 
     testWidgets('month change reloads dashboard', (tester) async {

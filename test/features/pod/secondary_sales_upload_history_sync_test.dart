@@ -177,6 +177,30 @@ void main() {
     });
   });
 
+  group('active vs historical Secondary Sales batches', () {
+    test('active list includes queued/processing/extracting only', () {
+      final records = [
+        _ss(batchId: '456', status: 'processing'),
+        _ss(batchId: '457', status: 'queued'),
+        _ss(batchId: '458', status: 'extracting'),
+        _ss(batchId: '459', status: 'validating'),
+        _ss(batchId: '455', status: 'completed'),
+        _ss(batchId: '454', status: 'failed'),
+        _ss(batchId: '453', status: 'cancelled'),
+        _pod(batchId: 'pod-1'),
+      ];
+      final active = secondarySalesActiveBatches(records);
+      expect(active.map((r) => r.batchId), ['456', '457', '458', '459']);
+      expect(isSecondarySalesActiveUploadStatus('COMPLETED'), isFalse);
+      expect(isSecondarySalesTerminalUploadStatus('failed'), isTrue);
+      expect(secondarySalesActiveStatusLabel('queued'), 'Queued');
+      expect(
+        secondarySalesActiveStatusLabel('extracting'),
+        'Extraction in progress',
+      );
+    });
+  });
+
   group('UploadRecordStore Secondary Sales replace', () {
     setUp(() {
       SharedPreferences.setMockInitialValues({});

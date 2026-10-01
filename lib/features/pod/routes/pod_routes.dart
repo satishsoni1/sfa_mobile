@@ -18,6 +18,7 @@ import 'package:zforce/features/pod/screens/upload_status_screen.dart';
 import 'package:zforce/features/pod/screens/pod_review_screen.dart';
 import 'package:zforce/features/pod/screens/batch_detail_screen.dart';
 import 'package:zforce/features/pod/screens/batches_list_screen.dart';
+import 'package:zforce/features/pod/models/batch_model.dart';
 import 'package:zforce/features/pod/screens/notifications_screen.dart';
 import 'package:zforce/features/pod/screens/modern_document_upload_screen.dart';
 import 'package:zforce/features/pod/screens/documents_list_screen.dart';
@@ -105,11 +106,18 @@ class PodRouteGenerator {
         return _errorRoute('PodReviewScreen requires review payload');
 
       case PodRoutes.batchDetail:
-        if (args is Map<String, dynamic>) {
+        if (args is Map<String, dynamic> && args['batchId'] != null) {
+          final rawId = args['batchId'];
+          final batchId = rawId is int
+              ? rawId
+              : int.tryParse(rawId.toString());
+          if (batchId == null) {
+            return _errorRoute('BatchDetailScreen requires batchId');
+          }
           return MaterialPageRoute(
             builder: (_) => BatchDetailScreen(
-              batchId: args['batchId'] as int,
-              batch: args['batch'] as dynamic,
+              batchId: batchId,
+              batch: args['batch'] is Batch ? args['batch'] as Batch : null,
             ),
           );
         }

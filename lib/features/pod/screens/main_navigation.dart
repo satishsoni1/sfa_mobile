@@ -8,6 +8,7 @@ import 'package:zforce/features/pod/screens/modern_document_upload_screen.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_dashboard_screen.dart';
 import 'package:zforce/features/pod/screens/unified_dashboard_screen.dart';
 import 'package:zforce/features/pod/services/api_client.dart';
+import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -25,8 +26,11 @@ class _MainNavigationState extends State<MainNavigation> {
     super.initState();
     // Set context for API client after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _apiClient.setContext(context);
+      if (!mounted) return;
+      _apiClient.setContext(context);
+      if (isSecondarySalesUpload) {
+        SecondarySalesBackgroundMonitor.instance.attachMessengerContext(context);
+        SecondarySalesBackgroundMonitor.instance.ensureStarted();
       }
     });
   }
@@ -36,6 +40,9 @@ class _MainNavigationState extends State<MainNavigation> {
     super.didChangeDependencies();
     // Update context whenever dependencies change
     _apiClient.setContext(context);
+    if (isSecondarySalesUpload) {
+      SecondarySalesBackgroundMonitor.instance.attachMessengerContext(context);
+    }
   }
 
   Future<bool> _onWillPop() async {
@@ -126,13 +133,82 @@ class _MainNavigationState extends State<MainNavigation> {
         ),
       );
       return false; // Always return false since we handle exit in the button
-    } else {
-      // Navigate back to Dashboard tab instead of exiting
+    }
+
+    // Upload tab — confirm before leaving Upload screen.
+    final leave = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Row(
+          children: [
+            Icon(
+              Icons.upload_file,
+              color: Color(0xFF450095),
+              size: 28,
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Leave Upload?',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF2C3E50),
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Do you want to go back from the Upload screen?',
+          style: TextStyle(
+            color: Color(0xFF7F8C8D),
+            fontSize: 16,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(
+                color: Color(0xFF7F8C8D),
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF450095),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text(
+              'Go Back',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (leave == true && mounted) {
       setState(() {
         _currentIndex = 0;
       });
-      return false;
     }
+    return false;
   }
 
   @override

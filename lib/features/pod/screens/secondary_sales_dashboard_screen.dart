@@ -2,10 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen.dart';
 import 'package:zforce/features/pod/services/api_client.dart';
+import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
 import 'package:zforce/features/pod/services/secondary_sales_dashboard_service.dart';
+import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 
 class SecondarySalesDashboardScreen extends StatefulWidget {
   const SecondarySalesDashboardScreen({super.key, this.service});
@@ -41,19 +44,34 @@ class _SecondarySalesDashboardScreenState
   @override
   void initState() {
     super.initState();
+    SecondarySalesDataRefresh.tick.addListener(_onDataRefresh);
     _service = widget.service ?? SecondarySalesDashboardService();
     final now = DateTime.now();
     _selectedMonth = DateTime(now.year, now.month, 1);
+    if (isSecondarySalesUpload) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        SecondarySalesBackgroundMonitor.instance
+            .attachMessengerContext(context);
+        SecondarySalesBackgroundMonitor.instance.ensureStarted();
+      });
+    }
     _reload(reset: true);
   }
 
   @override
   void dispose() {
+    SecondarySalesDataRefresh.tick.removeListener(_onDataRefresh);
     _employeeDebounce?.cancel();
     _stockistDebounce?.cancel();
     _employeeSearch.dispose();
     _stockistSearch.dispose();
     super.dispose();
+  }
+
+  void _onDataRefresh() {
+    if (!mounted) return;
+    _reload();
   }
 
   Future<void> _reload({bool reset = false}) async {

@@ -8,6 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/models/upload_record.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
+import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
+import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
 
@@ -199,94 +201,65 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
   }
 
   Future<void> _pollSecondarySalesStatus() async {
-    if (_documentIds.isEmpty) return;
-
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('authToken');
-      if (token == null) return;
-
-      final statuses = <String>[];
-      final ids = List<int>.from(_documentIds);
-
-      for (final documentId in ids) {
-        final uri = Uri.parse('${API_PODS_URL}/$documentId');
-        final resp = await http
-            .get(
-              uri,
-              headers: {
-                'Authorization': 'Bearer $token',
-                'Accept': 'application/json',
-              },
-            )
-            .timeout(const Duration(seconds: 15));
-
-        if (resp.statusCode == 401 || resp.statusCode == 403) {
-          if (!mounted) return;
-          setState(() {
-            _statusError = resp.statusCode == 401
-                ? 'Session expired. Please log in again.'
-                : 'You do not have permission to view this upload.';
-          });
-          return;
-        }
-        if (resp.statusCode == 404) {
-          statuses.add('missing');
-          continue;
-        }
-        if (resp.statusCode == 202) {
-          statuses.add('processing');
-          continue;
-        }
-        if (resp.statusCode != 200) {
-          return;
-        }
-
-        final decoded = jsonDecode(resp.body);
-        if (decoded is! Map<String, dynamic>) return;
-        final data = decoded['data'] is Map<String, dynamic>
-            ? decoded['data'] as Map<String, dynamic>
-            : decoded;
-        statuses.add(
-          _normalizeStatus((data['status'] ?? 'processing').toString()),
-        );
-      }
-
-      if (statuses.isEmpty) return;
-      if (statuses.every((s) => s == 'missing')) {
-        _missingPolls += 1;
-        if (_missingPolls >= 3) {
-          _pollTimer?.cancel();
-          await UploadRecordStore.instance.removeByBatchId(_batchId);
-          if (!mounted) return;
-          setState(() {
-            _statusError = 'This upload is no longer available.';
-            _status = 'failed';
-          });
-        }
-        return;
-      }
-      _missingPolls = 0;
-
-      final live = statuses.where((s) => s != 'missing').toList();
-      final latestStatus = live.any((s) => s == 'failed')
-          ? 'failed'
-          : (live.every((s) => s == 'completed')
-              ? 'completed'
-              : 'processing');
-
+      final service = SecondarySalesBatchStatusService();
+      final record = UploadRecord(
+        batchId: _batchId,
+        batchDbId: _batchDbId,
+        uploadType: _uploadType,
+        fileNames: _fileNames,
+        documentIds: _documentIds,
+        status: _status,
+        createdAt: _createdAt,
+        totalFiles: _totalFiles,
+        error: _statusError,
+      );
+      final result = await service.poll(record);
+      if (result == null) return;
       if (!mounted) return;
+
       setState(() {
-        _status = latestStatus;
+        _status = result.status;
         _statusError = null;
-        if (latestStatus == 'completed') {
+        if (result.documentIds.isNotEmpty) {
+          _documentIds = result.documentIds;
+        }
+        if (result.batchDbId != null) {
+          _batchDbId = result.batchDbId;
+        }
+        if (result.status == 'completed') {
           _progressPercentage = 100;
         }
       });
       await _persistCurrent(clearError: true);
 
-      if (latestStatus == 'completed' || latestStatus == 'failed') {
+      if (result.isTerminal) {
         _pollTimer?.cancel();
+        SecondarySalesDataRefresh.notify();
+        if (result.status == 'completed') {
+          final claimed =
+              await SecondarySalesCompletionTracker.claim(_batchId);
+          if (claimed && mounted) {
+            final stockist = result.stockistName;
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  result.hasValidationIssue
+                      ? (stockist != null
+                          ? 'Processing completed with a validation issue\n$stockist\n${result.validationMessage ?? ''}'
+                          : 'Processing completed with a validation issue\n${result.validationMessage ?? ''}')
+                      : (stockist != null
+                          ? 'Processing completed\n$stockist\nStatement processed successfully.'
+                          : 'Processing completed\nYour Secondary Sales statement has been processed successfully.'),
+                ),
+                backgroundColor: result.hasValidationIssue
+                    ? const Color(0xFFE65100)
+                    : Colors.green,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        }
       }
     } on TimeoutException {
       // keep PROCESSING — do not re-upload
@@ -297,6 +270,9 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
 
   String _normalizeStatus(String raw) {
     final s = raw.toLowerCase();
+    if (s.contains('cancel')) {
+      return 'cancelled';
+    }
     if (s.contains('fail') || s.contains('error') || s.contains('reject')) {
       return 'failed';
     }
@@ -404,9 +380,9 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
 
   String _displayProgressLabel(bool isCompleted, bool isFailed) {
     if (_isSecondarySales) {
-      if (isCompleted) return '100%  •  Processing complete';
-      if (isFailed) return 'Failed';
-      return 'Processing your statement...';
+      if (isCompleted) return 'Processing complete';
+      if (isFailed) return 'Processing failed';
+      return 'Processing in background…';
     }
     return _progressPercentage > 0 ? '$_progressPercentage%' : 'Starting…';
   }
@@ -471,17 +447,45 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              LinearProgressIndicator(
-                value: _displayProgressValue(isCompleted, isFailed),
-                minHeight: 8,
-                backgroundColor: Colors.teal.withOpacity(0.15),
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF450095)),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                _displayProgressLabel(isCompleted, isFailed),
-                style: const TextStyle(fontSize: 12, color: Colors.black54),
-              ),
+              if (_isSecondarySales) ...[
+                if (isProcessing)
+                  const Row(
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          color: Color(0xFF450095),
+                        ),
+                      ),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Processing in background…',
+                          style: TextStyle(fontSize: 13, color: Colors.black54),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    _displayProgressLabel(isCompleted, isFailed),
+                    style: const TextStyle(fontSize: 13, color: Colors.black54),
+                  ),
+              ] else ...[
+                LinearProgressIndicator(
+                  value: _displayProgressValue(isCompleted, isFailed),
+                  minHeight: 8,
+                  backgroundColor: Colors.teal.withOpacity(0.15),
+                  valueColor: const AlwaysStoppedAnimation(Color(0xFF450095)),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _displayProgressLabel(isCompleted, isFailed),
+                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              ],
               const SizedBox(height: 16),
               if (_steps.isNotEmpty)
                 _buildSectionCard(
@@ -536,7 +540,9 @@ class _UploadStatusScreenState extends State<UploadStatusScreen> {
                 ? (_isSecondarySales
                     ? 'Statement processing finished. You can view details or go to the dashboard.'
                     : 'Redirecting to the review screen…')
-                : 'Background processing is running. You can leave this screen.'));
+                : (_isSecondarySales
+                    ? 'Upload accepted. Processing continues in the background — you can leave this screen.'
+                    : 'Background processing is running. You can leave this screen.')));
 
     return Card(
       elevation: 4,

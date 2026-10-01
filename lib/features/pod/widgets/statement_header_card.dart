@@ -12,8 +12,8 @@ class StatementHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stockistName =
-        detail.stockist?['name']?.toString() ?? detail.customerName ?? '—';
+    final stockistName = detail.stockistDisplayName;
+    final hospitalName = detail.hospitalDisplayName;
     final from = _fmt(detail.reportPeriodFrom);
     final to   = _fmt(detail.reportPeriodTo);
     final periodLine = (from != '—' || to != '—') ? '$from → $to' : null;
@@ -103,8 +103,8 @@ class StatementHeaderCard extends StatelessWidget {
               final tiles = [
                 _InfoTile(
                   icon: Icons.business_rounded,
-                  label: 'Company',
-                  value: detail.vendorName ?? '—',
+                  label: 'Hospital / Company',
+                  value: hospitalName,
                   color: const Color(0xFF2196F3),
                 ),
                 _InfoTile(
@@ -156,6 +156,56 @@ class StatementHeaderCard extends StatelessWidget {
               );
             }),
           ),
+
+          if (detail.showsValidationIssue)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFFCC80)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Color(0xFFF57C00),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Validation Issue',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFFE65100),
+                          ),
+                        ),
+                        if ((detail.validationMessage ?? '').trim().isNotEmpty) ...[
+                          const SizedBox(height: 3),
+                          Text(
+                            detail.validationMessage!.trim(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF5D4037),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Status + Upload date footer
           Container(

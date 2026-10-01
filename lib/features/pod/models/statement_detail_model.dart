@@ -37,6 +37,10 @@ class StatementDetail {
 
   final Map<String, dynamic>? stockist;
   final Map<String, dynamic>? hospital;
+  final String? hospitalNameOverride;
+  final String? stockistNameOverride;
+  final bool hasValidationIssue;
+  final String? validationMessage;
   final StatementMappingSummary mappingSummary;
 
   final List<StatementItem> items;
@@ -69,6 +73,10 @@ class StatementDetail {
     required this.totalProducts,
     this.stockist,
     this.hospital,
+    this.hospitalNameOverride,
+    this.stockistNameOverride,
+    this.hasValidationIssue = false,
+    this.validationMessage,
     required this.mappingSummary,
     required this.items,
   });
@@ -77,6 +85,51 @@ class StatementDetail {
       v == null ? 0.0 : (v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0);
   static int _i(dynamic v) =>
       v == null ? 0 : (v is num ? v.toInt() : int.tryParse(v.toString()) ?? 0);
+
+  static bool _asBool(dynamic value) {
+    if (value == true || value == 1 || value == '1') return true;
+    if (value is String) {
+      final v = value.toLowerCase().trim();
+      return v == 'true' || v == 'yes';
+    }
+    return false;
+  }
+
+  static Map<String, dynamic>? _asMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return null;
+  }
+
+  String get stockistDisplayName {
+    final fromMap = stockist?['name'] ?? stockist?['stockist_name'];
+    if (fromMap != null && fromMap.toString().trim().isNotEmpty) {
+      return fromMap.toString();
+    }
+    final override = stockistNameOverride?.trim();
+    if (override != null && override.isNotEmpty) return override;
+    if (customerName != null && customerName!.trim().isNotEmpty) {
+      return customerName!;
+    }
+    return '—';
+  }
+
+  String get hospitalDisplayName {
+    final fromMap = hospital?['name'] ?? hospital?['hospital_name'];
+    if (fromMap != null && fromMap.toString().trim().isNotEmpty) {
+      return fromMap.toString();
+    }
+    final override = hospitalNameOverride?.trim();
+    if (override != null && override.isNotEmpty) return override;
+    if (vendorName != null && vendorName!.trim().isNotEmpty) return vendorName!;
+    return '—';
+  }
+
+  bool get showsValidationIssue {
+    if (hasValidationIssue) return true;
+    final msg = validationMessage?.trim();
+    return msg != null && msg.isNotEmpty;
+  }
 
   factory StatementDetail.fromJson(Map<String, dynamic> json) {
     final rawItems = json['items'];
@@ -107,6 +160,43 @@ class StatementDetail {
     final totalProducts =
         json['total_products'] != null ? _i(json['total_products']) : items.length;
 
+    final hospitalMap = _asMap(json['hospital']);
+    final stockistRaw = json['stockist'];
+    final stockistMap = _asMap(stockistRaw);
+    final hospitalFlat = (json['hospital_name'] ??
+            json['hospitalName'] ??
+            json['company_name'] ??
+            json['companyName'])
+        ?.toString();
+    final stockistFlat = ((stockistRaw is String || stockistRaw is num)
+            ? stockistRaw.toString()
+            : null) ??
+        (json['stockist_name'] ?? json['stockistName'])?.toString();
+
+    final metadata = _asMap(json['metadata']) ?? const <String, dynamic>{};
+    final metaValidation = _asMap(metadata['validation']);
+    final batch = _asMap(json['batch']);
+    final validationMsg = (json['validation_message'] ??
+            json['validationMessage'] ??
+            metaValidation?['validation_message'] ??
+            metaValidation?['validationMessage'] ??
+            metadata['validation_message'] ??
+            metadata['validationMessage'] ??
+            batch?['validation_message'] ??
+            batch?['validationMessage'])
+        ?.toString();
+    final hasValidation = _asBool(
+          json['has_validation_issue'] ??
+              json['hasValidationIssue'] ??
+              metaValidation?['has_validation_issue'] ??
+              metaValidation?['hasValidationIssue'] ??
+              metadata['has_validation_issue'] ??
+              metadata['hasValidationIssue'] ??
+              batch?['has_validation_issue'] ??
+              batch?['hasValidationIssue'],
+        ) ||
+        (validationMsg?.trim().isNotEmpty ?? false);
+
     return StatementDetail(
       id: _i(json['id']),
       invoiceNo: json['invoice_no']?.toString(),
@@ -131,12 +221,12 @@ class StatementDetail {
       openingQty: _i(json['opening_qty']),
       closingQty: _i(json['closing_qty']),
       totalProducts: totalProducts,
-      stockist: json['stockist'] is Map
-          ? Map<String, dynamic>.from(json['stockist'] as Map)
-          : null,
-      hospital: json['hospital'] is Map
-          ? Map<String, dynamic>.from(json['hospital'] as Map)
-          : null,
+      stockist: stockistMap,
+      hospital: hospitalMap,
+      hospitalNameOverride: hospitalFlat,
+      stockistNameOverride: stockistFlat,
+      hasValidationIssue: hasValidation,
+      validationMessage: validationMsg,
       mappingSummary: mappingSummary,
       items: items,
     );
