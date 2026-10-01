@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -15,6 +15,7 @@ import 'package:zforce/presentation/expense/ExpenseScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseManagerScreen.dart';
 import 'package:zforce/presentation/doctor_brand/doctor_brand_screen.dart';
+import 'package:zforce/presentation/doctor_brand/brand_dr_mapping_screen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
 import 'package:zforce/presentation/master/data_upload_screen.dart';
 import 'package:zforce/presentation/master/attendance_report_screen.dart';
@@ -1127,6 +1128,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _navigateTo(BbaMainScreen(initialEmployeeId: parsedEmpId));
     } else if (reqType == 'CHEMIST_APPROVAL') {
       _navigateTo(ChemistMainScreen(initialEmployeeId: parsedEmpId));
+    } else if (reqType == 'BRAND_DR') {
+      _navigateTo(BrandDrMappingScreen(initialEmployeeId: parsedEmpId));
     } else if (reqType == 'ACTION' || reqType == 'WEB' || reqType == 'TAB') {
       _openActionCenter();
     } else {
@@ -1338,6 +1341,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Brand Pathfinder",
             Colors.pink,
             () => _navigateTo(const DoctorBrandScreen()),
+          ),
+          _MenuAction(
+            Icons.medical_information_outlined,
+            "Zorberry Tab Daily Rxn List",
+            Colors.deepOrange,
+            () => _navigateTo(const BrandDrMappingScreen()),
           ),
           _MenuAction(
             Icons.medication_outlined,

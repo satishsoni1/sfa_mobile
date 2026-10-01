@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -1114,6 +1114,158 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       return List<Map<String, dynamic>>.from(json.decode(response.body)['data'] ?? []);
     }
     throw Exception('Failed to load doctor list');
+  }
+
+  // ── Dr-Brand-Map API methods 
+  Future<List<Map<String, dynamic>>> getDrBrandMapBrands({int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/app/dr-brand-map/brands?user_id=$userId'
+        : '$baseUrl/app/dr-brand-map/brands';
+    final response = await http.get(Uri.parse(url),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    }
+    throw Exception('Failed to load Dr-Brand-Map brands');
+  }
+
+
+  Future<List<Map<String, dynamic>>> getDrBrandMapSummary({int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/app/dr-brand-map/brands/doctor-summary?user_id=$userId'
+        : '$baseUrl/app/dr-brand-map/brands/doctor-summary';
+    try {
+      final response = await http.get(Uri.parse(url),
+          headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+      final body = json.decode(response.body);
+      if (response.statusCode == 200) {
+        final raw = body['data'] ?? body;
+        if (raw is List) return List<Map<String, dynamic>>.from(raw);
+        return [];
+      }
+      return [
+        {
+          '__error__': true,
+          'status': response.statusCode,
+          'message': body['message']?.toString() ?? 'Failed to load summary',
+        }
+      ];
+    } catch (_) {
+      return [{'__error__': true, 'status': 0, 'message': 'Network error. Please try again.'}];
+    }
+  }
+
+  /// GET /app/dr-brand-map/brands/{id}/doctors
+  Future<Map<String, dynamic>> getDrBrandMapDoctors(int brandId, {int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/app/dr-brand-map/brands/$brandId/doctors?user_id=$userId'
+        : '$baseUrl/app/dr-brand-map/brands/$brandId/doctors';
+    final response = await http.get(Uri.parse(url),
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+    if (response.statusCode == 200) return Map<String, dynamic>.from(json.decode(response.body));
+    throw Exception('Failed to load doctors for brand');
+  }
+
+  /// POST /app/dr-brand-map/brands/{id}/doctors
+  Future<void> addDrBrandMapDoctors(int brandId, List<int> doctorIds) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/dr-brand-map/brands/$brandId/doctors'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'doctor_ids': doctorIds}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(json.decode(response.body)['message'] ?? 'Failed to add doctors');
+    }
+  }
+
+  /// DELETE /app/dr-brand-map/brands/{id}/doctors/{doctorId}
+  Future<String> removeDrBrandMapDoctor(int brandId, int doctorId) async {
+    final token = await getToken();
+    final response = await http.delete(
+      Uri.parse('$baseUrl/app/dr-brand-map/brands/$brandId/doctors/$doctorId'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) {
+      return body['message']?.toString() ?? 'Doctor removed from brand successfully';
+    } else {
+      throw Exception(body['message'] ?? 'Failed to remove doctor');
+    }
+  }
+
+  /// POST /app/dr-brand-map/brands/submit
+  Future<void> submitDrBrandMapApproval(int brandId) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/dr-brand-map/brands/submit'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'brand_id': brandId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(json.decode(response.body)['message'] ?? 'Failed to submit');
+    }
+  }
+
+  /// POST /app/dr-brand-map/brands/{userId}/approve
+  Future<void> approveDrBrandMap(int userId, int brandId) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/dr-brand-map/brands/$userId/approve'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'brand_id': brandId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(json.decode(response.body)['message'] ?? 'Failed to approve');
+    }
+  }
+
+  /// POST /app/dr-brand-map/brands/{userId}/reject
+  Future<void> rejectDrBrandMap(int userId, int brandId, String reason) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/dr-brand-map/brands/$userId/reject'),
+      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json', 'Accept': 'application/json'},
+      body: json.encode({'brand_id': brandId, 'reject_reason': reason}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception(json.decode(response.body)['message'] ?? 'Failed to reject');
+    }
+  }
+
+  /// GET /app/dr-brand-map/doctors/my-list?employee_id={id}
+  Future<List<Map<String, dynamic>>> getDrBrandMapDoctorList({int? brandId}) async {
+    final token = await getToken();
+    final user = await getUser();
+    
+    final queryParams = <String>[];
+    if (user?.employeeId != null) queryParams.add('employee_id=${user!.employeeId}');
+    if (brandId != null) queryParams.add('brand_id=$brandId');
+    
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    final url = '$baseUrl/app/dr-brand-map/doctors/my-list$queryString';
+    
+    try {
+      final response = await http.get(Uri.parse(url),
+          headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'});
+      final body = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return List<Map<String, dynamic>>.from(body['data'] ?? []);
+      }
+      return [
+        {
+          '__error__': true,
+          'status': response.statusCode,
+          'message': body['message']?.toString() ?? 'Failed to load doctor list',
+        }
+      ];
+    } catch (_) {
+      return [{'__error__': true, 'status': 0, 'message': 'Network error. Please try again.'}];
+    }
   }
 
 // Submit all expenses for the month
