@@ -628,6 +628,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _openDoctorMerging() {
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    final employeeId = (user?.employeeId != null && user!.employeeId != 0)
+        ? user.employeeId.toString()
+        : (user?.employeeCode.trim() ?? '');
+
+    if (employeeId.isEmpty) {
+      _showSnack("Employee details not available.");
+      return;
+    }
+
+    final url =
+        'https://zorvia.globalspace.in/doctor-merging?employee_id=${Uri.encodeComponent(employeeId)}';
+
+    Navigator.pushNamed(
+      context,
+      InternalWebViewScreen.routeName,
+      arguments: InternalWebViewArgs(
+        url: url,
+        title: 'Doctor Merging',
+      ),
+    );
+  }
+
   String _getZoneLogo(String? division) {
     final zone = division?.toLowerCase() ?? "";
     if (zone.contains("1")) return "assets/images/3.png";
@@ -1335,6 +1359,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             "Dr. Master",
             Colors.deepPurple,
             () => _navigateTo(const DoctorMasterScreen()),
+          ),
+          _MenuAction(
+            Icons.merge_type,
+            "Doctor Merging",
+            Colors.indigo,
+            _openDoctorMerging,
           ),
           _MenuAction(
             Icons.medication_outlined,
