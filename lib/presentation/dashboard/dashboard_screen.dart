@@ -1,4 +1,4 @@
-﻿import '../tp_deviation/tp_deviation_history_screen.dart';
+import '../tp_deviation/tp_deviation_history_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -39,6 +39,7 @@ import '../reporting/TeamTerritoryScreen.dart';
 import 'external_links_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
+import '../cme/cme_history_screen.dart';
 import '../dcr/dcr_unlock_request_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
 
@@ -72,7 +73,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.81";
+  static const String CURRENT_APP_VERSION = "1.0.82";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -131,7 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isRefreshing = true);
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    authProvider.onForegroundMessage = _showFcmForegroundSnackbar;
+    // authProvider.onForegroundMessage = _showFcmForegroundSnackbar; // FCM commented out
     final reportProvider = Provider.of<ReportProvider>(context, listen: false);
     final apiService = ApiService();
 
@@ -1339,6 +1340,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "NFW Report",
         Colors.brown,
         () => _navigateTo(const NfwReportScreen()),
+      ),
+      _MenuAction(
+        Icons.school,
+        "CME",
+        const Color(0xFF4A148C),
+        () => _navigateTo(const CmeHistoryScreen()),
       ),
       _MenuAction(
         Icons.lock_open,

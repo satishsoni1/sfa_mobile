@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -14,11 +14,11 @@ void main() async {
   // Required before any async work in main().
   WidgetsFlutterBinding.ensureInitialized();
 
-    // Initialize Firebase
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  debugPrint('[Firebase] Initialized successfully.');
+  // Initialize Firebase (commented out - FCM not required right now)
+  // await Firebase.initializeApp(
+  //   options: DefaultFirebaseOptions.currentPlatform,
+  // );
+  // debugPrint('[Firebase] Initialized successfully.');
   
   runApp(
     MultiProvider(

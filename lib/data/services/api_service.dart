@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -675,6 +675,47 @@ class ApiService {
       throw Exception("Failed to load history");
     }
   }
+
+  // ─── CME (Continuing Medical Education) PROGRAM ────────────────────────────
+  Future<void> submitCmeProgram(Map<String, dynamic> cmeData) async {
+    final token = await getToken();
+    final url = Uri.parse('$baseUrl/app/cme-submit');
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+      body: jsonEncode(cmeData),
+    );
+
+    if (response.statusCode != 200 && response.statusCode != 201) {
+      throw Exception(_errorMessageFromBody(response.body));
+    }
+  }
+
+  Future<List<dynamic>> getCmeHistory() async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/cme-history'),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json is Map && json.containsKey('data')) {
+        return json['data'] is List ? json['data'] : [];
+      } else if (json is List) {
+        return json;
+      }
+      return [];
+    } else {
+      throw Exception(_errorMessageFromBody(response.body));
+    }
+  }
+
   // --- LEAVE MANAGEMENT ---
 
   // 1. Get Leave Types & Balances (For Apply Screen)
