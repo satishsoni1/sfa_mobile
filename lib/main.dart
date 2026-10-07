@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
 import 'providers/report_provider.dart';
 import 'providers/auth_provider.dart';
+import 'providers/gift_acceptance_provider.dart';
 import 'presentation/dashboard/dashboard_screen.dart';
 import 'presentation/login/login_screen.dart';
 import 'presentation/webview/internal_webview_screen.dart';
@@ -28,6 +29,7 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => AuthProvider()..checkLoginStatus(),
         ),
+        ChangeNotifierProvider(create: (_) => GiftAcceptanceProvider()),
       ],
       child: const ZForceApp(),
     ),

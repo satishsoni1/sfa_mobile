@@ -78,6 +78,7 @@ class _AddCmeScreenState extends State<AddCmeScreen> {
   final List<CmeManualDoctor> _manualDoctors = [];
 
   // 6. Joint Work (Subordinates)
+  String? _selectedSubordinateId;
   Map<String, dynamic>? _selectedSubordinate;
   List<dynamic> _subordinates = [];
   bool _isLoadingSubordinates = true;
@@ -128,18 +129,26 @@ class _AddCmeScreenState extends State<AddCmeScreen> {
 
   Future<void> _fetchDoctors() async {
     try {
-      final data = await _api.getDoctors();
+      final data = await _api.getDoctorsEmployeeList();
       final List<_DoctorOption> docs = [];
-      for (var json in data) {
-        if (json is Map<String, dynamic>) {
-          final doc = Doctor.fromJson(json);
+      for (var raw in data) {
+        if (raw is Map) {
+          final json = Map<String, dynamic>.from(raw);
+          final int? id = json['id'] is int
+              ? json['id']
+              : int.tryParse(json['id']?.toString() ?? json['doctor_id']?.toString() ?? '');
+          final String name = (json['doctor_name'] ?? json['name'] ?? json['doc_name'] ?? 'Doctor').toString();
+          final String spec = (json['speciality'] ?? json['specialization'] ?? json['qualification'] ?? '').toString();
+          final String area = (json['area'] ?? json['geo_name'] ?? json['patch'] ?? json['territory'] ?? '').toString();
+          final String? mobile = (json['mobile_no'] ?? json['mobile'] ?? json['phone'])?.toString();
+
           docs.add(
             _DoctorOption(
-              id: doc.id,
-              name: doc.name,
-              specialization: doc.specialization,
-              area: doc.area,
-              mobile: doc.mobile,
+              id: id,
+              name: name,
+              specialization: spec,
+              area: area,
+              mobile: mobile,
               isManual: false,
             ),
           );
@@ -152,8 +161,37 @@ class _AddCmeScreenState extends State<AddCmeScreen> {
         });
       }
     } catch (e) {
-      debugPrint("Error loading doctors for CME: $e");
-      if (mounted) setState(() => _isLoadingDoctors = false);
+      debugPrint("Error loading doctors from employee-list for CME: $e");
+      // Fallback to getDoctors if employee-list is unavailable
+      try {
+        final fallbackData = await _api.getDoctors();
+        final List<_DoctorOption> docs = [];
+        for (var raw in fallbackData) {
+          if (raw is Map) {
+            final json = Map<String, dynamic>.from(raw);
+            final doc = Doctor.fromJson(json);
+            docs.add(
+              _DoctorOption(
+                id: doc.id,
+                name: doc.name,
+                specialization: doc.specialization,
+                area: doc.area,
+                mobile: doc.mobile,
+                isManual: false,
+              ),
+            );
+          }
+        }
+        if (mounted) {
+          setState(() {
+            _availableDoctors = docs;
+            _isLoadingDoctors = false;
+          });
+        }
+      } catch (fallbackError) {
+        debugPrint("Fallback getDoctors also failed: $fallbackError");
+        if (mounted) setState(() => _isLoadingDoctors = false);
+      }
     }
   }
 
@@ -164,6 +202,18 @@ class _AddCmeScreenState extends State<AddCmeScreen> {
         setState(() {
           _subordinates = subs;
           _isLoadingSubordinates = false;
+          if (_selectedSubordinateId != null) {
+            final match = _subordinates.firstWhere(
+              (s) => s is Map && (s['id'] ?? s['employee_id'])?.toString() == _selectedSubordinateId,
+              orElse: () => null,
+            );
+            if (match is Map) {
+              _selectedSubordinate = Map<String, dynamic>.from(match);
+            } else {
+              _selectedSubordinateId = null;
+              _selectedSubordinate = null;
+            }
+          }
         });
       }
     } catch (e) {
@@ -230,9 +280,13 @@ class _AddCmeScreenState extends State<AddCmeScreen> {
           'manual_doctors': _manualDoctors.map((m) => m.toJson()).toList(),
         if (_selectedSubordinate != null)
           'joint_work': {
-            'employee_id': _selectedSubordinate!['id'],
-            'employee_name': _selectedSubordinate!['name'],
+            'employee_id': _selectedSubordinate!['id'] ?? _selectedSubordinate!['employee_id'],
+            'employee_name': _selectedSubordinate!['name'] ?? _selectedSubordinate!['employee_name'],
             'is_joint_work': true,
+          }
+        else
+          'joint_work': {
+            'is_joint_work': false,
           },
         if (hasCost)
           'cost_breakdown': {
@@ -1116,26 +1170,80 @@ class _AddCmeScreenState extends State<AddCmeScreen> {
                         padding: EdgeInsets.all(8.0),
                         child: Text("Loading colleagues list..."),
                       )
-                    : DropdownButtonFormField<Map<String, dynamic>?>(
-                        initialValue: _selectedSubordinate,
-                        decoration: _inputDecoration("Select Colleague (Optional)", Icons.group_outlined),
-                        items: [
-                          const DropdownMenuItem<Map<String, dynamic>?>(
-                            value: null,
-                            child: Text("None / Solo Work"),
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          DropdownButtonFormField<String?>(
+                            key: ValueKey(_selectedSubordinateId),
+                            initialValue: _selectedSubordinateId,
+                            isExpanded: true,
+                            decoration: _inputDecoration("Select Colleague (Optional)", Icons.group_outlined),
+                            items: _buildSubordinateDropdownItems(),
+                            onChanged: (selectedId) {
+                              setState(() {
+                                _selectedSubordinateId = selectedId;
+                                if (selectedId == null) {
+                                  _selectedSubordinate = null;
+                                } else {
+                                  final match = _subordinates.firstWhere(
+                                    (s) => s is Map && (s['id'] ?? s['employee_id'])?.toString() == selectedId,
+                                    orElse: () => null,
+                                  );
+                                  if (match is Map) {
+                                    _selectedSubordinate = Map<String, dynamic>.from(match);
+                                  } else {
+                                    _selectedSubordinate = null;
+                                  }
+                                }
+                              });
+                            },
                           ),
-                          ..._subordinates.map((s) {
-                            final map = Map<String, dynamic>.from(s is Map ? s : {});
-                            final name = map['name']?.toString() ?? 'Colleague';
-                            return DropdownMenuItem<Map<String, dynamic>?>(
-                              value: map,
-                              child: Text(name),
-                            );
-                          }),
+                          if (_selectedSubordinate != null) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4A148C).withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFF4A148C).withValues(alpha: 0.25)),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 14,
+                                    backgroundColor: const Color(0xFF4A148C).withValues(alpha: 0.15),
+                                    child: const Icon(Icons.handshake, size: 16, color: Color(0xFF4A148C)),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          "Joint Work Selected",
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF4A148C),
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                        Text(
+                                          "${_selectedSubordinate!['name'] ?? _selectedSubordinate!['employee_name'] ?? 'Colleague'}${_selectedSubordinate!['designation'] != null ? ' (${_selectedSubordinate!['designation']})' : ''}",
+                                          style: GoogleFonts.poppins(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
-                        onChanged: (val) {
-                          setState(() => _selectedSubordinate = val);
-                        },
                       ),
               ),
               const SizedBox(height: 16),
@@ -1374,6 +1482,51 @@ class _AddCmeScreenState extends State<AddCmeScreen> {
         ),
       ),
     );
+  }
+
+  List<DropdownMenuItem<String?>> _buildSubordinateDropdownItems() {
+    final List<DropdownMenuItem<String?>> items = [
+      const DropdownMenuItem<String?>(
+        value: null,
+        child: Row(
+          children: [
+            Icon(Icons.person_outline, size: 18, color: Colors.grey),
+            SizedBox(width: 8),
+            Text("None / Solo Work"),
+          ],
+        ),
+      ),
+    ];
+
+    final Set<String> seenIds = {};
+    for (var s in _subordinates) {
+      if (s is Map) {
+        final id = (s['id'] ?? s['employee_id'])?.toString();
+        if (id != null && id.isNotEmpty && !seenIds.contains(id)) {
+          seenIds.add(id);
+          final name = (s['name'] ?? s['employee_name'] ?? 'Colleague').toString();
+          final desig = s['designation'] != null ? " • ${s['designation']}" : "";
+          items.add(
+            DropdownMenuItem<String?>(
+              value: id,
+              child: Row(
+                children: [
+                  const Icon(Icons.handshake_outlined, size: 18, color: Color(0xFF4A148C)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "$name$desig",
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
+      }
+    }
+    return items;
   }
 
   Widget _buildSectionCard({

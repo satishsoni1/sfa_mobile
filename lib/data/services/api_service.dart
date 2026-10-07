@@ -102,6 +102,8 @@ class ApiService {
   Future<void> saveSession(String token, User user) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
+    await prefs.setString('employee_id', user.employeeId.toString());
+    await prefs.setString('employee_code', user.employeeCode);
     await prefs.setString(
       'user_data',
       jsonEncode(user.toJson()),
@@ -168,6 +170,28 @@ class ApiService {
     );
     if (response.statusCode == 200) {
       return jsonDecode(response.body); // Returns list of doctors
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  // Get Doctors Employee List (For CME and Doctor Selection)
+  Future<List<dynamic>> getDoctorsEmployeeList() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/doctors/employee-list'),
+      headers: await _getHeaders(),
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      if (decoded is List) {
+        return decoded;
+      } else if (decoded is Map<String, dynamic>) {
+        if (decoded['data'] is List) {
+          return decoded['data'];
+        } else if (decoded['doctors'] is List) {
+          return decoded['doctors'];
+        }
+      }
+      return [];
     }
     throw Exception(_errorMessageFromBody(response.body));
   }
