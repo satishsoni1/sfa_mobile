@@ -100,7 +100,7 @@ class StatementHeaderCard extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             child: LayoutBuilder(builder: (ctx, constraints) {
               final wide = constraints.maxWidth > 360;
-              final tiles = [
+              final tiles = <Widget>[
                 _InfoTile(
                   icon: Icons.business_rounded,
                   label: 'Hospital / Company',
@@ -119,6 +119,13 @@ class StatementHeaderCard extends StatelessWidget {
                   value: detail.uploadedBy ?? '—',
                   color: const Color(0xFFFF9800),
                 ),
+                if ((detail.onBehalfOf ?? '').trim().isNotEmpty)
+                  _InfoTile(
+                    icon: Icons.person_outline_rounded,
+                    label: 'On Behalf Of',
+                    value: detail.onBehalfOf!.trim(),
+                    color: const Color(0xFF450095),
+                  ),
                 _InfoTile(
                   icon: Icons.insert_drive_file_rounded,
                   label: 'File',
@@ -128,25 +135,21 @@ class StatementHeaderCard extends StatelessWidget {
               ];
 
               if (wide) {
-                return Column(
-                  children: [
+                final rows = <Widget>[];
+                for (var i = 0; i < tiles.length; i += 2) {
+                  if (i > 0) rows.add(const SizedBox(height: 10));
+                  final second = i + 1 < tiles.length ? tiles[i + 1] : null;
+                  rows.add(
                     Row(
                       children: [
-                        Expanded(child: tiles[0]),
+                        Expanded(child: tiles[i]),
                         const SizedBox(width: 10),
-                        Expanded(child: tiles[1]),
+                        Expanded(child: second ?? const SizedBox.shrink()),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: tiles[2]),
-                        const SizedBox(width: 10),
-                        Expanded(child: tiles[3]),
-                      ],
-                    ),
-                  ],
-                );
+                  );
+                }
+                return Column(children: rows);
               }
               return Column(
                 children: tiles.map((t) => Padding(

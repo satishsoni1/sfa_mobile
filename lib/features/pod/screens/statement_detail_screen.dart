@@ -1,5 +1,6 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:zforce/features/pod/models/statement_detail_model.dart';
+import 'package:zforce/features/pod/routes/pod_routes.dart';
 import 'package:zforce/features/pod/services/statement_detail_service.dart';
 import 'package:zforce/features/pod/widgets/statement_header_card.dart';
 import 'package:zforce/features/pod/widgets/statement_kpi_grid.dart';
@@ -74,12 +75,35 @@ class _StatementDetailScreenState extends State<StatementDetailScreen> {
             return const _LoadingView();
           }
           if (snapshot.hasError) {
+            final message = snapshot.error
+                .toString()
+                .replaceFirst('Exception: ', '');
+            final forbidden = message.toLowerCase().contains('not authorized');
             return _ErrorView(
-              message: snapshot.error.toString().replaceFirst('Exception: ', ''),
-              onRetry: _load,
+              message: message,
+              onRetry: forbidden ? null : _load,
+              title: forbidden
+                  ? 'Unauthorized'
+                  : 'Failed to load statement',
             );
           }
-          return _BodyView(detail: snapshot.data!);
+          return _BodyView(
+            detail: snapshot.data!,
+            onManualCorrection: () {
+              final detail = snapshot.data!;
+              Navigator.pushNamed(
+                context,
+                PodRoutes.stockCorrection,
+                arguments: {
+                  'statementId': detail.id,
+                  'stockistName': detail.stockistDisplayName,
+                  'statementMonth': detail.reportPeriodFrom ??
+                      detail.reportPeriodTo ??
+                      detail.invoiceDate,
+                },
+              );
+            },
+          );
         },
       ),
     );
@@ -125,8 +149,13 @@ class _LoadingView extends StatelessWidget {
 
 class _ErrorView extends StatelessWidget {
   final String message;
-  final VoidCallback onRetry;
-  const _ErrorView({required this.message, required this.onRetry});
+  final String title;
+  final VoidCallback? onRetry;
+  const _ErrorView({
+    required this.message,
+    this.onRetry,
+    this.title = 'Failed to load statement',
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -142,13 +171,18 @@ class _ErrorView extends StatelessWidget {
                 color: Colors.red.shade50,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.wifi_off_rounded,
-                  size: 40, color: Colors.red.shade400),
+              child: Icon(
+                onRetry == null
+                    ? Icons.lock_outline_rounded
+                    : Icons.wifi_off_rounded,
+                size: 40,
+                color: Colors.red.shade400,
+              ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Failed to load statement',
-              style: TextStyle(
+            Text(
+              title,
+              style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w700,
                   color: Colors.black87),
@@ -160,7 +194,8 @@ class _ErrorView extends StatelessWidget {
               style:
                   TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
-            const SizedBox(height: 28),
+            if (onRetry != null) const SizedBox(height: 28),
+            if (onRetry != null)
             FilledButton.icon(
               onPressed: onRetry,
               icon: const Icon(Icons.refresh_rounded, size: 18),
@@ -186,7 +221,11 @@ class _ErrorView extends StatelessWidget {
 
 class _BodyView extends StatelessWidget {
   final StatementDetail detail;
-  const _BodyView({required this.detail});
+  final VoidCallback onManualCorrection;
+  const _BodyView({
+    required this.detail,
+    required this.onManualCorrection,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -197,6 +236,26 @@ class _BodyView extends StatelessWidget {
         children: [
           // 1. Header card
           StatementHeaderCard(detail: detail),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onManualCorrection,
+              icon: const Icon(Icons.edit_note_rounded),
+              label: const Text(
+                'Manual Correction',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF450095),
+                side: const BorderSide(color: Color(0xFF450095)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 14),
 
           // 2. Totals strip

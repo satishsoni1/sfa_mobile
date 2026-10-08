@@ -779,6 +779,22 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
                         ),
                       ),
                     ),
+                    if (batch.isMultiPage) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        batch.isProcessingStatus &&
+                                (batch.displayProcessedPages) > 0 &&
+                                batch.displayProcessedPages <
+                                    batch.displayTotalPages
+                            ? 'Processing page ${batch.displayProcessedPages + 1} of ${batch.displayTotalPages}'
+                            : batch.multiPageProgressLabel,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -975,7 +991,19 @@ class _BatchDetailScreenState extends State<BatchDetailScreen> {
               const Divider(height: 24),
               _buildInfoRow('Stockist', batch.stockistName, Icons.store_rounded),
               const Divider(height: 24),
-              _buildInfoRow('User', batch.userName, Icons.person_rounded),
+              _buildInfoRow(
+                'Uploaded By',
+                batch.userName,
+                Icons.person_rounded,
+              ),
+              if ((batch.onBehalfOf ?? '').trim().isNotEmpty) ...[
+                const Divider(height: 24),
+                _buildInfoRow(
+                  'On Behalf Of',
+                  batch.onBehalfOf!.trim(),
+                  Icons.person_outline_rounded,
+                ),
+              ],
               const Divider(height: 24),
               _buildInfoRow(
                 'Started At',

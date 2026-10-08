@@ -2,7 +2,7 @@ name: zforce
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
@@ -59,10 +59,10 @@ dependencies:
   connectivity_plus: ^6.1.4
   uuid: ^4.4.0
   geolocator: ^13.0.4
-  record: '>=5.0.0 <5.2.0'
+  record: ">=5.0.0 <5.2.0"
   audioplayers: ^6.1.0
-  firebase_core: ^4.14.0
-  firebase_messaging: ^16.6.0
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
 
   # ============================================================
   # POD / SECONDARY SALES DEPENDENCIES
@@ -120,7 +120,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

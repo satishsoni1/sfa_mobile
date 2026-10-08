@@ -19,6 +19,7 @@ class StatementDetail {
 
   final String? sourceFileName;
   final String? uploadedBy;
+  final String? onBehalfOf;
   final String? uploadedAt;
 
   final String? reportDescription;
@@ -59,6 +60,7 @@ class StatementDetail {
     this.customerName,
     this.sourceFileName,
     this.uploadedBy,
+    this.onBehalfOf,
     this.uploadedAt,
     this.reportDescription,
     this.reportPeriodFrom,
@@ -209,6 +211,14 @@ class StatementDetail {
       customerName: json['customer_name']?.toString(),
       sourceFileName: json['source_file_name']?.toString(),
       uploadedBy: json['uploaded_by']?.toString(),
+      onBehalfOf: (json['on_behalf_of'] ??
+              json['on_behalf_of_name'] ??
+              json['on_behalf_of_employee_name'] ??
+              (json['on_behalf_of_employee'] is Map
+                  ? (json['on_behalf_of_employee']['name'] ??
+                      json['on_behalf_of_employee']['employee_name'])
+                  : null))
+          ?.toString(),
       uploadedAt: json['uploaded_at']?.toString(),
       reportDescription: json['report_description']?.toString(),
       reportPeriodFrom: json['report_period_from']?.toString(),

@@ -198,6 +198,10 @@ class SecondarySalesBackgroundMonitor {
 
   static const Duration pollInterval = Duration(seconds: 5);
 
+  /// When true, [ensureStarted] is a no-op (widget tests must not leave timers).
+  @visibleForTesting
+  static bool suppressInTests = false;
+
   final SecondarySalesBatchStatusService _statusService =
       SecondarySalesBatchStatusService();
   Timer? _timer;
@@ -209,7 +213,7 @@ class SecondarySalesBackgroundMonitor {
   }
 
   void ensureStarted() {
-    if (!isSecondarySalesUpload) return;
+    if (suppressInTests || !isSecondarySalesUpload) return;
     _timer ??= Timer.periodic(pollInterval, (_) {
       unawaited(tick());
     });

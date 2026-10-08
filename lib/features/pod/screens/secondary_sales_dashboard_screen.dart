@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
+import 'package:zforce/features/pod/routes/pod_routes.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen.dart';
 import 'package:zforce/features/pod/services/api_client.dart';
 import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
@@ -11,9 +12,17 @@ import 'package:zforce/features/pod/services/secondary_sales_dashboard_service.d
 import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 
 class SecondarySalesDashboardScreen extends StatefulWidget {
-  const SecondarySalesDashboardScreen({super.key, this.service});
+  const SecondarySalesDashboardScreen({
+    super.key,
+    this.service,
+    this.onBackPressed,
+  });
 
   final SecondarySalesDashboardService? service;
+
+  /// When hosted inside [MainNavigation], leave the Secondary Sales module
+  /// (confirm + pop root). Do not call rootNavigator.pop() from the AppBar.
+  final Future<void> Function()? onBackPressed;
 
   @override
   State<SecondarySalesDashboardScreen> createState() =>
@@ -30,6 +39,10 @@ class _SecondarySalesDashboardScreenState
   SecondarySalesDashboardData? _data;
   int _tabIndex = 0;
   final Set<int> _expandedManagerIds = <int>{};
+
+  /// Employee/KAM filter — only IDs from Laravel's available_kams/employees.
+  String? _selectedEmployeeId;
+  String? _selectedZoneId;
 
   final TextEditingController _employeeSearch = TextEditingController();
   final TextEditingController _stockistSearch = TextEditingController();
@@ -86,11 +99,28 @@ class _SecondarySalesDashboardScreenState
       }
     });
     try {
-      final data = await _service.fetchDashboard(month: month);
+      final data = await _service.fetchDashboard(
+        month: month,
+        employeeId: _selectedEmployeeId,
+        zoneId: _selectedZoneId,
+      );
       if (!mounted || token != _loadToken) return;
+      // Drop stale unauthorized filter if Laravel no longer returns it.
+      final allowedIds = {
+        for (final k in data.filters.availableKams)
+          if (k.id != null && !k.unassigned) k.id!,
+      };
+      if (_selectedEmployeeId != null &&
+          allowedIds.isNotEmpty &&
+          !allowedIds.contains(_selectedEmployeeId)) {
+        _selectedEmployeeId = null;
+      }
       setState(() {
         _data = data;
         _loading = false;
+        if (!data.showsTeamSection && _tabIndex == 0) {
+          _tabIndex = 0; // stockists-only layout uses single pane below
+        }
       });
     } on UnauthorizedException {
       if (!mounted || token != _loadToken) return;
@@ -100,6 +130,18 @@ class _SecondarySalesDashboardScreenState
           'You are not authorized to view this data.',
           401,
         );
+      });
+    } on SecondarySalesDashboardException catch (e) {
+      if (!mounted || token != _loadToken) return;
+      if (e.isForbidden) {
+        // Clear unauthorized filter and show message; do not keep stale data.
+        _selectedEmployeeId = null;
+        _selectedZoneId = null;
+      }
+      setState(() {
+        _loading = false;
+        _error = e;
+        if (e.isForbidden) _data = null;
       });
     } catch (e) {
       if (!mounted || token != _loadToken) return;
@@ -152,6 +194,21 @@ class _SecondarySalesDashboardScreenState
     if (mounted) _reload();
   }
 
+  Future<void> _handleBack() async {
+    if (widget.onBackPressed != null) {
+      await widget.onBackPressed!();
+      return;
+    }
+    // Standalone / deep-link fallback: pop one route safely.
+    final nav = Navigator.of(context);
+    if (nav.canPop()) {
+      nav.pop();
+      return;
+    }
+    final root = Navigator.of(context, rootNavigator: true);
+    if (root.canPop()) root.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -168,8 +225,22 @@ class _SecondarySalesDashboardScreenState
         iconTheme: const IconThemeData(color: Colors.black),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded, color: Colors.black),
-          onPressed: () => Navigator.of(context, rootNavigator: true).pop(),
+          onPressed: () => _handleBack(),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Upload Status Report',
+            onPressed: () {
+              Navigator.pushNamed(context, PodRoutes.uploadStatusReport);
+            },
+            icon: const Icon(Icons.assessment_outlined),
+          ),
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : () => _reload(),
+            icon: const Icon(Icons.refresh_rounded),
+          ),
+        ],
       ),
       body: SafeArea(child: _buildBody()),
     );
@@ -180,84 +251,117 @@ class _SecondarySalesDashboardScreenState
       return const _DashboardSkeleton();
     }
     if (_error != null && _data == null) {
-      return SecondarySalesStatusError(error: _error!, onRetry: _reload);
+      return SecondarySalesStatusError(
+        error: _error!,
+        onRetry: () => _reload(reset: true),
+      );
     }
 
     final data = _data!;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-          child: SecondarySalesMonthBar(
-            selectedMonth: _selectedMonth,
-            onMonthChanged: (month) {
-              setState(() {
-                _selectedMonth = DateTime(month.year, month.month, 1);
-              });
+    final hierarchy = data.effectiveHierarchy;
+    final showTeam = data.showsTeamSection;
+    final tabIndex = showTeam ? _tabIndex : 0;
+    final monthLabel = DateFormat('MMM yyyy').format(_selectedMonth);
+    final bottomPad = MediaQuery.paddingOf(context).bottom + 88;
+
+    return RefreshIndicator(
+      color: const Color(0xFF450095),
+      onRefresh: () => _reload(),
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: EdgeInsets.fromLTRB(16, 12, 16, bottomPad),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SecondarySalesMonthBar(
+              selectedMonth: _selectedMonth,
+              onMonthChanged: (month) {
+                setState(() {
+                  _selectedMonth = DateTime(month.year, month.month, 1);
+                });
                 _reload(reset: true);
               },
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: _OverviewSection(overview: data.overview),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-          child: _SegmentedTabs(
-            index: _tabIndex,
-            onChanged: (index) => setState(() => _tabIndex = index),
-          ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            color: const Color(0xFF450095),
-            onRefresh: _reload,
-            child: IndexedStack(
-              index: _tabIndex,
-              children: [
-                _HierarchyTab(
-                  data: data,
-                  query: _employeeQuery,
-                  search: _employeeSearch,
-                  onSearch: _onEmployeeSearch,
-                  onClearSearch: () {
-                    _employeeSearch.clear();
-                    setState(() => _employeeQuery = '');
-                  },
-                  expandedIds: _expandedManagerIds,
-                  onToggle: _toggleExpand,
-                  onOpen: _openEmployee,
-                  monthLabel: DateFormat('MMM yyyy').format(_selectedMonth),
-                ),
-                _StockistTab(
-                  stockists: data.visibleStockists,
-                  query: _stockistQuery,
-                  search: _stockistSearch,
-                  onSearch: _onStockistSearch,
-                  onClearSearch: () {
-                    _stockistSearch.clear();
-                    setState(() => _stockistQuery = '');
-                  },
-                  month: _monthKey,
-                  monthLabel: DateFormat('MMM yyyy').format(_selectedMonth),
-                  service: _service,
-                  onOpened: _reload,
-                ),
-              ],
             ),
-          ),
+            if (hierarchy != null) ...[
+              const SizedBox(height: 12),
+              _HierarchyHeader(hierarchy: hierarchy),
+            ],
+            const SizedBox(height: 14),
+            _OverviewSection(
+              overview: data.overview,
+              stockistCount: data.visibleStockists.length,
+              title: hierarchy?.sectionTitle ?? 'SUMMARY',
+            ),
+            if (showTeam && data.filters.availableKams.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _EmployeeFilterBar(
+                options: data.filters.availableKams,
+                selectedId: _selectedEmployeeId,
+                onChanged: (id) {
+                  setState(() => _selectedEmployeeId = id);
+                  _reload(reset: true);
+                },
+              ),
+            ],
+            if (showTeam) ...[
+              const SizedBox(height: 14),
+              _SegmentedTabs(
+                index: tabIndex,
+                onChanged: (index) => setState(() => _tabIndex = index),
+                teamLabel: 'Team',
+                stockistLabel: 'Stockists',
+              ),
+            ],
+            const SizedBox(height: 14),
+            if (showTeam && tabIndex == 0)
+              _TeamPerformanceSection(
+                data: data,
+                query: _employeeQuery,
+                search: _employeeSearch,
+                onSearch: _onEmployeeSearch,
+                onClearSearch: () {
+                  _employeeSearch.clear();
+                  setState(() => _employeeQuery = '');
+                },
+                expandedIds: _expandedManagerIds,
+                onToggle: _toggleExpand,
+                onOpen: _openEmployee,
+                monthLabel: monthLabel,
+              )
+            else
+              _StockistStatementsSection(
+                stockists: data.visibleStockists,
+                query: _stockistQuery,
+                search: _stockistSearch,
+                onSearch: _onStockistSearch,
+                onClearSearch: () {
+                  _stockistSearch.clear();
+                  setState(() => _stockistQuery = '');
+                },
+                month: _monthKey,
+                monthLabel: monthLabel,
+                service: _service,
+                onOpened: _reload,
+              ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
 class _SegmentedTabs extends StatelessWidget {
-  const _SegmentedTabs({required this.index, required this.onChanged});
+  const _SegmentedTabs({
+    required this.index,
+    required this.onChanged,
+    this.teamLabel = 'Team',
+    this.stockistLabel = 'Stockists',
+  });
 
   final int index;
   final ValueChanged<int> onChanged;
+  final String teamLabel;
+  final String stockistLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -269,8 +373,9 @@ class _SegmentedTabs extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _seg('KAM / Manager', 0, key: const ValueKey('ss-tab-hierarchy')),
-          _seg('Stockist Statements', 1, key: const ValueKey('ss-tab-stockists')),
+          // Keep legacy key; label is hierarchy-neutral ("Team").
+          _seg(teamLabel, 0, key: const ValueKey('ss-tab-hierarchy')),
+          _seg(stockistLabel, 1, key: const ValueKey('ss-tab-stockists')),
         ],
       ),
     );
@@ -304,18 +409,133 @@ class _SegmentedTabs extends StatelessWidget {
   }
 }
 
-class _OverviewSection extends StatelessWidget {
-  const _OverviewSection({required this.overview});
-  final SecondarySalesOverview overview;
+class _HierarchyHeader extends StatelessWidget {
+  const _HierarchyHeader({required this.hierarchy});
+  final SecondarySalesHierarchy hierarchy;
 
   @override
   Widget build(BuildContext context) {
+    final count = hierarchy.visibleEmployeeCount;
+    final level = hierarchy.level?.trim();
+    final name = hierarchy.employeeName?.trim();
+    final subtitleParts = <String>[
+      if (level != null && level.isNotEmpty) level,
+      if (name != null && name.isNotEmpty) name,
+    ];
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4ECFF),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFD8C4F5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            hierarchy.headerEyebrow,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.4,
+              color: Color(0xFF450095),
+            ),
+          ),
+          if (subtitleParts.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitleParts.join(' • '),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF2C3E50),
+              ),
+            ),
+          ],
+          if (count != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              '$count Employees',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF5D6570),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EmployeeFilterBar extends StatelessWidget {
+  const _EmployeeFilterBar({
+    required this.options,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  final List<SecondarySalesKamOption> options;
+  final String? selectedId;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = options
+        .where((o) => o.id != null && !o.unassigned)
+        .toList();
+    if (items.isEmpty) return const SizedBox.shrink();
+    return DropdownButtonFormField<String?>(
+      value: selectedId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Employee',
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE6E8EE)),
+        ),
+      ),
+      items: [
+        const DropdownMenuItem<String?>(
+          value: null,
+          child: Text('All visible employees'),
+        ),
+        for (final o in items)
+          DropdownMenuItem<String?>(
+            value: o.id,
+            child: Text(o.label, overflow: TextOverflow.ellipsis),
+          ),
+      ],
+      onChanged: onChanged,
+    );
+  }
+}
+
+class _OverviewSection extends StatelessWidget {
+  const _OverviewSection({
+    required this.overview,
+    required this.stockistCount,
+    this.title = 'SUMMARY',
+  });
+  final SecondarySalesOverview overview;
+  final int stockistCount;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final completion = overview.completionPercentage;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Executive Overview',
-          style: TextStyle(
+        Text(
+          title,
+          style: const TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w700,
             color: Color(0xFF2C3E50),
@@ -334,9 +554,29 @@ class _OverviewSection extends StatelessWidget {
             const SizedBox(width: 10),
             Expanded(
               child: _KpiCard(
-                title: 'Total Statements',
+                title: 'Statements',
                 value: '${overview.statementCount}',
                 icon: Icons.description_outlined,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _KpiCard(
+                title: 'Stockists',
+                value: '$stockistCount',
+                icon: Icons.storefront_outlined,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _KpiCard(
+                title: 'Completion',
+                value: '${completion.toStringAsFixed(0)}%',
+                icon: Icons.task_alt_outlined,
               ),
             ),
           ],
@@ -452,8 +692,8 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _HierarchyTab extends StatelessWidget {
-  const _HierarchyTab({
+class _TeamPerformanceSection extends StatelessWidget {
+  const _TeamPerformanceSection({
     required this.data,
     required this.query,
     required this.search,
@@ -491,71 +731,48 @@ class _HierarchyTab extends StatelessWidget {
             ..._ancestorIds(roots),
           };
     final visible = SecondarySalesHierarchyTree.flattenVisible(roots, expanded);
+    final noTeamRows =
+        data.managerPerformance.isEmpty && data.kamPerformance.isEmpty;
 
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'KAM / Manager Performance',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2C3E50),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _SearchField(
-                  controller: search,
-                  hint: 'Search KAM or Manager',
-                  onChanged: onSearch,
-                  onClear: onClearSearch,
-                ),
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Team Performance',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF2C3E50),
           ),
         ),
-        if (data.managerPerformance.isEmpty && data.kamPerformance.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _EmptyCopy(
-              title: 'No data for this month',
-              subtitle:
-                  'There are no Secondary Sales records available for $monthLabel.',
-            ),
+        const SizedBox(height: 10),
+        _SearchField(
+          controller: search,
+          hint: 'Search employee',
+          onChanged: onSearch,
+          onClear: onClearSearch,
+        ),
+        const SizedBox(height: 12),
+        if (noTeamRows)
+          _EmptyCopy(
+            title: 'No team data available',
+            subtitle:
+                'No secondary sales data available for $monthLabel.',
           )
         else if (visible.isEmpty)
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: _EmptyCopy(
-              title: 'No results found',
-              subtitle: 'Try a different name or stockist code.',
-            ),
+          const _EmptyCopy(
+            title: 'No results found',
+            subtitle: 'Try a different employee name.',
           )
         else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final node = visible[index];
-                  final id = node.employee.employeeId;
-                  return _HierarchyCard(
-                    node: node,
-                    expanded: id != null && expanded.contains(id),
-                    onExpand: () => onToggle(id),
-                    onOpen: () => onOpen(node.employee),
-                  );
-                },
-                childCount: visible.length,
-              ),
+          for (final node in visible)
+            _HierarchyCard(
+              node: node,
+              expanded: node.employee.employeeId != null &&
+                  expanded.contains(node.employee.employeeId),
+              onExpand: () => onToggle(node.employee.employeeId),
+              onOpen: () => onOpen(node.employee),
             ),
-          ),
       ],
     );
   }
@@ -729,8 +946,8 @@ class _MetaLine extends StatelessWidget {
   }
 }
 
-class _StockistTab extends StatelessWidget {
-  const _StockistTab({
+class _StockistStatementsSection extends StatelessWidget {
+  const _StockistStatementsSection({
     required this.stockists,
     required this.query,
     required this.search,
@@ -762,68 +979,44 @@ class _StockistTab extends StatelessWidget {
                 (row.stockistId?.toString().contains(q) ?? false);
           }).toList();
 
-    return CustomScrollView(
-      physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          sliver: SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Stockist Statements',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2C3E50),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                _SearchField(
-                  controller: search,
-                  hint: 'Search stockist name or code',
-                  onChanged: onSearch,
-                  onClear: onClearSearch,
-                ),
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Stockist Statements',
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: Color(0xFF2C3E50),
           ),
         ),
+        const SizedBox(height: 10),
+        _SearchField(
+          controller: search,
+          hint: 'Search stockist name or code',
+          onChanged: onSearch,
+          onClear: onClearSearch,
+        ),
+        const SizedBox(height: 12),
         if (stockists.isEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _EmptyCopy(
-              title: 'No data for this month',
-              subtitle:
-                  'There are no Secondary Sales records available for $monthLabel.',
-            ),
+          _EmptyCopy(
+            title: 'No stockist statements available',
+            subtitle:
+                'No secondary sales data available for $monthLabel.',
           )
         else if (filtered.isEmpty)
-          const SliverFillRemaining(
-            hasScrollBody: false,
-            child: _EmptyCopy(
-              title: 'No results found',
-              subtitle: 'Try a different name or stockist code.',
-            ),
+          const _EmptyCopy(
+            title: 'No results found',
+            subtitle: 'Try a different name or stockist code.',
           )
         else
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
-            sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  return SecondarySalesStockistPerformanceTile(
-                    row: filtered[index],
-                    month: month,
-                    service: service,
-                    onOpened: onOpened,
-                  );
-                },
-                childCount: filtered.length,
-              ),
+          for (final row in filtered)
+            SecondarySalesStockistPerformanceTile(
+              row: row,
+              month: month,
+              service: service,
+              onOpened: onOpened,
             ),
-          ),
       ],
     );
   }

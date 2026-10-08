@@ -8,9 +8,19 @@ import 'package:zforce/features/pod/screens/main_navigation.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_dashboard_screen.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_kam_stockists_screen.dart';
 import 'package:zforce/features/pod/screens/secondary_sales_stockist_statements_screen.dart';
+import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
 import 'package:zforce/features/pod/services/secondary_sales_dashboard_service.dart';
 
 void main() {
+  setUp(() {
+    SecondarySalesBackgroundMonitor.suppressInTests = true;
+    SecondarySalesBackgroundMonitor.instance.stop();
+  });
+  tearDown(() {
+    SecondarySalesBackgroundMonitor.instance.stop();
+    SecondarySalesBackgroundMonitor.suppressInTests = false;
+  });
+
   final productionPayload = {
     'success': true,
     'data': {
@@ -509,6 +519,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(service.statementCalls.map((c) => c['page']), [1, 2]);
+      // Page-2 row sorts to the top (highest id); scroll back so ListView builds it.
+      await tester.drag(find.byType(ListView).last, const Offset(0, 4000));
+      await tester.pumpAndSettle();
       expect(find.text('file-next.pdf'), findsOneWidget);
     });
   });
@@ -615,11 +628,11 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      expect(find.text('KAM / Manager Performance'), findsOneWidget);
+      expect(find.text('Team Performance'), findsOneWidget);
       expect(find.text('Manager B'), findsOneWidget);
       expect(find.text('KAM A'), findsOneWidget);
       expect(find.text('Total Sales'), findsOneWidget);
-      expect(find.text('Total Statements'), findsOneWidget);
+      expect(find.text('Statements'), findsWidgets);
 
       await tester.ensureVisible(find.text('KAM A'));
       await tester.tap(find.text('KAM A'));
@@ -647,7 +660,8 @@ void main() {
       );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
-      expect(find.text('No data for this month'), findsOneWidget);
+      expect(find.text('No stockist statements available'), findsOneWidget);
+      expect(find.text('Recent Statements'), findsNothing);
     });
 
     testWidgets('403 shows authorization message without retry', (tester) async {
@@ -769,8 +783,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
-      await tester.tap(find.byKey(const ValueKey('ss-tab-stockists')));
-      await tester.pump();
+      // No team rows → stockists pane is shown directly (no Team/Stockists tabs).
       expect(find.text('KAMAL DRUG DISTRIBUTORS'), findsOneWidget);
       await tester.tap(find.text('KAMAL DRUG DISTRIBUTORS'));
       await tester.pump();
@@ -834,7 +847,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       await tester.enterText(
-        find.widgetWithText(TextField, 'Search KAM or Manager'),
+        find.widgetWithText(TextField, 'Search employee'),
         'KAM A',
       );
       await tester.pump(const Duration(milliseconds: 400));
@@ -934,6 +947,66 @@ void main() {
           },
         };
 
+    test('parses hierarchy metadata without local designation logic', () {
+      final data = SecondarySalesDashboardData.fromJson({
+        'hierarchy': {
+          'level': 'RM',
+          'employee_id': 123,
+          'employee_name': 'Sample RM',
+          'visible_employee_count': 12,
+          'can_view_team': true,
+          'can_view_all': false,
+        },
+        'data': {
+          'filters': {
+            'available_kams': [
+              {'id': 101, 'name': 'Visible Employee'},
+            ],
+          },
+          'overview': {'total_sales': 10, 'total_documents': 1},
+          'manager_performance': [],
+          'kam_performance': [
+            {
+              'employee_id': 101,
+              'employee_name': 'Visible Employee',
+              'total_sales': 10,
+            },
+          ],
+          'stockist_performance': [],
+        },
+      });
+      expect(data.hierarchy?.employeeId, 123);
+      expect(data.hierarchy?.canViewTeam, isTrue);
+      expect(data.hierarchy?.canViewAll, isFalse);
+      expect(data.hierarchy?.visibleEmployeeCount, 12);
+      expect(data.hierarchy?.sectionTitle, "MY TEAM'S SECONDARY SALES");
+      expect(data.showsTeamSection, isTrue);
+      expect(data.teamEmployees, hasLength(1));
+    });
+
+    test('hides team section when Laravel can_view_team is false', () {
+      final data = SecondarySalesDashboardData.fromJson({
+        'data': {
+          'hierarchy': {
+            'level': 'KAM',
+            'employee_id': 55,
+            'employee_name': 'Solo KAM',
+            'visible_employee_count': 1,
+            'can_view_team': false,
+            'can_view_all': false,
+          },
+          'overview': {'total_sales': 5, 'total_documents': 1},
+          'kam_performance': [],
+          'manager_performance': [],
+          'stockist_performance': [
+            {'stockist_id': 1, 'stockist_name': 'Only Mine', 'sales': 5},
+          ],
+        },
+      });
+      expect(data.showsTeamSection, isFalse);
+      expect(data.hierarchy?.sectionTitle, 'MY SECONDARY SALES');
+    });
+
     test('parses unrestricted hierarchy and keeps unmapped/zero rows', () {
       final data = SecondarySalesDashboardData.fromJson(adminPayload());
       expect(data.filters.hierarchy?.unrestricted, isTrue);
@@ -1006,8 +1079,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
 
       expect(find.text('Total Sales'), findsOneWidget);
-      expect(find.text('KAM / Manager'), findsOneWidget);
-      expect(find.text('Stockist Statements'), findsOneWidget);
+      expect(find.text('Team'), findsOneWidget);
+      expect(find.byKey(const ValueKey('ss-tab-stockists')), findsOneWidget);
       expect(find.text('Top Manager'), findsOneWidget);
       expect(find.text('Manager B'), findsNothing);
 
@@ -1134,6 +1207,145 @@ void main() {
       expect(MainNavigation, isNotNull);
     });
   });
+
+  group('Secondary Sales module navigation', () {
+    testWidgets(
+      'Dashboard AppBar back asks before leaving module; Cancel stays',
+      (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => const MainNavigation(),
+                      ),
+                    );
+                  },
+                  child: const Text('open-ss'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open-ss'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(MainNavigation), findsOneWidget);
+        expect(find.byType(SecondarySalesDashboardScreen), findsOneWidget);
+
+        await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Leave Secondary Sales'), findsOneWidget);
+        expect(find.text('Do you want to return to Home?'), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(MainNavigation), findsOneWidget);
+        expect(find.byType(SecondarySalesDashboardScreen), findsOneWidget);
+        expect(find.text('open-ss'), findsNothing);
+      },
+    );
+
+    testWidgets('Dashboard AppBar Leave pops module without duplicate Home',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const MainNavigation(),
+                    ),
+                  );
+                },
+                child: const Text('open-ss'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open-ss'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.arrow_back_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Leave'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MainNavigation), findsNothing);
+      expect(find.text('open-ss'), findsOneWidget);
+    });
+
+    testWidgets(
+      'Android system back on nested POD navigator shows leave confirm',
+      (tester) async {
+        final nestedKey = GlobalKey<NavigatorState>();
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => PopScope(
+                          canPop: false,
+                          onPopInvokedWithResult: (didPop, result) async {
+                            if (didPop) return;
+                            final nested = nestedKey.currentState;
+                            if (nested == null) return;
+                            if (nested.canPop()) {
+                              nested.pop();
+                              return;
+                            }
+                            await nested.maybePop();
+                          },
+                          child: Navigator(
+                            key: nestedKey,
+                            onGenerateInitialRoutes: (navigator, name) {
+                              return [
+                                MaterialPageRoute<void>(
+                                  builder: (_) => const MainNavigation(),
+                                ),
+                              ];
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('open-ss'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open-ss'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(MainNavigation), findsOneWidget);
+
+        // Simulate Android system back (root route PopScope → nested maybePop).
+        final handled = await tester.binding.handlePopRoute();
+        expect(handled, isTrue);
+        await tester.pumpAndSettle();
+
+        expect(find.text('Leave Secondary Sales'), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+        expect(find.byType(MainNavigation), findsOneWidget);
+      },
+    );
+  });
 }
 
 Widget _app(Widget home, {void Function(RouteSettings settings)? onRoute}) {
@@ -1187,7 +1399,10 @@ class _FakeDashboardService extends SecondarySalesDashboardService {
   Future<SecondarySalesDashboardData> fetchDashboard({
     required String month,
     String? kamId,
+    String? employeeId,
     String? zoneId,
+    String? stockistId,
+    String? search,
   }) async {
     dashboardMonths.add(month);
     return dashboard;

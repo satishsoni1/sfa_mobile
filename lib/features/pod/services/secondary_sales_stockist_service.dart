@@ -350,7 +350,8 @@ List<SecondarySalesStockistInfo> filterAuthorizedStockists(
   return stockists.where((s) {
     final name = s.name.toLowerCase();
     final id = s.id?.toString() ?? '';
-    return name.contains(q) || id.contains(q);
+    final code = (s.code ?? '').toLowerCase();
+    return name.contains(q) || id.contains(q) || code.contains(q);
   }).toList();
 }
 
@@ -359,6 +360,7 @@ Map<String, String> buildSecondarySalesUploadFields({
   required DateTime selectedMonth,
   String companyName = 'Himalaya',
   String remarks = 'Mobile upload',
+  int? onBehalfOfEmployeeId,
 }) {
   final statementMonth =
       '${selectedMonth.year}-${selectedMonth.month.toString().padLeft(2, '0')}';
@@ -367,6 +369,8 @@ Map<String, String> buildSecondarySalesUploadFields({
     'statement_month': statementMonth,
     'company_name': companyName,
     'remarks': remarks,
+    if (onBehalfOfEmployeeId != null && onBehalfOfEmployeeId > 0)
+      'on_behalf_of_employee_id': onBehalfOfEmployeeId.toString(),
   };
 }
 
@@ -381,9 +385,56 @@ String secondarySalesUploadForbiddenMessage(String body) {
 }
 
 String secondarySalesUploadUnprocessableMessage(String body) {
-  final parsed = _messageFromBody(body);
-  if (parsed != null && parsed.isNotEmpty) return parsed;
+  final formatted = secondarySalesFormatLaravelValidationMessage(body);
+  if (formatted != null && formatted.isNotEmpty) return formatted;
   return 'The upload was rejected. Please check the file and try again.';
+}
+
+/// Builds a user-facing message from Laravel 422 `{message, errors}` payloads.
+/// Returns null when [body] cannot be parsed.
+String? secondarySalesFormatLaravelValidationMessage(dynamic body) {
+  Map<String, dynamic>? map;
+  if (body is Map) {
+    map = Map<String, dynamic>.from(body);
+  } else if (body is String && body.trim().isNotEmpty) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        map = Map<String, dynamic>.from(decoded);
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+  if (map == null) return null;
+
+  final errorParts = <String>[];
+  final errors = map['errors'];
+  if (errors is Map) {
+    for (final entry in errors.entries) {
+      final value = entry.value;
+      if (value is List) {
+        for (final item in value) {
+          final text = item?.toString().trim() ?? '';
+          if (text.isNotEmpty) errorParts.add(text);
+        }
+      } else {
+        final text = value?.toString().trim() ?? '';
+        if (text.isNotEmpty) errorParts.add(text);
+      }
+    }
+  }
+  if (errorParts.isNotEmpty) {
+    return 'Upload validation failed: ${errorParts.join(' ')}';
+  }
+
+  final message = map['message']?.toString().trim() ?? '';
+  if (message.isEmpty) return null;
+  if (message.toLowerCase() == 'validation failed' ||
+      message.toLowerCase() == 'the given data was invalid.') {
+    return 'Upload validation failed. Please check the file, stockist, and month.';
+  }
+  return message;
 }
 
 /// Filename is never used to extract or reject statement month.

@@ -30,6 +30,14 @@ class Batch {
   final String? stockistNameOverride;
   /// POD / statement document ids created from this batch (for Statement Details).
   final List<int> documentIds;
+  /// Multi-page stock statement fields (upload-multiple).
+  final bool isMultiPage;
+  final int? totalPages;
+  final int? processedPages;
+  final int? failedPages;
+  final List<Map<String, dynamic>> pages;
+  /// Employee name when uploaded on behalf (Laravel source of truth).
+  final String? onBehalfOf;
 
   Batch({
     required this.id,
@@ -60,6 +68,12 @@ class Batch {
     this.hospitalNameOverride,
     this.stockistNameOverride,
     this.documentIds = const [],
+    this.isMultiPage = false,
+    this.totalPages,
+    this.processedPages,
+    this.failedPages,
+    this.pages = const [],
+    this.onBehalfOf,
   });
 
   factory Batch.fromJson(Map<String, dynamic> json) {
@@ -185,6 +199,46 @@ class Batch {
     );
 
     final documentIds = _parseDocumentIds(json, metadata);
+    final pages = _parsePages(json['pages'] ?? metadata['pages']);
+    final totalPages = _safeIntNullable(
+          json['total_pages'] ?? json['totalPages'] ?? metadata['total_pages'],
+        ) ??
+        (pages.isNotEmpty ? pages.length : null);
+    final processedPages = _safeIntNullable(
+      json['processed_pages'] ??
+          json['processedPages'] ??
+          metadata['processed_pages'],
+    );
+    final failedPages = _safeIntNullable(
+      json['failed_pages'] ?? json['failedPages'] ?? metadata['failed_pages'],
+    );
+    final isMultiPageFlag = _asBool(
+          json['is_multi_page'] ??
+              json['isMultiPage'] ??
+              metadata['is_multi_page'] ??
+              metadata['isMultiPage'],
+        ) ||
+        (totalPages != null && totalPages > 1) ||
+        pages.length > 1;
+
+    final onBehalfEmployeeMap = _safeMap(
+      json['on_behalf_of_employee'] ??
+          json['onBehalfOfEmployee'] ??
+          metadata['on_behalf_of_employee'] ??
+          metadata['onBehalfOfEmployee'],
+    );
+    final onBehalfOf = _safeString(
+      json['on_behalf_of'] ??
+          json['on_behalf_of_name'] ??
+          json['on_behalf_of_employee_name'] ??
+          json['onBehalfOf'] ??
+          metadata['on_behalf_of'] ??
+          metadata['on_behalf_of_name'] ??
+          metadata['on_behalf_of_employee_name'] ??
+          onBehalfEmployeeMap?['name'] ??
+          onBehalfEmployeeMap?['employee_name'] ??
+          onBehalfEmployeeMap?['full_name'],
+    );
 
     return Batch(
       id: _safeInt(json['id'], 0),
@@ -229,7 +283,53 @@ class Batch {
       hospitalNameOverride: hospitalFlat,
       stockistNameOverride: stockistFlat,
       documentIds: documentIds,
+      isMultiPage: isMultiPageFlag,
+      totalPages: totalPages,
+      processedPages: processedPages,
+      failedPages: failedPages,
+      pages: pages,
+      onBehalfOf: onBehalfOf,
     );
+  }
+
+  static List<Map<String, dynamic>> _parsePages(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+  }
+
+  static int? _safeIntNullable(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is num) return value.toInt();
+    return null;
+  }
+
+  int get displayTotalPages => totalPages ?? totalFiles;
+
+  int get displayProcessedPages =>
+      processedPages ?? successfulFiles;
+
+  int get displayFailedPages => failedPages ?? failedFiles;
+
+  String get multiPageProgressLabel {
+    final total = displayTotalPages;
+    if (total <= 0) return displayStatus;
+    if (isCompletedStatus) return '$total Pages · Completed';
+    if (normalizedStatus == 'failed' || normalizedStatus == 'error') {
+      return '$total Pages · $displayProcessedPages processed · $displayFailedPages failed';
+    }
+    if (isProcessingStatus) {
+      final done = displayProcessedPages;
+      if (done > 0 && done < total) {
+        return 'Processing: $done/$total';
+      }
+      return 'Processing multi-page statement...';
+    }
+    return '$total Pages · $displayStatus';
   }
 
   /// Collects POD/statement ids from common batch payload shapes.

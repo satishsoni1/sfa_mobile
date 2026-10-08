@@ -30,6 +30,10 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Default FCM notification channel (matches flutter_local_notifications). -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="secondary_sales_fcm" />
         <!-- POD / SECONDARY SALES: ML Kit Document Scanner -->
         <meta-data
             android:name="com.google.mlkit.vision.DEPENDENCIES"

@@ -20,6 +20,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:zforce/features/pod/models/_SplitOut.dart';
 import 'package:zforce/features/pod/models/upload_record.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
+import 'package:zforce/features/pod/config/secondary_sales_multi_page_upload.dart';
 import 'package:zforce/features/pod/config/secondary_sales_upload_files.dart';
 import 'package:zforce/features/pod/screens/upload_status_screen.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
@@ -31,6 +32,9 @@ import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
 import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 import 'package:zforce/features/pod/models/secondary_sales_dashboard_models.dart';
+import 'package:zforce/features/pod/models/secondary_sales_upload_on_behalf_models.dart';
+import 'package:zforce/features/pod/widgets/secondary_sales_leave_upload_dialog.dart';
+import 'package:zforce/features/pod/widgets/secondary_sales_on_behalf_section.dart';
 import 'package:zforce/features/pod/widgets/secondary_sales_stockist_picker.dart';
 import 'package:zforce/features/pod/widgets/secondary_sales_upload_source_sheet.dart';
 import 'package:google_mlkit_document_scanner/google_mlkit_document_scanner.dart';
@@ -436,6 +440,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
   _SelectItem? _selectedStockist;
   List<SecondarySalesStockistInfo> _authorizedStockists = [];
   SecondarySalesStockistInfo? _authorizedSelected;
+  SecondarySalesUploadTeamMember? _onBehalfEmployee;
   String? _stockistsLoadedForToken;
   DateTime _selectedStatementMonth = DateTime(
     DateTime.now().year,
@@ -1499,10 +1504,13 @@ class _PODUploadScreenState extends State<PODUploadScreen>
               buildSecondarySalesUploadFields(
                 stockistId: stockistId,
                 selectedMonth: _selectedStatementMonth,
+                onBehalfOfEmployeeId: _onBehalfEmployee?.id,
               ),
             );
             debugPrint(
-              '[UPLOAD] Fields: stockist_id=$stockistId, statement_month=${req.fields['statement_month']}',
+              '[UPLOAD] Fields: stockist_id=$stockistId, '
+              'statement_month=${req.fields['statement_month']}'
+              '${_onBehalfEmployee != null ? ', on_behalf_of_employee_id=${_onBehalfEmployee!.id}' : ''}',
             );
           } else {
             // Invoice POD — existing split-file-processor / allow-images fields.
@@ -1885,13 +1893,26 @@ class _PODUploadScreenState extends State<PODUploadScreen>
     );
   }
 
+  Future<void> _confirmLeaveUpload() async {
+    final leave = await showSecondarySalesLeaveUploadDialog(context);
+    if (leave && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
   /// ===================== UI BUILD =====================
 
   @override
   Widget build(BuildContext context) {
     final showTopLoader = _isLoadingLists || _isProcessingDocuments;
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _confirmLeaveUpload();
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1911,9 +1932,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           tooltip: 'Back',
-          onPressed: () {
-            Navigator.maybePop(context);
-          },
+          onPressed: () => _confirmLeaveUpload(),
         ),
       ),
       body: SafeArea(
@@ -1973,7 +1992,43 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                           },
                         ),
                       ),
-                    _buildSectionCard(
+                    if (isSecondarySalesUpload)
+                      _buildSectionCard(
+                        icon: Icons.groups_outlined,
+                        title: 'Upload On Behalf Of',
+                        subtitle:
+                            'Optional — upload a statement for a team member',
+                        child: SecondarySalesOnBehalfSection(
+                          selectedEmployee: _onBehalfEmployee,
+                          selectedStockist: _onBehalfEmployee == null
+                              ? null
+                              : _authorizedSelected,
+                          onEmployeeChanged: (member) {
+                            setState(() {
+                              _onBehalfEmployee = member;
+                              _authorizedSelected = null;
+                              _selectedStockist = null;
+                            });
+                            if (member == null) {
+                              _stockistListController.refresh();
+                            }
+                          },
+                          onStockistChanged: (stockist) {
+                            setState(() {
+                              _authorizedSelected = stockist;
+                              _selectedStockist =
+                                  stockist == null || stockist.id == null
+                                      ? null
+                                      : _SelectItem(
+                                          id: stockist.id.toString(),
+                                          label: stockist.name,
+                                        );
+                            });
+                          },
+                        ),
+                      ),
+                    if (!(isSecondarySalesUpload && _onBehalfEmployee != null))
+                      _buildSectionCard(
                       icon: Icons.store_mall_directory,
                       title: 'Stockist',
                       subtitle: 'Select Stockist',
@@ -1982,6 +2037,8 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                               controller: _stockistListController,
                               selected: _authorizedSelected,
                               onSelected: (stockist) {
+                                // Keep selected stockist; empty + hide the search list.
+                                _stockistListController.reset();
                                 setState(() {
                                   _authorizedSelected = stockist;
                                   _selectedStockist = _SelectItem(
@@ -1995,6 +2052,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                                   _authorizedSelected = null;
                                   _selectedStockist = null;
                                 });
+                                _stockistListController.refresh();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text('Stockist selection cleared'),
@@ -2046,6 +2104,45 @@ class _PODUploadScreenState extends State<PODUploadScreen>
                             ),
                           ),
                           if (isSecondarySalesUpload) ...[
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _isBusy
+                                  ? null
+                                  : () async {
+                                      final result =
+                                          await Navigator.pushNamed(
+                                        context,
+                                        PodRoutes.multiPageUpload,
+                                      );
+                                      if (result == true && mounted) {
+                                        SecondarySalesBackgroundMonitor
+                                            .instance
+                                            .ensureStarted();
+                                        SecondarySalesDataRefresh.notify();
+                                      }
+                                    },
+                              icon: const Icon(Icons.filter_none_rounded),
+                              label: const Text(
+                                kSecondarySalesMultiPageEntryLabel,
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFF450095),
+                                side: const BorderSide(
+                                  color: Color(0xFF450095),
+                                ),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Take photos of all pages of the SAME stock statement for the SAME stockist and SAME month.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey.shade700,
+                              ),
+                            ),
                             const SizedBox(height: 8),
                             Text(
                               kSecondarySalesSupportedFormatsLabel,
@@ -2256,6 +2353,7 @@ class _PODUploadScreenState extends State<PODUploadScreen>
           ),
         ),
       ), // ✅ CLOSE SafeArea HERE
+    ), // Scaffold
     );
   }
 

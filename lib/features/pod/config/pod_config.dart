@@ -27,8 +27,18 @@ const String API_POD_UPLOAD_URL = "${API_BASE_URL}pod/upload-pdf";
 // Accepts: files[] (multipart), stockist_id, statement_month, company_name, remarks
 // ──────────────────────────────────────────────────────────────────────────────
 const String API_SECONDARY_SALES_UPLOAD_URL = "${API_BASE_URL}secondary-sales/upload";
+/// Multi-page stock statement upload (one batch, multiple page images).
+const String API_SECONDARY_SALES_UPLOAD_MULTIPLE_URL =
+    "${API_BASE_URL}secondary-sales/upload-multiple";
 const String API_SECONDARY_SALES_STOCKISTS_URL =
     "${API_BASE_URL}secondary-sales/stockists";
+/// Team members available for Secondary Sales "upload on behalf".
+const String API_SECONDARY_SALES_UPLOAD_TEAM_MEMBERS_URL =
+    "${API_BASE_URL}secondary-sales/upload/team-members";
+
+String secondarySalesUploadTeamMemberStockistsUrl(int employeeId) =>
+    "${API_BASE_URL}secondary-sales/upload/team-members/$employeeId/stockists";
+
 const String API_SECONDARY_SALES_DASHBOARD_URL =
     "${API_BASE_URL}secondary-sales/dashboard";
 const String API_SECONDARY_SALES_DASHBOARD_BREAKDOWN_URL =
@@ -46,6 +56,24 @@ String secondarySalesKamStockistsUrl(int kamId) =>
 /// Does NOT re-upload or re-extract — Laravel only re-groups by month.
 String secondarySalesBatchDateUrl(int batchId) =>
     "${API_BASE_URL}secondary-sales/batches/$batchId/date";
+
+/// Reprocess an existing Secondary Sales batch (Laravel OCR/validation retry).
+String secondarySalesBatchReprocessUrl(int batchId) =>
+    "${API_BASE_URL}secondary-sales/batches/$batchId/reprocess";
+
+/// Manual stock corrections for a Secondary Sales statement (pod/statement id).
+String secondarySalesCorrectionsUrl(int statementId) =>
+    "${API_BASE_URL}secondary-sales/$statementId/corrections";
+
+/// Hierarchy-aware upload status report.
+const String API_SECONDARY_SALES_UPLOAD_STATUS_URL =
+    "${API_BASE_URL}secondary-sales/upload-status";
+
+String secondarySalesUploadStatusFilterUrl(String filterKey) =>
+    "${API_BASE_URL}secondary-sales/upload-status/filters/$filterKey";
+
+String secondarySalesUploadStatusStockistSummaryUrl(int stockistId) =>
+    "${API_BASE_URL}secondary-sales/upload-status/stockists/$stockistId/summary";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // CLIENT UPLOAD TYPE

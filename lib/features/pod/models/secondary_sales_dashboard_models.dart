@@ -8,6 +8,8 @@ class SecondarySalesDashboardData {
   final List<SecondarySalesEmployeePerformance> managerPerformance;
   final List<SecondarySalesEmployeePerformance> kamPerformance;
   final List<SecondarySalesStockistPerformance> stockistPerformance;
+  /// Top-level Laravel hierarchy metadata (also mirrored under filters).
+  final SecondarySalesHierarchy? hierarchy;
 
   const SecondarySalesDashboardData({
     required this.filters,
@@ -19,8 +21,28 @@ class SecondarySalesDashboardData {
     this.managerPerformance = const [],
     this.kamPerformance = const [],
     this.stockistPerformance = const [],
+    this.hierarchy,
   });
 
+  /// Effective hierarchy: top-level payload preferred, then filters.hierarchy.
+  SecondarySalesHierarchy? get effectiveHierarchy =>
+      hierarchy ?? filters.hierarchy;
+
+  /// UI may show a Team section when Laravel says so, or (legacy) when
+  /// employee performance rows were returned. Never inferred from designation.
+  bool get showsTeamSection {
+    final h = effectiveHierarchy;
+    if (h != null && (h.canViewTeam != null || h.canViewAll != null)) {
+      return h.showsTeam;
+    }
+    if (h?.unrestricted == true) return true;
+    return managerPerformance.isNotEmpty || kamPerformance.isNotEmpty;
+  }
+
+  /// Flat employee rows for Team Performance (API order, managers then KAMs).
+  List<SecondarySalesEmployeePerformance> get teamEmployees {
+    return [...managerPerformance, ...kamPerformance];
+  }
   List<SecondarySalesStockistPerformance> get visibleStockists {
     // Prefer dedicated stockist_performance, but also merge breakdown rows so
     // validation-only / zero-sales stockists are not dropped when the
@@ -131,15 +153,44 @@ class SecondarySalesDashboardData {
   }
 
   factory SecondarySalesDashboardData.fromJson(Map<String, dynamic> json) {
-    final data = json['data'] is Map<String, dynamic>
-        ? json['data'] as Map<String, dynamic>
-        : json;
+    final data = json['data'] is Map
+        ? Map<String, dynamic>.from(json['data'] as Map)
+        : Map<String, dynamic>.from(json);
+    final filtersJson = data['filters'] is Map
+        ? Map<String, dynamic>.from(data['filters'] as Map)
+        : <String, dynamic>{};
+
+    // Prefer top-level hierarchy, then data.hierarchy, then filters.hierarchy.
+    final rawHierarchy = json['hierarchy'] ??
+        data['hierarchy'] ??
+        filtersJson['hierarchy'];
+    final parsedHierarchy = SecondarySalesHierarchy.tryParse(rawHierarchy) ??
+        (filtersJson['unrestricted'] == true
+            ? const SecondarySalesHierarchy(unrestricted: true)
+            : null);
+
+    // Keep filters.hierarchy populated for older callers/tests.
+    if (parsedHierarchy != null && filtersJson['hierarchy'] == null) {
+      filtersJson['hierarchy'] = {
+        if (parsedHierarchy.viewerId != null)
+          'viewer_id': parsedHierarchy.viewerId,
+        if (parsedHierarchy.employeeId != null)
+          'employee_id': parsedHierarchy.employeeId,
+        if (parsedHierarchy.level != null) 'level': parsedHierarchy.level,
+        if (parsedHierarchy.employeeName != null)
+          'employee_name': parsedHierarchy.employeeName,
+        if (parsedHierarchy.visibleEmployeeCount != null)
+          'visible_employee_count': parsedHierarchy.visibleEmployeeCount,
+        if (parsedHierarchy.canViewTeam != null)
+          'can_view_team': parsedHierarchy.canViewTeam,
+        if (parsedHierarchy.canViewAll != null)
+          'can_view_all': parsedHierarchy.canViewAll,
+        'unrestricted': parsedHierarchy.unrestricted,
+      };
+    }
+
     return SecondarySalesDashboardData(
-      filters: SecondarySalesFilters.fromJson(
-        data['filters'] is Map
-            ? Map<String, dynamic>.from(data['filters'] as Map)
-            : const {},
-      ),
+      filters: SecondarySalesFilters.fromJson(filtersJson),
       overview: SecondarySalesOverview.fromJson(
         data['overview'] is Map
             ? Map<String, dynamic>.from(data['overview'] as Map)
@@ -160,7 +211,7 @@ class SecondarySalesDashboardData {
         data['recent_documents'],
       ),
       managerPerformance: SecondarySalesEmployeePerformance.listFrom(
-        data['manager_performance'],
+        data['manager_performance'] ?? data['employee_performance'],
       ),
       kamPerformance: SecondarySalesEmployeePerformance.listFrom(
         data['kam_performance'],
@@ -168,31 +219,95 @@ class SecondarySalesDashboardData {
       stockistPerformance: SecondarySalesStockistPerformance.listFrom(
         data['stockist_performance'],
       ),
+      hierarchy: parsedHierarchy,
     );
   }
 }
 
-class SecondarySalesHierarchyFilter {
+/// Hierarchy metadata from Laravel (source of truth for visibility).
+///
+/// Also kept as [SecondarySalesHierarchyFilter] typedef alias for older code.
+class SecondarySalesHierarchy {
+  final String? level;
+  final int? employeeId;
+  final String? employeeName;
+  final int? visibleEmployeeCount;
+  final bool? canViewTeam;
+  final bool? canViewAll;
+  /// Legacy fields still returned by some payloads.
   final int? viewerId;
   final bool unrestricted;
 
-  const SecondarySalesHierarchyFilter({
+  const SecondarySalesHierarchy({
+    this.level,
+    this.employeeId,
+    this.employeeName,
+    this.visibleEmployeeCount,
+    this.canViewTeam,
+    this.canViewAll,
     this.viewerId,
     this.unrestricted = false,
   });
 
-  factory SecondarySalesHierarchyFilter.fromJson(Map<String, dynamic> json) {
-    return SecondarySalesHierarchyFilter(
-      viewerId: _asInt(json['viewer_id']),
-      unrestricted: json['unrestricted'] == true,
+  bool get showsTeam =>
+      canViewTeam == true || canViewAll == true || unrestricted;
+
+  String get sectionTitle {
+    if (canViewAll == true || unrestricted) {
+      return 'ORGANIZATION SECONDARY SALES';
+    }
+    if (canViewTeam == true) return "MY TEAM'S SECONDARY SALES";
+    return 'MY SECONDARY SALES';
+  }
+
+  String get headerEyebrow {
+    if (canViewAll == true || unrestricted) return 'ORGANIZATION';
+    if (canViewTeam == true) return 'MY TEAM';
+    return 'MY PERFORMANCE';
+  }
+
+  factory SecondarySalesHierarchy.fromJson(Map<String, dynamic> json) {
+    return SecondarySalesHierarchy(
+      level: (json['level'] ?? json['hierarchy_level'])?.toString(),
+      employeeId: _asInt(
+        json['employee_id'] ?? json['emp_id'] ?? json['viewer_id'],
+      ),
+      employeeName: (json['employee_name'] ??
+              json['name'] ??
+              json['viewer_name'])
+          ?.toString(),
+      visibleEmployeeCount: _asInt(
+        json['visible_employee_count'] ??
+            json['employee_count'] ??
+            json['visible_employees'],
+      ),
+      canViewTeam: json.containsKey('can_view_team')
+          ? json['can_view_team'] == true
+          : null,
+      canViewAll: json.containsKey('can_view_all')
+          ? json['can_view_all'] == true
+          : null,
+      viewerId: _asInt(json['viewer_id'] ?? json['employee_id']),
+      unrestricted: json['unrestricted'] == true ||
+          json['can_view_all'] == true,
     );
   }
+
+  static SecondarySalesHierarchy? tryParse(dynamic raw) {
+    if (raw is Map) {
+      return SecondarySalesHierarchy.fromJson(Map<String, dynamic>.from(raw));
+    }
+    return null;
+  }
 }
+
+/// Backward-compatible name used by older dashboard code/tests.
+typedef SecondarySalesHierarchyFilter = SecondarySalesHierarchy;
 
 class SecondarySalesFilters {
   final List<SecondarySalesKamOption> availableKams;
   final List<SecondarySalesZoneOption> availableZones;
-  final SecondarySalesHierarchyFilter? hierarchy;
+  final SecondarySalesHierarchy? hierarchy;
 
   const SecondarySalesFilters({
     this.availableKams = const [],
@@ -206,18 +321,15 @@ class SecondarySalesFilters {
     final rawHierarchy = json['hierarchy'];
     return SecondarySalesFilters(
       availableKams: SecondarySalesKamOption.listFrom(
-        json['available_kams'] ?? json['kams'],
+        json['available_kams'] ?? json['kams'] ?? json['available_employees'],
       ),
       availableZones: SecondarySalesZoneOption.listFrom(
         json['available_zones'] ?? json['zones'],
       ),
-      hierarchy: rawHierarchy is Map
-          ? SecondarySalesHierarchyFilter.fromJson(
-              Map<String, dynamic>.from(rawHierarchy),
-            )
-          : json['unrestricted'] == true
-              ? const SecondarySalesHierarchyFilter(unrestricted: true)
-              : null,
+      hierarchy: SecondarySalesHierarchy.tryParse(rawHierarchy) ??
+          (json['unrestricted'] == true
+              ? const SecondarySalesHierarchy(unrestricted: true)
+              : null),
     );
   }
 }
@@ -643,13 +755,44 @@ class RecentSecondarySalesDocument {
 class SecondarySalesStockistInfo {
   final int? id;
   final String name;
+  final String? code;
+  /// Raw address object from Laravel (optional; UI prefers [addressDisplay]).
+  final Map<String, dynamic>? address;
+  /// Preformatted address from Laravel — do not rebuild in Flutter when set.
+  final String? addressDisplay;
 
-  const SecondarySalesStockistInfo({this.id, required this.name});
+  const SecondarySalesStockistInfo({
+    this.id,
+    required this.name,
+    this.code,
+    this.address,
+    this.addressDisplay,
+  });
+
+  /// Non-empty display address for list / selection cards.
+  String? get displayAddress {
+    final text = addressDisplay?.trim();
+    if (text == null || text.isEmpty) return null;
+    return text;
+  }
 
   factory SecondarySalesStockistInfo.fromJson(Map<String, dynamic> json) {
+    Map<String, dynamic>? addressMap;
+    final rawAddress = json['address'];
+    if (rawAddress is Map) {
+      addressMap = Map<String, dynamic>.from(rawAddress);
+    }
+
+    final display = (json['address_display'] ?? json['addressDisplay'])
+        ?.toString()
+        .trim();
+
     return SecondarySalesStockistInfo(
       id: _asInt(json['id'] ?? json['stockist_id']),
       name: (json['name'] ?? json['stockist_name'] ?? 'Stockist').toString(),
+      code: (json['code'] ?? json['stockist_code'])?.toString(),
+      address: addressMap,
+      addressDisplay: (display == null || display.isEmpty) ? null : display,
     );
   }
 }
@@ -670,6 +813,10 @@ class SecondarySalesStockistStatement {
   final String? errorMessage;
   final bool hasValidationIssue;
   final String? validationMessage;
+  final bool isMultiPage;
+  final int? totalPages;
+  final int? processedPages;
+  final int? failedPages;
 
   const SecondarySalesStockistStatement({
     this.id,
@@ -687,6 +834,10 @@ class SecondarySalesStockistStatement {
     this.errorMessage,
     this.hasValidationIssue = false,
     this.validationMessage,
+    this.isMultiPage = false,
+    this.totalPages,
+    this.processedPages,
+    this.failedPages,
   });
 
   String get identity =>
@@ -719,6 +870,26 @@ class SecondarySalesStockistStatement {
         if (status.isEmpty) return 'Unknown';
         return status[0].toUpperCase() + status.substring(1);
     }
+  }
+
+  /// One multi-page batch = one statement card (never per-page rows).
+  String get multiPageSummary {
+    final total = totalPages;
+    if (total == null || total <= 0) return '';
+    if (isCompleted) return '$total Pages · Completed';
+    if (isFailed) {
+      final processed = processedPages ?? 0;
+      final failed = failedPages ?? 0;
+      return '$total Pages · $processed processed · $failed failed';
+    }
+    if (isProcessing || isPending) {
+      final processed = processedPages;
+      if (processed != null && processed > 0 && processed < total) {
+        return 'Processing: $processed/$total';
+      }
+      return 'Processing multi-page statement...';
+    }
+    return '$total Pages';
   }
 
   factory SecondarySalesStockistStatement.fromJson(Map<String, dynamic> json) {
@@ -762,6 +933,15 @@ class SecondarySalesStockistStatement {
         ) ||
         (validationMsg?.trim().isNotEmpty ?? false);
 
+    final totalPages = _asInt(json['total_pages'] ?? json['totalPages']);
+    final processedPages =
+        _asInt(json['processed_pages'] ?? json['processedPages']);
+    final failedPages = _asInt(json['failed_pages'] ?? json['failedPages']);
+    final isMultiPage = asBool(
+          json['is_multi_page'] ?? json['isMultiPage'],
+        ) ||
+        (totalPages != null && totalPages > 1);
+
     return SecondarySalesStockistStatement(
       id: _asInt(json['id']),
       documentId: _asInt(
@@ -775,7 +955,7 @@ class SecondarySalesStockistStatement {
       fileName: (json['file_name'] ??
               json['fileName'] ??
               json['name'] ??
-              'Untitled statement')
+              (isMultiPage ? 'Stock Statement' : 'Untitled statement'))
           .toString(),
       status: (json['status'] ?? 'unknown').toString(),
       stockistName: stockistName,
@@ -794,7 +974,8 @@ class SecondarySalesStockistStatement {
               json['updatedAt'])
           ?.toString(),
       statementMonth:
-          (json['statement_month'] ?? json['statementMonth'])?.toString(),
+          (json['statement_month'] ?? json['statementMonth'] ?? json['month'])
+              ?.toString(),
       errorMessage: (json['error'] ??
               json['error_message'] ??
               json['errorMessage'] ??
@@ -803,6 +984,10 @@ class SecondarySalesStockistStatement {
           ?.toString(),
       hasValidationIssue: hasValidation,
       validationMessage: validationMsg,
+      isMultiPage: isMultiPage,
+      totalPages: totalPages,
+      processedPages: processedPages,
+      failedPages: failedPages,
     );
   }
 

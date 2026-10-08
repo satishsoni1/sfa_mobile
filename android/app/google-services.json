@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "615438101526",
-    "project_id": "himalaya-e7d22",
-    "storage_bucket": "himalaya-e7d22.firebasestorage.app"
+    "project_number": "875489413283",
+    "project_id": "secondary-sales-mobile-app",
+    "storage_bucket": "secondary-sales-mobile-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:615438101526:android:5bea291e2c6dca6ffa5937",
+        "mobilesdk_app_id": "1:875489413283:android:cc63d505a5f09a84f55716",
         "android_client_info": {
           "package_name": "com.globalspace.himalaya"
         }
@@ -15,26 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyAnzOtwTTVjYgHRax4xWn_APMN5gRN8MBY"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:615438101526:android:92807169bad73c86fa5937",
-        "android_client_info": {
-          "package_name": "in.globalspace.vodoclm_himalaya"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAnzOtwTTVjYgHRax4xWn_APMN5gRN8MBY"
+          "current_key": "AIzaSyChAOFF1fPTQRD-2n4ZF3nbOjM74VG5BM4"
         }
       ],
       "services": {

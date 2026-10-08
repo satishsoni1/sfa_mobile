@@ -273,6 +273,17 @@ class _BatchesListScreenState extends State<BatchesListScreen> {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ],
+                        if (batch.isMultiPage) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            batch.multiPageProgressLabel,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF450095),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

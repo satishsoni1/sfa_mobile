@@ -1,5 +1,5 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../data/services/api_service.dart';
 import '../data/services/fcm_notification_service.dart';
@@ -84,19 +84,23 @@ class AuthProvider with ChangeNotifier {
 
   // ─── Private ───────────────────────────────────────────────────────────────
 
-  /// Initializes the FCM service for a logged-in user.
-  /// Safe to call multiple times — the service guards against re-initialization.
+  /// Initializes the FCM service for a logged-in user (Android / iOS / Web).
+  /// Failures never fail login — the service catches and logs errors.
   Future<void> _initFcm({
     required String authToken,
     required User user,
   }) async {
-    await FcmNotificationService.instance.initializeAfterLogin(
-      authToken: authToken,
-      employeeCode: user.employeeCode,
-      onForegroundMessage: (message) {
-        // Invoke the callback registered by the UI layer (DashboardScreen).
-        onForegroundMessage?.call(message);
-      },
-    );
+    try {
+      await FcmNotificationService.instance.initializeAfterLogin(
+        authToken: authToken,
+        employeeCode: user.employeeCode,
+        onForegroundMessage: (message) {
+          // Non-Secondary-Sales actions still use the Dashboard snackbar.
+          onForegroundMessage?.call(message);
+        },
+      );
+    } catch (e) {
+      debugPrint('[AuthProvider] FCM init failed (login continues): $e');
+    }
   }
 }

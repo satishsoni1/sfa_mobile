@@ -500,7 +500,7 @@ class _StatementCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            statement.fileName,
+            statement.isMultiPage ? 'Stock Statement' : statement.fileName,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -511,6 +511,17 @@ class _StatementCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           _StatusBadge(status: statement.displayStatus, raw: statement.normalizedStatus),
+          if (statement.isMultiPage && statement.multiPageSummary.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              statement.multiPageSummary,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF450095),
+              ),
+            ),
+          ],
           if (statement.statementMonth != null &&
               statement.statementMonth!.isNotEmpty) ...[
             const SizedBox(height: 6),

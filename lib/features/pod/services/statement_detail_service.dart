@@ -43,9 +43,13 @@ class StatementDetailService {
           return true;
         }());
         return detail;
-      } else {
-        throw Exception('Failed to load statement (${response.statusCode}): ${response.body}');
       }
+      if (response.statusCode == 403) {
+        throw Exception('You are not authorized to view this statement.');
+      }
+      throw Exception(
+        'Failed to load statement (${response.statusCode}): ${response.body}',
+      );
     } catch (e) {
       print('[StatementDetailService] Error: $e');
       rethrow;

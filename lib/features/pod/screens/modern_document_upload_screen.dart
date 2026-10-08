@@ -4,21 +4,25 @@ import 'package:flutter/material.dart';
 import 'package:zforce/features/pod/config/pod_config.dart';
 import 'package:zforce/features/pod/models/upload_record.dart';
 import 'package:zforce/features/pod/screens/document_upload_screen.dart';
-import 'package:zforce/features/pod/screens/notifications_screen.dart';
-import 'package:zforce/features/pod/screens/pod_upload_screen.dart';
-import 'package:zforce/features/pod/screens/e_invoice_data_screen.dart';
-import 'package:zforce/features/pod/screens/batches_list_screen.dart';
 import 'package:zforce/features/pod/services/secondary_sales_background_monitor.dart';
 import 'package:zforce/features/pod/services/secondary_sales_data_refresh.dart';
 import 'package:zforce/features/pod/services/secondary_sales_upload_history_sync.dart';
 import 'package:zforce/features/pod/services/upload_record_store.dart';
 import 'package:zforce/features/pod/widgets/modern_ui_components.dart';
+import 'package:zforce/features/pod/widgets/secondary_sales_leave_upload_dialog.dart';
 import 'package:zforce/features/pod/routes/pod_routes.dart';
 
 class ModernDocumentUploadScreen extends StatefulWidget {
-  const ModernDocumentUploadScreen({super.key, this.isActive = true});
+  const ModernDocumentUploadScreen({
+    super.key,
+    this.isActive = true,
+    this.onBackPressed,
+  });
 
   final bool isActive;
+
+  /// When hosted in [MainNavigation], parent handles leave-confirm + tab switch.
+  final Future<void> Function()? onBackPressed;
 
   @override
   State<ModernDocumentUploadScreen> createState() =>
@@ -68,9 +72,22 @@ class _ModernDocumentUploadScreenState extends State<ModernDocumentUploadScreen>
     super.dispose();
   }
 
+  Future<void> _handleBack() async {
+    if (widget.onBackPressed != null) {
+      // Embedded in MainNavigation — parent shows Leave Upload? and switches tab.
+      await widget.onBackPressed!();
+      return;
+    }
+    // Standalone route (deep link / named route).
+    final leave = await showSecondarySalesLeaveUploadDialog(context);
+    if (leave && mounted) {
+      Navigator.of(context).maybePop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: _buildModernAppBar(),
       body: Column(
@@ -85,6 +102,19 @@ class _ModernDocumentUploadScreenState extends State<ModernDocumentUploadScreen>
         ],
       ),
     );
+
+    // Only intercept system back when this screen is its own route.
+    // When embedded, MainNavigation's PopScope owns system back.
+    if (widget.onBackPressed != null) return scaffold;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleBack();
+      },
+      child: scaffold,
+    );
   }
 
   AppBar _buildModernAppBar() {
@@ -96,9 +126,7 @@ class _ModernDocumentUploadScreenState extends State<ModernDocumentUploadScreen>
       leading: IconButton(
         icon: const Icon(Icons.arrow_back, color: Colors.black),
         tooltip: 'Back',
-        onPressed: () {
-          Navigator.maybePop(context);
-        },
+        onPressed: _handleBack,
       ),
       actions: const [
         // Notification icon hidden as per requirement
@@ -259,6 +287,19 @@ class _PODUploadPageState extends State<PODUploadPage> {
               onTap: () async {
                 await Navigator.pushNamed(context, PodRoutes.batchesList);
                 await _loadRecentUploads();
+              },
+            ),
+            const SizedBox(height: 16),
+            ModernUIComponents.buildUploadCard(
+              title: 'Upload Status Report',
+              subtitle: 'Hierarchy-aware upload coverage by month',
+              icon: Icons.assessment_outlined,
+              color: const Color(0xFF00897B),
+              onTap: () async {
+                await Navigator.pushNamed(
+                  context,
+                  PodRoutes.uploadStatusReport,
+                );
               },
             ),
             if (_isRefreshing) ...[

@@ -126,6 +126,46 @@ class BatchService {
     );
   }
 
+  /// Asks Laravel to reprocess an existing Secondary Sales batch.
+  Future<void> reprocessBatch(int batchId) async {
+    if (batchId <= 0) {
+      throw const BatchDateUpdateException('Invalid batch id for reprocess.');
+    }
+    final uri = Uri.parse(secondarySalesBatchReprocessUrl(batchId));
+    http.Response response;
+    try {
+      response = await _apiClient
+          .post(uri, body: jsonEncode({}))
+          .timeout(const Duration(seconds: 45));
+    } on TimeoutException {
+      throw const BatchDateUpdateException(
+        'Request timed out while starting reprocess.',
+      );
+    } on UnauthorizedException {
+      rethrow;
+    }
+
+    if (response.statusCode == 200 ||
+        response.statusCode == 201 ||
+        response.statusCode == 202) {
+      return;
+    }
+
+    throw BatchDateUpdateException(
+      _extractErrorMessage(
+        response.body,
+        fallback: switch (response.statusCode) {
+          403 => 'You are not authorized to reprocess this batch.',
+          404 => 'Batch not found.',
+          409 || 422 =>
+            'This batch cannot be reprocessed right now.',
+          _ => 'Unable to reprocess batch (${response.statusCode}).',
+        },
+      ),
+      response.statusCode,
+    );
+  }
+
   Map<String, dynamic>? _tryDecodeMap(String body) {
     if (body.trim().isEmpty) return null;
     try {
