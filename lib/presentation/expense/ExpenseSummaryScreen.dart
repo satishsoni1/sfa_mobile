@@ -829,7 +829,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Food Bill'      : Icons.restaurant_outlined,
       'Stationary'     : Icons.edit_note_outlined,
       'Award'          : Icons.emoji_events_outlined,
-      'Patrol Charges' : Icons.local_police_outlined,
+      'Petrol'         : Icons.local_gas_station,
+      'Patrol Charges' : Icons.local_gas_station,
       'Misc'           : Icons.more_horiz,
     };
     final claimColors = {
@@ -843,6 +844,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       'Food Bill'      : Colors.green,
       'Stationary'     : Colors.teal,
       'Award'          : Colors.amber,
+      'Petrol'         : Colors.deepPurple,
       'Patrol Charges' : Colors.deepPurple,
       'Misc'           : Colors.grey,
     };
@@ -870,7 +872,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               backgroundColor: color.withValues(alpha: 0.1),
               child: Icon(icon, color: color, size: 20),
             ),
-            title: Text(type,
+            title: Text(type == 'Patrol Charges' ? 'Petrol' : type,
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
             subtitle: claim['bill_attachment'] != null
                 // Bill exists
@@ -1978,7 +1980,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
 
   static const _claimTypes = [
     'Mobile', 'Internet', 'Hotel', 'Postage',
-    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Patrol Charges', 'Misc',
+    'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Petrol', 'Misc',
   ];
 
   final _claimIcons = {
@@ -1992,7 +1994,8 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
     'Food Bill': Icons.restaurant_outlined,
     'Stationary': Icons.edit_note_outlined,
     'Award': Icons.emoji_events_outlined,
-    'Patrol Charges': Icons.local_police_outlined,
+    'Petrol': Icons.local_gas_station,
+    'Patrol Charges': Icons.local_gas_station,
     'Misc': Icons.more_horiz,
   };
 
@@ -2008,7 +2011,7 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
   void initState() {
     super.initState();
     if (widget.initialType != null) {
-      _selectedType = widget.initialType!;
+      _selectedType = widget.initialType == 'Patrol Charges' ? 'Petrol' : widget.initialType!;
     }
     _fetchClaimRates();
   }
