@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../data/services/api_service.dart';
 import 'brand_dr_mapping_doctor_screen.dart';
@@ -28,18 +28,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
   bool _isLoadingBrands = true;
   bool _isLoadingSummary = false;
   bool _isLoadingTeamBrands = false;
-  bool _isSubmitting = false;
-  bool _isApproving = false;
-  bool _isRejecting = false;
-
-  String? _myApprovalStatus;
-  String? _myRejectionReason;
-  String? _subApprovalStatus;
-  String? _subRejectionReason;
+  int? _submittingBrandId;
+  int? _approvingBrandId;
+  int? _rejectingBrandId;
 
   String _summarySpecialityFilter = 'All';
-
-  // â”€â”€ Derived â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   List<Map<String, dynamic>> get _filteredBrands {
     final q = _searchCtrl.text.toLowerCase();
@@ -69,23 +62,10 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
   int get _totalTagCount =>
       _brands.fold(0, (s, b) => s + (int.tryParse(b['doctor_count']?.toString() ?? '0') ?? 0));
 
-  bool get _isMyListLocked =>
-      _myApprovalStatus == 'pending' || _myApprovalStatus == 'approved';
-
-  /// quota is the MINIMUM required â€” show submit when every brand meets it.
-  bool get _allBrandQuotasComplete =>
-      _brands.isNotEmpty && _brands.every((b) {
-        final quota = int.tryParse(b['quota']?.toString() ?? '0') ?? 0;
-        final count = int.tryParse(b['doctor_count']?.toString() ?? '0') ?? 0;
-        return quota <= 0 || count >= quota;
-      });
-
   /// Reads brand name from 'brand' field first (dr-brand-map response), falls
   /// back to 'name' so both API shapes are handled gracefully.
   String _brandDisplayName(Map<String, dynamic> b) =>
       (b['brand'] ?? b['name'])?.toString() ?? '';
-
-  // â”€â”€ Lifecycle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   @override
   void initState() {
@@ -115,8 +95,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     super.dispose();
   }
 
-  // â”€â”€ Data Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   Future<void> _loadBrands() async {
     setState(() => _isLoadingBrands = true);
     try {
@@ -125,8 +103,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
       if (mounted) {
         setState(() {
           _brands = brands;
-          _myApprovalStatus = _readApprovalStatus(brands);
-          _myRejectionReason = _readRejectionReason(brands);
         });
       }
     } catch (_) {}
@@ -182,16 +158,12 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
   Future<void> _loadTeamBrands(int userId) async {
     setState(() {
       _isLoadingTeamBrands = true;
-      _subApprovalStatus = null;
-      _subRejectionReason = null;
     });
     try {
       final brands = await ApiService().getDrBrandMapBrands(userId: userId);
       if (mounted) {
         setState(() {
           _teamBrands = brands;
-          _subApprovalStatus = _readApprovalStatus(brands);
-          _subRejectionReason = _readRejectionReason(brands);
         });
       }
     } catch (_) {
@@ -200,25 +172,38 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     if (mounted) setState(() => _isLoadingTeamBrands = false);
   }
 
-  // â”€â”€ Approval / Rejection Flow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  String? _getBrandStatus(Map<String, dynamic> brand) {
+    final raw = brand['approval_status'] ??
+        brand['brand_approval_status'] ??
+        brand['status'];
+    final s = raw?.toString().toLowerCase().trim();
+    if (s == 'submitted') return 'pending';
+    if (s == 'pending' || s == 'approved' || s == 'rejected') return s;
+    return null;
+  }
 
-  Future<void> _submitForApproval() async {
-    if (_brands.isEmpty) return;
-    final int brandId = int.tryParse(_brands.first['id']?.toString() ?? '0') ?? 0;
-    
+  String? _getBrandRejectionReason(Map<String, dynamic> brand) {
+    return (brand['rejection_reason'] ?? brand['reject_reason'])?.toString();
+  }
+
+  Future<void> _submitBrand(Map<String, dynamic> brand) async {
+    final int brandId = int.tryParse(brand['id']?.toString() ?? '0') ?? 0;
+    if (brandId <= 0) return;
+    final brandName = _brandDisplayName(brand);
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(children: [
-          Icon(Icons.send_outlined, color: _purple),
-          SizedBox(width: 10),
-          Text('Submit for Approval',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        title: Row(children: [
+          const Icon(Icons.send_outlined, color: _purple),
+          const SizedBox(width: 10),
+          Expanded(child: Text('Submit $brandName?',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
         ]),
-        content: const Text(
-          'Submit Zorberry Tab Daily Rxn List for manager approval?',
-          style: TextStyle(fontSize: 13),
+        content: Text(
+          'Submit doctor mapping for "$brandName" for manager approval?',
+          style: const TextStyle(fontSize: 13),
         ),
         actions: [
           TextButton(
@@ -239,54 +224,95 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     );
     if (confirm != true) return;
 
-    setState(() => _isSubmitting = true);
+    setState(() => _submittingBrandId = brandId);
     try {
       await ApiService().submitDrBrandMapApproval(brandId);
       if (mounted) {
-        setState(() => _myApprovalStatus = 'pending');
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$brandName submitted for approval!'),
+          backgroundColor: Colors.green,
+        ));
         await _loadBrands();
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Zorberry Tab Daily Rxn List submitted for approval!'),
-          backgroundColor: Colors.green,
-        ));
       }
     } catch (e) {
       if (mounted) {
+        final err = e.toString().replaceFirst('Exception: ', '').trim();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed: $e'),
+          content: Text('Failed: $err'),
           backgroundColor: Colors.red,
         ));
       }
+    } finally {
+      if (mounted) setState(() => _submittingBrandId = null);
     }
-    if (mounted) setState(() => _isSubmitting = false);
   }
 
-  Future<void> _approveBrandList() async {
-    if (_selectedSubId == null || _teamBrands.isEmpty) return;
-    final int brandId = int.tryParse(_teamBrands.first['id']?.toString() ?? '0') ?? 0;
-    
-    setState(() => _isApproving = true);
+  Future<void> _approveSingleBrand(int userId, Map<String, dynamic> brand) async {
+    final int brandId = int.tryParse(brand['id']?.toString() ?? '0') ?? 0;
+    if (brandId <= 0) return;
+    final brandName = _brandDisplayName(brand);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(children: [
+          Icon(Icons.check_circle_outline, color: Colors.green),
+          SizedBox(width: 10),
+          Text('Approve Brand',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        ]),
+        content: Text(
+          'Approve doctor mapping for "$brandName"?',
+          style: const TextStyle(fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Approve'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+
+    setState(() => _approvingBrandId = brandId);
     try {
-      await ApiService().approveDrBrandMap(_selectedSubId!, brandId);
+      await ApiService().approveDrBrandMap(userId, brandId);
       if (mounted) {
-        setState(() => _subApprovalStatus = 'approved');
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Zorberry Tab Daily Rxn List approved!'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$brandName approved!'),
           backgroundColor: Colors.green,
         ));
+        await _loadTeamBrands(userId);
       }
     } catch (e) {
       if (mounted) {
+        final err = e.toString().replaceFirst('Exception: ', '').trim();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed: $e'),
+          content: Text('Failed: $err'),
           backgroundColor: Colors.red,
         ));
       }
+    } finally {
+      if (mounted) setState(() => _approvingBrandId = null);
     }
-    if (mounted) setState(() => _isApproving = false);
   }
 
-  Future<void> _showRejectDialog() async {
+  Future<void> _rejectSingleBrand(int userId, Map<String, dynamic> brand) async {
+    final int brandId = int.tryParse(brand['id']?.toString() ?? '0') ?? 0;
+    if (brandId <= 0) return;
+    final brandName = _brandDisplayName(brand);
+
     final reasonCtrl = TextEditingController();
     final reason = await showDialog<String>(
       context: context,
@@ -295,15 +321,15 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
         title: Row(children: [
           Icon(Icons.cancel_outlined, color: Colors.red.shade600),
           const SizedBox(width: 10),
-          const Text('Reject List',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          Expanded(child: Text('Reject $brandName',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
         ]),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Please provide a reason for rejection:',
-                style: TextStyle(fontSize: 13)),
+            Text('Provide a reason for rejecting "$brandName":',
+                style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 12),
             TextField(
               controller: reasonCtrl,
@@ -333,39 +359,31 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
         ],
       ),
     );
-    if (reason == null) return;
-    await _rejectBrandList(reason);
-  }
+    if (reason == null || reason.isEmpty) return;
 
-  Future<void> _rejectBrandList(String reason) async {
-    if (_selectedSubId == null || _teamBrands.isEmpty) return;
-    final int brandId = int.tryParse(_teamBrands.first['id']?.toString() ?? '0') ?? 0;
-    
-    setState(() => _isRejecting = true);
+    setState(() => _rejectingBrandId = brandId);
     try {
-      await ApiService().rejectDrBrandMap(_selectedSubId!, brandId, reason);
+      await ApiService().rejectDrBrandMap(userId, brandId, reason);
       if (mounted) {
-        setState(() {
-          _subApprovalStatus = 'rejected';
-          _subRejectionReason = reason;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Zorberry Tab Daily Rxn List rejected.'),
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('$brandName rejected.'),
           backgroundColor: Colors.orange,
         ));
+        await _loadTeamBrands(userId);
       }
     } catch (e) {
       if (mounted) {
+        final err = e.toString().replaceFirst('Exception: ', '').trim();
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Failed: $e'),
+          content: Text('Failed: $err'),
           backgroundColor: Colors.red,
         ));
       }
+    } finally {
+      if (mounted) setState(() => _rejectingBrandId = null);
     }
-    if (mounted) setState(() => _isRejecting = false);
   }
 
-  // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   @override
   Widget build(BuildContext context) {
@@ -457,7 +475,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     ),
   );
 
-  // â”€â”€ Brands (Dr List) Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildBrandsTab() {
     return Column(
@@ -467,7 +484,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
           child: TextField(
             controller: _searchCtrl,
             decoration: InputDecoration(
-              hintText: 'Search brandsâ€¦',
+              hintText: 'Search brands…',
               hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
               prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
               suffixIcon: _searchCtrl.text.isNotEmpty
@@ -484,11 +501,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
             ),
           ),
         ),
-        if (!_isLoadingBrands)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 4, 14, 6),
-            child: _buildSubmitSection(),
-          ),
         Expanded(
           child: _isLoadingBrands
               ? const Center(child: CircularProgressIndicator())
@@ -497,7 +509,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                   : RefreshIndicator(
                       onRefresh: _loadBrands,
                       child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 24),
+                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
                         itemCount: _filteredBrands.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _buildBrandCard(_filteredBrands[i]),
@@ -522,150 +534,449 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final color = _brandColor(name);
 
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () async {
-          await Navigator.push(context,
-              MaterialPageRoute(builder: (_) => BrandDrMappingDoctorScreen(
-                brand: brand,
-                targetUserId: targetUserId,
-                readOnly: readOnly || _isMyListLocked,
-              )));
-          if (targetUserId == null) {
-            _loadBrands();
-            _loadDoctorSummary();
-          } else {
-            _loadTeamBrands(targetUserId);
-          }
-        },
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.grey.shade200),
-            boxShadow: [
-              BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2))
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  // Avatar
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: color.withValues(alpha: 0.3)),
-                    ),
-                    child: Center(
-                      child: Text(initial,
-                          style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: color)),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Name + division
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 6,
+              offset: const Offset(0, 2))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Tappable Card Body (Opens Doctor List)
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+              onTap: () => _openDoctorScreen(brand, readOnly: readOnly, targetUserId: targetUserId),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
                       children: [
-                        Text(name,
-                            style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w600, fontSize: 14)),
-                        if (division.isNotEmpty)
-                          Text(division,
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.grey.shade500)),
+                        // Avatar
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: color.withValues(alpha: 0.3)),
+                          ),
+                          child: Center(
+                            child: Text(initial,
+                                style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: color)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Name + division
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(name,
+                                  style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w600, fontSize: 14)),
+                              if (division.isNotEmpty)
+                                Text(division,
+                                    style: TextStyle(
+                                        fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                        ),
+                        // Doctor count badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: quotaMet ? Colors.green.shade50 : color.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: quotaMet ? Border.all(color: Colors.green.shade200) : null,
+                          ),
+                          child: Column(children: [
+                            Text(quota > 0 ? '$count/$quota' : '$count',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: quota > 0 ? 14 : 18,
+                                    color: quotaMet ? Colors.green.shade700 : color)),
+                            Text('Drs',
+                                style: TextStyle(fontSize: 9, color: quotaMet ? Colors.green.shade700 : color)),
+                          ]),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.chevron_right, color: Colors.grey.shade400),
                       ],
                     ),
-                  ),
-                  // Doctor count badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: quotaMet ? Colors.green.shade50 : color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: quotaMet ? Border.all(color: Colors.green.shade200) : null,
-                    ),
-                    child: Column(children: [
-                      Text(quota > 0 ? '$count/$quota' : '$count',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: quota > 0 ? 14 : 18,
-                              color: quotaMet ? Colors.green.shade700 : color)),
-                      Text('Drs',
-                          style: TextStyle(fontSize: 9, color: quotaMet ? Colors.green.shade700 : color)),
-                    ]),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade400),
-                ],
-              ),
-              // Preferred specialities
-              if (preferredSps.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.shade200),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.star_rounded, size: 13, color: Colors.amber.shade700),
-                      const SizedBox(width: 5),
-                      Text('Preferred Speciality   ',
-                          style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.amber.shade800,
-                              fontWeight: FontWeight.w600)),
-                      Expanded(
-                        child: Wrap(
-                          spacing: 5,
-                          runSpacing: 4,
-                          children: preferredSps
-                              .map((sp) => Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 7, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.shade100,
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Text(sp,
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.amber.shade900,
-                                            fontWeight: FontWeight.w500)),
-                                  ))
-                              .toList(),
+                    // Preferred specialities
+                    if (preferredSps.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade200),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.star_rounded, size: 13, color: Colors.amber.shade700),
+                            const SizedBox(width: 5),
+                            Text('Preferred Speciality   ',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.amber.shade800,
+                                    fontWeight: FontWeight.w600)),
+                            Expanded(
+                              child: Wrap(
+                                spacing: 5,
+                                runSpacing: 4,
+                                children: preferredSps
+                                    .map((sp) => Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 7, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.amber.shade100,
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(sp,
+                                              style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.amber.shade900,
+                                                  fontWeight: FontWeight.w500)),
+                                        ))
+                                    .toList(),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
-        ),
+          // Divider & Action / Status Section
+          const Divider(height: 1, thickness: 1, color: Color(0xFFF0F0F0)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            child: _buildBrandCardActions(brand, readOnly: readOnly, targetUserId: targetUserId),
+          ),
+        ],
       ),
     );
   }
 
-  // â”€â”€ Team Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _openDoctorScreen(
+    Map<String, dynamic> brand, {
+    bool readOnly = false,
+    int? targetUserId,
+  }) async {
+    final brandStatus = _getBrandStatus(brand);
+    final isBrandLocked = readOnly || brandStatus == 'pending' || brandStatus == 'approved';
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BrandDrMappingDoctorScreen(
+          brand: brand,
+          targetUserId: targetUserId,
+          readOnly: readOnly,
+          isDoctorListLocked: isBrandLocked,
+        ),
+      ),
+    );
+
+    if (targetUserId == null) {
+      _loadBrands();
+      _loadDoctorSummary();
+    } else {
+      _loadTeamBrands(targetUserId);
+    }
+  }
+
+  Widget _buildBrandCardActions(
+    Map<String, dynamic> brand, {
+    bool readOnly = false,
+    int? targetUserId,
+  }) {
+    final brandId = int.tryParse(brand['id']?.toString() ?? '0') ?? 0;
+    final count = int.tryParse(brand['doctor_count']?.toString() ?? '0') ?? 0;
+    final quota = int.tryParse(brand['quota']?.toString() ?? '0') ?? 0;
+    final status = _getBrandStatus(brand);
+    final rejectionReason = _getBrandRejectionReason(brand);
+
+    if (readOnly && targetUserId != null) {
+      // ── Manager Team View actions ──
+      final isApproving = _approvingBrandId == brandId;
+      final isRejecting = _rejectingBrandId == brandId;
+      final isBusy = isApproving || isRejecting;
+
+      if (status == 'approved') {
+        return _brandStatusBadge(
+          icon: Icons.verified,
+          color: Colors.green,
+          label: 'Approved',
+        );
+      }
+      if (status == 'rejected') {
+        return _brandStatusBadge(
+          icon: Icons.cancel,
+          color: Colors.red,
+          label: rejectionReason != null && rejectionReason.isNotEmpty
+              ? 'Rejected: $rejectionReason'
+              : 'Rejected',
+        );
+      }
+      if (status == 'pending') {
+        return Row(
+          children: [
+            Expanded(
+              child: SizedBox(
+                height: 36,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 1,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onPressed: isBusy ? null : () => _approveSingleBrand(targetUserId, brand),
+                  icon: isApproving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.check_circle_outline, size: 16),
+                  label: Text(
+                    isApproving ? 'Approving...' : 'Approve',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: SizedBox(
+                height: 36,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red.shade600,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 1,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  onPressed: isBusy ? null : () => _rejectSingleBrand(targetUserId, brand),
+                  icon: isRejecting
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.cancel_outlined, size: 16),
+                  label: Text(
+                    isRejecting ? 'Rejecting...' : 'Reject',
+                    style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      }
+
+      // Not submitted yet
+      return _brandStatusBadge(
+        icon: Icons.info_outline,
+        color: Colors.grey,
+        label: 'Not submitted for approval yet ($count/$quota tagged)',
+      );
+    }
+
+    // ── User My List actions ──
+    final isSubmitting = _submittingBrandId == brandId;
+    final bool isExactQuota = quota > 0 && count == quota;
+
+    if (status == 'approved') {
+      return _brandStatusBadge(
+        icon: Icons.verified,
+        color: Colors.green,
+        label: 'Approved by Manager',
+      );
+    }
+
+    if (status == 'pending') {
+      return _brandStatusBadge(
+        icon: Icons.hourglass_empty,
+        color: Colors.blue,
+        label: 'Pending Manager Approval',
+      );
+    }
+
+    if (status == 'rejected') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _brandStatusBadge(
+            icon: Icons.cancel,
+            color: Colors.red,
+            label: rejectionReason != null && rejectionReason.isNotEmpty
+                ? 'Rejected: $rejectionReason'
+                : 'Rejected — Update list and re-submit',
+          ),
+          const SizedBox(height: 8),
+          if (isExactQuota)
+            SizedBox(
+              width: double.infinity,
+              height: 36,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _purple,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  elevation: 1,
+                ),
+                onPressed: isSubmitting ? null : () => _submitBrand(brand),
+                icon: isSubmitting
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.send_outlined, size: 15),
+                label: Text(
+                  isSubmitting ? 'Submitting...' : 'Re-submit for Approval',
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+                ),
+              ),
+            )
+          else
+            _brandQuotaHint(count: count, quota: quota),
+        ],
+      );
+    }
+
+    // status is unsubmitted (null)
+    if (isExactQuota) {
+      return SizedBox(
+        width: double.infinity,
+        height: 36,
+        child: ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _purple,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            elevation: 1,
+          ),
+          onPressed: isSubmitting ? null : () => _submitBrand(brand),
+          icon: isSubmitting
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.send_outlined, size: 15),
+          label: Text(
+            isSubmitting ? 'Submitting...' : 'Submit for Approval',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
+          ),
+        ),
+      );
+    }
+
+    return _brandQuotaHint(count: count, quota: quota);
+  }
+
+  Widget _brandStatusBadge({
+    required IconData icon,
+    required MaterialColor color,
+    required String label,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: color.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color.shade700, size: 15),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: color.shade800,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _brandQuotaHint({required int count, required int quota}) {
+    if (quota <= 0) {
+      return const SizedBox.shrink();
+    }
+    final isShort = count < quota;
+    final diff = (quota - count).abs();
+    final message = isShort
+        ? 'Tag $diff more doctor${diff == 1 ? '' : 's'} to submit (Target: $quota)'
+        : 'Remove $diff doctor${diff == 1 ? '' : 's'} to meet exact quota ($quota)';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: isShort ? Colors.orange.shade50 : Colors.red.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: isShort ? Colors.orange.shade200 : Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isShort ? Icons.info_outline : Icons.warning_amber_rounded,
+            color: isShort ? Colors.orange.shade700 : Colors.red.shade700,
+            size: 15,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isShort ? Colors.orange.shade800 : Colors.red.shade800,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildTeamTab() {
     final brands = _teamBrands.where((b) {
@@ -685,14 +996,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
           if (_subordinates.isNotEmpty) ...[
             _buildSubordinatePicker(),
             const SizedBox(height: 10),
-          ],
-          if (_selectedSubId != null) ...[
-            _buildSubApprovalBanner(),
-            if (_subApprovalStatus == 'pending') ...[
-              const SizedBox(height: 8),
-              _buildApprovalButtons(),
-            ],
-            const SizedBox(height: 8),
           ],
           _buildSectionHeader(
             _selectedSubId == null ? 'Select a team member' : '${brands.length} Brands',
@@ -720,12 +1023,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     );
   }
 
-  // â”€â”€ Dr. Summary Tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Widget _buildSummaryTab() {
     return Column(
       children: [
-        // â”€â”€ Error banner from API (e.g. 403 "Brand list is not approved.") â”€â”€
+        //  Error banner from API (e.g. 403 "Brand list is not approved.") 
         if (_summaryError != null)
           Expanded(
             child: RefreshIndicator(
@@ -764,7 +1066,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
             ),
           )
         else ...[
-          // â”€â”€ Speciality filter chips â”€â”€
+          // Speciality filter chips
           if (_doctorSummary.isNotEmpty && _summarySpecialities.length > 1)
             Container(
               height: 46,
@@ -961,85 +1263,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
   // â”€â”€ Submit Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  Widget _buildSubmitSection() {
-    if (_myApprovalStatus == 'approved') {
-      return _statusBanner(
-        icon: Icons.verified,
-        color: Colors.green,
-        title: 'List Approved!',
-        subtitle: 'Your Zorberry Tab Daily Rxn List has been approved by your manager.',
-      );
-    }
-    if (_myApprovalStatus == 'pending') {
-      return _statusBanner(
-        icon: Icons.hourglass_empty,
-        color: Colors.blue,
-        title: 'Pending Approval',
-        subtitle: 'Your Zorberry Tab Daily Rxn List is submitted and awaiting manager review.',
-      );
-    }
-    if (_myApprovalStatus == 'rejected') {
-      return Column(children: [
-        _statusBanner(
-          icon: Icons.cancel,
-          color: Colors.red,
-          title: 'List Rejected',
-          subtitle: (_myRejectionReason != null && _myRejectionReason!.isNotEmpty)
-              ? 'Reason: $_myRejectionReason'
-              : 'Please update your list and re-submit.',
-        ),
-        if (_allBrandQuotasComplete) ...[
-          const SizedBox(height: 8),
-          _submitButton(label: 'Re-submit Zorberry Tab Daily Rxn List for approval'),
-        ],
-      ]);
-    }
-    if (_allBrandQuotasComplete) {
-      return Column(children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(colors: [Colors.green.shade400, Colors.green.shade600]),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Row(children: [
-            Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
-            SizedBox(width: 10),
-            Expanded(child: Text('Minimum quota reached. Ready to submit.',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white))),
-          ]),
-        ),
-        const SizedBox(height: 8),
-        _submitButton(label: 'Submit Zorberry Tab Daily Rxn List for approval'),
-      ]);
-    }
-    return const SizedBox.shrink();
-  }
-
-  Widget _submitButton({required String label}) {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: ElevatedButton.icon(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _purple,
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          elevation: 2,
-        ),
-        onPressed: _isSubmitting ? null : _submitForApproval,
-        icon: _isSubmitting
-            ? const SizedBox(width: 18, height: 18,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : const Icon(Icons.send_outlined, size: 18),
-        label: Text(_isSubmitting ? 'Submitting...' : label,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14)),
-      ),
-    );
-  }
-
-  // â”€â”€ Team Sub-Widgets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
   Widget _buildSubordinatePicker() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1068,107 +1291,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     );
   }
 
-  Widget _buildSubApprovalBanner() {
-    if (_subApprovalStatus == null) {
-      return _statusBanner(
-        icon: Icons.info_outline,
-        color: Colors.orange,
-        title: 'Not Submitted',
-        subtitle: 'This team member has not submitted Dr. Mapping for approval yet.',
-      );
-    }
-    switch (_subApprovalStatus) {
-      case 'approved':
-        return _statusBanner(
-          icon: Icons.verified,
-          color: Colors.green,
-          title: 'List Approved',
-          subtitle: 'This Zorberry Tab Daily Rxn List has been approved.',
-        );
-      case 'pending':
-        return _statusBanner(
-          icon: Icons.hourglass_empty,
-          color: Colors.blue,
-          title: 'Pending Approval',
-          subtitle: 'List submitted and awaiting your review.',
-        );
-      default:
-        return _statusBanner(
-          icon: Icons.cancel,
-          color: Colors.red,
-          title: 'Previously Rejected',
-          subtitle: (_subRejectionReason != null && _subRejectionReason!.isNotEmpty)
-              ? 'Reason: $_subRejectionReason'
-              : 'This Zorberry Tab Daily Rxn List was rejected.',
-        );
-    }
-  }
-
-  Widget _buildApprovalButtons() {
-    return Row(children: [
-      Expanded(
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          onPressed: _isApproving || _isRejecting ? null : _approveBrandList,
-          icon: _isApproving
-              ? const SizedBox(width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.check_circle_outline, size: 18),
-          label: Text(_isApproving ? 'Approving...' : 'Approve',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-        ),
-      ),
-      const SizedBox(width: 10),
-      Expanded(
-        child: ElevatedButton.icon(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red.shade600,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-          onPressed: _isApproving || _isRejecting ? null : _showRejectDialog,
-          icon: _isRejecting
-              ? const SizedBox(width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.cancel_outlined, size: 18),
-          label: Text(_isRejecting ? 'Rejecting...' : 'Reject',
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-        ),
-      ),
-    ]);
-  }
-
-  Widget _statusBanner({
-    required IconData icon,
-    required MaterialColor color,
-    required String title,
-    required String subtitle,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: color.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.shade300),
-      ),
-      child: Row(children: [
-        Icon(icon, color: color.shade600, size: 22),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title,
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
-                  color: color.shade800)),
-          Text(subtitle,
-              style: TextStyle(fontSize: 11, color: color.shade600)),
-        ])),
-      ]),
-    );
-  }
-
   Widget _buildSectionHeader(String label) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1184,23 +1306,6 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     );
   }
 
-  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  String? _readApprovalStatus(List<Map<String, dynamic>> brands) {
-    if (brands.isEmpty) return null;
-    final raw = brands.first['approval_status'] ??
-        brands.first['brand_approval_status'] ??
-        brands.first['status'];
-    final status = raw?.toString().toLowerCase();
-    if (status == 'submitted') return 'pending';
-    if (status == 'pending' || status == 'approved' || status == 'rejected') return status;
-    return null;
-  }
-
-  String? _readRejectionReason(List<Map<String, dynamic>> brands) {
-    if (brands.isEmpty) return null;
-    return (brands.first['rejection_reason'] ?? brands.first['reject_reason'])?.toString();
-  }
 
   List<String> _parsePreferredSpecialities(dynamic raw) {
     if (raw == null) return [];

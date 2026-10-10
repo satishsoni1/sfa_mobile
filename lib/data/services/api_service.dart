@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -1265,6 +1265,98 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       ];
     } catch (_) {
       return [{'__error__': true, 'status': 0, 'message': 'Network error. Please try again.'}];
+    }
+  }
+
+  /// POST /app/dr-brand-map/brands/{brandId}/weekly-rxn
+  Future<void> submitDrBrandMapWeeklyRxn(int brandId, Map<String, dynamic> payload) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/dr-brand-map/brands/$brandId/weekly-rxn'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: json.encode(payload),
+    );
+
+    dynamic body;
+    try {
+      body = json.decode(response.body);
+    } catch (_) {}
+
+    final bool isHttpError = response.statusCode != 200 && response.statusCode != 201;
+    final bool isBodyError = body is Map &&
+        (body['error'] == true ||
+         body['status'] == false ||
+         body['status'] == 500 ||
+         body['status'] == 400 ||
+         body['status'] == 422 ||
+         (body['status'] is int && (body['status'] as int) >= 400));
+
+    if (isHttpError || isBodyError) {
+      String errorMsg = '';
+      if (body is Map) {
+        final msg = body['message']?.toString();
+        if (msg != null && msg.trim().isNotEmpty) {
+          errorMsg = msg.trim();
+        } else if (body['error'] != null && body['error'] != true && body['error'] != false) {
+          errorMsg = body['error'].toString().trim();
+        } else if (body['errors'] != null) {
+          errorMsg = body['errors'].toString().trim();
+        }
+      }
+      if (errorMsg.isEmpty) {
+        final statusCode = (body is Map && body['status'] is int) ? body['status'] : response.statusCode;
+        errorMsg = 'Server error ($statusCode)';
+      }
+      throw Exception(errorMsg);
+    }
+  }
+
+
+  Future<Map<String, dynamic>> getDrBrandMapWeeklyRxn(
+    int brandId, {
+    String? startDate,
+    String? endDate,
+    String? weekStart,
+    String? weekEnd,
+    int? weekNumber,
+    int? userId,
+  }) async {
+    final token = await getToken();
+    try {
+      final queryParams = <String, String>{};
+      final ws = weekStart ?? startDate;
+      final we = weekEnd ?? endDate;
+      if (ws != null && ws.isNotEmpty) {
+        queryParams['week_start'] = ws;
+      }
+      if (we != null && we.isNotEmpty) {
+        queryParams['week_end'] = we;
+      }
+      if (weekNumber != null && weekNumber > 0) {
+        queryParams['week_number'] = weekNumber.toString();
+      }
+      if (userId != null && userId > 0) {
+        queryParams['user_id'] = userId.toString();
+      }
+
+      final uri = Uri.parse('$baseUrl/app/dr-brand-map/brands/$brandId/weekly-rxn').replace(
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        return json.decode(response.body);
+      }
+      return {};
+    } catch (_) {
+      return {};
     }
   }
 

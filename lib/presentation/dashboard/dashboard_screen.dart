@@ -72,7 +72,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.72";
+  static const String CURRENT_APP_VERSION = "1.0.73";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -1146,7 +1146,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     } else if (reqType == 'MCL') {
       _navigateTo(NewDrMasterScreen(initialEmployeeId: parsedEmpId));
-    } else if (reqType == 'BRAND') {
+    } else if (reqType == 'BRAND' || reqType == 'BRAND_PATHFINDER') {
       _navigateTo(DoctorBrandScreen(initialEmployeeId: parsedEmpId));
     } else if (reqType == 'DOC_SEL') {
       _navigateTo(BbaMainScreen(initialEmployeeId: parsedEmpId));
@@ -1731,7 +1731,9 @@ class _DcrRequestsSheet extends StatelessWidget {
         expReqs.add(req);
       } else if (cat == 'MCL' || reqType == 'MCL') {
         mclReqs.add(req);
-      } else if (cat == 'BRAND' || ['BRAND', 'DOC_SEL'].contains(reqType)) {
+      } else if (cat == 'BRAND' ||
+          cat == 'BRAND_PATHFINDER' ||
+          ['BRAND', 'BRAND_PATHFINDER', 'BRAND_DR', 'DOC_SEL'].contains(reqType)) {
         brandReqs.add(req);
       } else {
         generalReqs.add(req);
@@ -1968,8 +1970,14 @@ class _DcrRequestCard extends StatelessWidget {
       typeColor = Colors.purple.shade700;
       typeBg = Colors.purple.shade50;
       typeIcon = Icons.medical_services_outlined;
-    } else if (cat == 'BRAND' || ['BRAND', 'DOC_SEL'].contains(requestType)) {
-      typeLabel = requestType == 'DOC_SEL' ? 'Campaign Selection' : 'Brand Pathfinder';
+    } else if (cat == 'BRAND' ||
+        cat == 'BRAND_PATHFINDER' ||
+        ['BRAND', 'BRAND_PATHFINDER', 'BRAND_DR', 'DOC_SEL'].contains(requestType)) {
+      typeLabel = requestType == 'DOC_SEL'
+          ? 'Campaign Selection'
+          : requestType == 'BRAND_DR'
+              ? 'Zorberry Rxn List'
+              : 'Brand Pathfinder';
       typeColor = Colors.red.shade700;
       typeBg = Colors.red.shade50;
       typeIcon = Icons.campaign_outlined;
