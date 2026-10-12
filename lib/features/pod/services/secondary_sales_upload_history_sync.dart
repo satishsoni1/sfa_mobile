@@ -42,6 +42,9 @@ class SecondarySalesHistoryReconcileResult {
 
 String normalizeSecondarySalesUploadStatus(String raw) {
   final s = raw.toLowerCase();
+  if (s.contains('cancel')) {
+    return 'cancelled';
+  }
   if (s.contains('fail') || s.contains('error') || s.contains('reject')) {
     return 'failed';
   }
@@ -53,7 +56,43 @@ String normalizeSecondarySalesUploadStatus(String raw) {
       s == 'done') {
     return 'completed';
   }
+  // queued / processing / extracting / validating / pending → active
   return 'processing';
+}
+
+/// Non-terminal statuses shown on the upload landing "Background Processing" list.
+bool isSecondarySalesActiveUploadStatus(String raw) {
+  final normalized = normalizeSecondarySalesUploadStatus(raw);
+  return normalized == 'processing';
+}
+
+bool isSecondarySalesTerminalUploadStatus(String raw) {
+  final normalized = normalizeSecondarySalesUploadStatus(raw);
+  return normalized == 'completed' ||
+      normalized == 'failed' ||
+      normalized == 'cancelled';
+}
+
+List<UploadRecord> secondarySalesActiveBatches(List<UploadRecord> records) {
+  return records
+      .where(
+        (r) =>
+            r.uploadType == kUploadTypeSecondarySales &&
+            isSecondarySalesActiveUploadStatus(r.status),
+      )
+      .toList();
+}
+
+String secondarySalesActiveStatusLabel(String raw) {
+  final s = raw.toLowerCase();
+  if (s.contains('queue') || s.contains('pending')) {
+    return 'Queued — processing in background';
+  }
+  if (s.contains('validat')) {
+    return 'Validating statement…';
+  }
+  // Avoid implying known OCR percentage or "extraction completed".
+  return 'Processing in background…';
 }
 
 /// Laravel is the source of truth. Local Secondary Sales records are kept,

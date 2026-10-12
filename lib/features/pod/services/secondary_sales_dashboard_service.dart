@@ -28,25 +28,52 @@ class SecondarySalesDashboardService {
   Future<SecondarySalesDashboardData> fetchDashboard({
     required String month,
     String? kamId,
+    String? employeeId,
     String? zoneId,
+    String? stockistId,
+    String? search,
   }) async {
     final qp = <String, String>{'month': month};
     if (kamId != null && kamId.isNotEmpty) qp['kam_id'] = kamId;
+    if (employeeId != null && employeeId.isNotEmpty) {
+      qp['employee_id'] = employeeId;
+    }
     if (zoneId != null && zoneId.isNotEmpty) qp['zone_id'] = zoneId;
+    if (stockistId != null && stockistId.isNotEmpty) {
+      qp['stockist_id'] = stockistId;
+    }
+    if (search != null && search.trim().isNotEmpty) {
+      qp['search'] = search.trim();
+    }
 
     final response = await _request(
       Uri.parse(API_SECONDARY_SALES_DASHBOARD_URL).replace(
         queryParameters: qp,
       ),
     );
-    return SecondarySalesDashboardData.fromJson(_decodeMap(response.body));
+    final data = SecondarySalesDashboardData.fromJson(_decodeMap(response.body));
+    assert(() {
+      final sample = data.visibleStockists.take(5).toList();
+      // ignore: avoid_print
+      print(
+        '[DASHBOARD STOCKISTS] month=$month count=${data.visibleStockists.length} '
+        'perf=${data.stockistPerformance.length} '
+        'breakdown=${data.breakdown.stockist.length} '
+        'sample=${sample.map((s) => '${s.stockistName}:${s.stockistId}'
+            ':stmts=${s.documents}:done=${s.completedStatements}:sales=${s.sales}').join(' | ')}',
+      );
+      return true;
+    }());
+    return data;
   }
 
   Future<SecondarySalesBreakdownPage> fetchBreakdown({
     required String month,
     required String breakdownType,
     String? kamId,
+    String? employeeId,
     String? zoneId,
+    String? stockistId,
     String search = '',
     int page = 1,
     int perPage = 20,
@@ -58,7 +85,13 @@ class SecondarySalesDashboardService {
       'per_page': perPage.toString(),
     };
     if (kamId != null && kamId.isNotEmpty) qp['kam_id'] = kamId;
+    if (employeeId != null && employeeId.isNotEmpty) {
+      qp['employee_id'] = employeeId;
+    }
     if (zoneId != null && zoneId.isNotEmpty) qp['zone_id'] = zoneId;
+    if (stockistId != null && stockistId.isNotEmpty) {
+      qp['stockist_id'] = stockistId;
+    }
     if (search.trim().isNotEmpty) qp['search'] = search.trim();
 
     final response = await _request(
@@ -90,11 +123,19 @@ class SecondarySalesDashboardService {
   Future<List<RecentSecondarySalesDocument>> fetchRecent({
     required String month,
     String? kamId,
+    String? employeeId,
     String? zoneId,
+    String? stockistId,
   }) async {
     final qp = <String, String>{'month': month};
     if (kamId != null && kamId.isNotEmpty) qp['kam_id'] = kamId;
+    if (employeeId != null && employeeId.isNotEmpty) {
+      qp['employee_id'] = employeeId;
+    }
     if (zoneId != null && zoneId.isNotEmpty) qp['zone_id'] = zoneId;
+    if (stockistId != null && stockistId.isNotEmpty) {
+      qp['stockist_id'] = stockistId;
+    }
 
     final response = await _request(
       Uri.parse(API_SECONDARY_SALES_DASHBOARD_RECENT_URL).replace(
@@ -132,9 +173,30 @@ class SecondarySalesDashboardService {
       ),
       errorMessage: 'Unable to load stockist statements',
     );
-    return SecondarySalesStockistStatementsResponse.fromJson(
+    assert(() {
+      // ignore: avoid_print
+      print(
+        '[STATEMENTS HTTP] '
+        'GET ${secondarySalesStockistStatementsUrl(stockistId)} '
+        'params=$qp status=${response.statusCode}',
+      );
+      return true;
+    }());
+    final parsed = SecondarySalesStockistStatementsResponse.fromJson(
       _decodeMap(response.body),
     );
+    assert(() {
+      final sample = parsed.statements.take(3).toList();
+      // ignore: avoid_print
+      print(
+        '[STATEMENTS PARSE] stockistId=$stockistId month=$month '
+        'count=${parsed.statements.length} '
+        'sample=${sample.map((s) => 'id=${s.id}/doc=${s.documentId}/batch=${s.batchId}'
+            ' status=${s.status} validation=${s.hasValidationIssue}').join(' | ')}',
+      );
+      return true;
+    }());
+    return parsed;
   }
 
   Future<SecondarySalesKamStockistsResponse> fetchKamStockists({
@@ -164,8 +226,12 @@ class SecondarySalesDashboardService {
         return response;
       }
       if (response.statusCode == 403) {
-        throw const SecondarySalesDashboardException(
-          'You are not authorized to view this data.',
+        throw SecondarySalesDashboardException(
+          _messageFromBody(
+                response.body,
+                fallback: 'You are not authorized to view this data.',
+              ) ??
+              'You are not authorized to view this data.',
           403,
         );
       }
@@ -176,9 +242,16 @@ class SecondarySalesDashboardService {
         );
       }
       if (response.statusCode == 422) {
-        throw SecondarySalesDashboardException(errorMessage, 422);
+        throw SecondarySalesDashboardException(
+          _messageFromBody(response.body, fallback: errorMessage) ??
+              errorMessage,
+          422,
+        );
       }
-      throw SecondarySalesDashboardException(errorMessage, response.statusCode);
+      throw SecondarySalesDashboardException(
+        _messageFromBody(response.body, fallback: errorMessage) ?? errorMessage,
+        response.statusCode,
+      );
     } on SecondarySalesDashboardException {
       rethrow;
     } on UnauthorizedException {
@@ -194,6 +267,18 @@ class SecondarySalesDashboardService {
     throw const SecondarySalesDashboardException(
       'Unable to load Secondary Sales dashboard',
     );
+  }
+
+  String? _messageFromBody(String body, {String? fallback}) {
+    if (body.trim().isEmpty) return fallback;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['message'] != null) {
+        final msg = decoded['message'].toString().trim();
+        if (msg.isNotEmpty) return msg;
+      }
+    } catch (_) {}
+    return fallback;
   }
 
   int? _asInt(dynamic v) {

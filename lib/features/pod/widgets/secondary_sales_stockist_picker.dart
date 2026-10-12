@@ -28,31 +28,28 @@ class SecondarySalesStockistPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasSelection = selected != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (selected != null)
+        if (hasSelection)
           _SelectedCard(stockist: selected!, onClear: onClear)
-        else
-          const SizedBox.shrink(),
-        if (selected != null)
-          const SizedBox(height: 12)
-        else
-          const SizedBox.shrink(),
-        _StockistSearchField(
-          key: const ValueKey('ss-stockist-search'),
-          onDebouncedQuery: (query) {
-            controller.applySearch(query, authToken: authToken);
-          },
-        ),
-        const SizedBox(height: 12),
-        _StockistResultsList(
-          key: const ValueKey('ss-stockist-results'),
-          controller: controller,
-          selected: selected,
-          onSelected: onSelected,
-          authToken: authToken,
-        ),
+        else ...[
+          _StockistSearchField(
+            key: const ValueKey('ss-stockist-search'),
+            onDebouncedQuery: (query) {
+              controller.applySearch(query, authToken: authToken);
+            },
+          ),
+          const SizedBox(height: 12),
+          _StockistResultsList(
+            key: const ValueKey('ss-stockist-results'),
+            controller: controller,
+            selected: selected,
+            onSelected: onSelected,
+            authToken: authToken,
+          ),
+        ],
       ],
     );
   }
@@ -377,11 +374,27 @@ class _SelectedCard extends StatelessWidget {
                     color: Color(0xFF2C3E50),
                   ),
                 ),
-                if (stockist.id != null)
+                if (stockist.id != null) ...[
+                  const SizedBox(height: 2),
                   Text(
                     'ID: ${stockist.id}',
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
+                ],
+                if (stockist.displayAddress != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    stockist.displayAddress!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.25,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -410,6 +423,7 @@ class _StockistCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final address = stockist.displayAddress;
     return Material(
       color: selected ? const Color(0xFFF4ECFF) : Colors.white,
       borderRadius: BorderRadius.circular(12),
@@ -426,6 +440,7 @@ class _StockistCard extends StatelessWidget {
             ),
           ),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: Column(
@@ -446,13 +461,36 @@ class _StockistCard extends StatelessWidget {
                       'ID: ${stockist.id}',
                       style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                     ),
+                    if (address != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        address,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1.25,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
-              if (selected)
-                const Icon(Icons.check_circle, color: Color(0xFF450095), size: 20)
-              else
-                Icon(Icons.chevron_right_rounded, color: Colors.grey.shade500),
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: selected
+                    ? const Icon(
+                        Icons.check_circle,
+                        color: Color(0xFF450095),
+                        size: 20,
+                      )
+                    : Icon(
+                        Icons.chevron_right_rounded,
+                        color: Colors.grey.shade500,
+                      ),
+              ),
             ],
           ),
         ),

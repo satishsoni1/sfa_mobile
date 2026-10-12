@@ -29,10 +29,27 @@ class StatementDetailService {
         if (data == null) {
           throw Exception('No data returned for pod $podId');
         }
-        return StatementDetail.fromJson(data);
-      } else {
-        throw Exception('Failed to load statement (${response.statusCode}): ${response.body}');
+        final detail = StatementDetail.fromJson(data);
+        assert(() {
+          // Safe summary only — no OCR/document contents.
+          // ignore: avoid_print
+          print(
+            '[STATEMENT DETAILS] id=${detail.id} status=${detail.status} '
+            'has_validation_issue=${detail.hasValidationIssue} '
+            'validation_message=${detail.validationMessage != null} '
+            'stockist=${detail.stockistDisplayName} '
+            'hospital=${detail.hospitalDisplayName}',
+          );
+          return true;
+        }());
+        return detail;
       }
+      if (response.statusCode == 403) {
+        throw Exception('You are not authorized to view this statement.');
+      }
+      throw Exception(
+        'Failed to load statement (${response.statusCode}): ${response.body}',
+      );
     } catch (e) {
       print('[StatementDetailService] Error: $e');
       rethrow;

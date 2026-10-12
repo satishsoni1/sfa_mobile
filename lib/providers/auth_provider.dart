@@ -1,7 +1,7 @@
 // TODO [iOS]: firebase_messaging import temporarily disabled.
 // Re-enable after adding GoogleService-Info.plist and iOS Firebase config.
 // import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+// import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../data/services/api_service.dart';
 // TODO [iOS]: FCM notification service temporarily disabled.

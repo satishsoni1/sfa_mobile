@@ -270,3 +270,33 @@ class FcmNotificationService {
   }
 
 }
+
+/// Bridge so an already-open Secondary Sales module can react to push actions
+/// without requiring Firebase. This is a pure in-memory event bus.
+class SecondarySalesPushBridge {
+  SecondarySalesPushBridge._();
+  static final SecondarySalesPushBridge instance = SecondarySalesPushBridge._();
+
+  void Function(int tabIndex, Map<String, dynamic>? validationData)? onPush;
+
+  bool get isOpen => onPush != null;
+
+  void register(
+    void Function(int tabIndex, Map<String, dynamic>? validationData) handler,
+  ) {
+    onPush = handler;
+  }
+
+  void unregister(
+    void Function(int tabIndex, Map<String, dynamic>? validationData) handler,
+  ) {
+    if (onPush == handler) onPush = null;
+  }
+
+  void dispatch({
+    required int tabIndex,
+    Map<String, dynamic>? validationData,
+  }) {
+    onPush?.call(tabIndex, validationData);
+  }
+}

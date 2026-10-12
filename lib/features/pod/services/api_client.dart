@@ -29,7 +29,9 @@ class ApiClient {
     bool requiresAuth = true,
   }) async {
     try {
-      Map<String, String> requestHeaders = headers ?? {};
+      // Always copy — callers may pass a const/unmodifiable map.
+      Map<String, String> requestHeaders =
+          Map<String, String>.from(headers ?? const <String, String>{});
 
       if (requiresAuth) {
         final prefs = await SharedPreferences.getInstance();
@@ -44,6 +46,17 @@ class ApiClient {
       }
 
       final response = await http.get(uri, headers: requestHeaders);
+
+      if (uri.path.contains('team-members') &&
+          !uri.path.contains('/stockists')) {
+        // ignore: avoid_print
+        print(
+          '[SS_ON_BEHALF_TRACE] ApiClient.get done '
+          'path=${uri.path} status=${response.statusCode} '
+          'runtimeType=${response.runtimeType} '
+          'authHeaderPresent=${requestHeaders.containsKey('Authorization')}',
+        );
+      }
 
       if (response.statusCode == 401) {
         await _handleUnauthorized();
@@ -65,7 +78,8 @@ class ApiClient {
     bool requiresAuth = true,
   }) async {
     try {
-      Map<String, String> requestHeaders = headers ?? {};
+      Map<String, String> requestHeaders =
+          Map<String, String>.from(headers ?? const <String, String>{});
 
       if (requiresAuth) {
         final prefs = await SharedPreferences.getInstance();
@@ -106,7 +120,8 @@ class ApiClient {
     bool requiresAuth = true,
   }) async {
     try {
-      Map<String, String> requestHeaders = headers ?? {};
+      Map<String, String> requestHeaders =
+          Map<String, String>.from(headers ?? const <String, String>{});
 
       if (requiresAuth) {
         final prefs = await SharedPreferences.getInstance();
@@ -147,7 +162,8 @@ class ApiClient {
     bool requiresAuth = true,
   }) async {
     try {
-      Map<String, String> requestHeaders = headers ?? {};
+      Map<String, String> requestHeaders =
+          Map<String, String>.from(headers ?? const <String, String>{});
 
       if (requiresAuth) {
         final prefs = await SharedPreferences.getInstance();

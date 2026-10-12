@@ -222,6 +222,12 @@ class SecondarySalesMonthBar extends StatelessWidget {
       24,
       (i) => DateTime(now.year, now.month - i, 1),
     );
+    final selectedKey = _key(selectedMonth);
+    // Keep the selected month selectable even if it falls outside the default
+    // rolling window (prevents DropdownButton from dropping the value).
+    if (months.every((m) => _key(m) != selectedKey)) {
+      months.insert(0, DateTime(selectedMonth.year, selectedMonth.month, 1));
+    }
     final labelFmt = DateFormat('MMM yyyy');
 
     return Container(
@@ -247,7 +253,7 @@ class SecondarySalesMonthBar extends StatelessWidget {
           const Spacer(),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
-              value: _key(selectedMonth),
+              value: selectedKey,
               isDense: true,
               borderRadius: BorderRadius.circular(12),
               items: [
@@ -261,7 +267,7 @@ class SecondarySalesMonthBar extends StatelessWidget {
                 if (value == null) return;
                 final parts = value.split('-');
                 onMonthChanged(
-                  DateTime(int.parse(parts[0]), int.parse(parts[1])),
+                  DateTime(int.parse(parts[0]), int.parse(parts[1]), 1),
                 );
               },
             ),
@@ -378,20 +384,45 @@ class SecondarySalesStockistPerformanceTile extends StatelessWidget {
   }
 
   Future<void> _open(BuildContext context) async {
-    if (row.stockistId == null) {
+    final stockistId = row.stockistId;
+    final stockistName = row.stockistName;
+    // Capture dashboard month at tap time so navigation cannot lose the filter.
+    final monthKey = month.trim();
+    assert(() {
+      debugPrint(
+        '[VIEW STATEMENTS CLICK]\n'
+        'stockist: id=$stockistId name=$stockistName\n'
+        'month: selected=$monthKey api=$monthKey',
+      );
+      return true;
+    }());
+    if (stockistId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Stockist details are not available.')),
+        SnackBar(
+          content: Text(
+            'Stockist ID missing for $stockistName. Cannot open statements.',
+          ),
+        ),
       );
       return;
     }
+    if (monthKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Statement month is not available.')),
+      );
+      return;
+    }
+
+    // Do not pass kamId/zoneId here: the stockist is already scoped by the
+    // path /secondary-sales/stockist/{id}/statements. Extra kam_id filtering
+    // can hide statements that the dashboard count still includes.
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => SecondarySalesStockistStatementsScreen(
-          stockistId: row.stockistId!,
-          stockistName: row.stockistName,
-          month: month,
-          kamId: row.kamId,
+          stockistId: stockistId,
+          stockistName: stockistName,
+          month: monthKey,
           service: service,
         ),
       ),

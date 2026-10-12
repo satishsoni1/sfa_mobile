@@ -35,6 +35,12 @@ void main() {
       expect(find.text('Scan a document'), findsOneWidget);
       expect(find.text('PDF Files'), findsNothing);
       expect(find.text('Add Documents'), findsNothing);
+      expect(
+        find.text(
+          'Supported formats: JPG, JPEG, PNG, PDF, XLS, XLSX, TXT, DOC, DOCX, ZIP',
+        ),
+        findsNothing,
+      );
 
       final cameraY = tester.getTopLeft(find.text('Camera')).dy;
       final documentsY = tester.getTopLeft(find.text('Documents')).dy;
@@ -126,19 +132,22 @@ void main() {
   });
 
   group('supported document extensions', () {
-    test('accepts PDF, DOC, DOCX, TXT, JPG, JPEG, PNG, HTML, HTM', () {
-      const files = [
-        'statement.pdf',
-        'notes.doc',
-        'report.docx',
-        'readme.txt',
-        '1000173016.jpg',
+    test('accepts images, PDF, Excel, TXT, DOC, DOCX, ZIP and HTML', () {
+      const accepted = [
+        'statement.jpg',
         'scan.JPEG',
         'photo.png',
+        'statement.pdf',
+        'stock_statement.xls',
+        'stock_statement_aug_2026.xlsx',
+        'notes.txt',
+        'report.doc',
+        'report.docx',
+        'bundle.zip',
         'page.html',
         'index.htm',
       ];
-      for (final name in files) {
+      for (final name in accepted) {
         final ext = name.split('.').last;
         expect(
           isSecondarySalesDocumentExtension(ext),
@@ -149,7 +158,50 @@ void main() {
       expect(kSecondarySalesDocumentPickerAllowsMultiple, isTrue);
       expect(
         kSecondarySalesDocumentExtensions,
-        ['pdf', 'doc', 'docx', 'txt', 'jpg', 'jpeg', 'png', 'html', 'htm'],
+        [
+          'jpg',
+          'jpeg',
+          'png',
+          'pdf',
+          'xls',
+          'xlsx',
+          'txt',
+          'doc',
+          'docx',
+          'zip',
+          'html',
+          'htm',
+        ],
+      );
+      expect(
+        kSecondarySalesSupportedFormatsLabel,
+        'Supported formats: JPG, JPEG, PNG, PDF, XLS, XLSX, TXT, DOC, DOCX, ZIP',
+      );
+    });
+
+    test('accepts Excel by extension even when MIME is wrong', () {
+      expect(
+        secondarySalesResolvedExtension(
+          pathExtension: 'xlsx',
+          pickerExtension: 'application/octet-stream',
+        ),
+        'xlsx',
+      );
+      expect(
+        secondarySalesResolvedExtension(
+          pathExtension: '',
+          pickerExtension: 'XLS',
+        ),
+        'xls',
+      );
+      expect(isSecondarySalesExcelExtension('.XLSX'), isTrue);
+      expect(
+        secondarySalesContentTypeForExtension('xls').mimeType,
+        'application/vnd.ms-excel',
+      );
+      expect(
+        secondarySalesContentTypeForExtension('xlsx').mimeType,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       );
     });
 

@@ -18,6 +18,7 @@ import 'package:zforce/features/pod/screens/upload_status_screen.dart';
 import 'package:zforce/features/pod/screens/pod_review_screen.dart';
 import 'package:zforce/features/pod/screens/batch_detail_screen.dart';
 import 'package:zforce/features/pod/screens/batches_list_screen.dart';
+import 'package:zforce/features/pod/models/batch_model.dart';
 import 'package:zforce/features/pod/screens/notifications_screen.dart';
 import 'package:zforce/features/pod/screens/modern_document_upload_screen.dart';
 import 'package:zforce/features/pod/screens/documents_list_screen.dart';
@@ -29,6 +30,9 @@ import 'package:zforce/features/pod/screens/sales_dashboard_screen.dart';
 import 'package:zforce/features/pod/widgets/notification_handler.dart';
 import 'package:zforce/features/pod/widgets/pdf_preview_bytes_screen.dart';
 import 'package:zforce/features/pod/screens/statement_detail_screen.dart';
+import 'package:zforce/features/pod/screens/secondary_sales_multi_page_upload_screen.dart';
+import 'package:zforce/features/pod/screens/secondary_sales_stock_correction_screen.dart';
+import 'package:zforce/features/pod/screens/secondary_sales_upload_status_report_screen.dart';
 
 /// POD Route name constants — all prefixed with /pod/ to avoid SFA collisions.
 class PodRoutes {
@@ -50,6 +54,9 @@ class PodRoutes {
   static const String notificationSettings = '/pod/notification-settings';
   static const String salesAnalytics     = '/pod/sales-analytics';
   static const String statementDetail    = '/pod/statement-detail';
+  static const String multiPageUpload    = '/pod/secondary-sales-multi-page-upload';
+  static const String stockCorrection    = '/pod/secondary-sales-stock-correction';
+  static const String uploadStatusReport = '/pod/secondary-sales-upload-status-report';
 }
 
 /// POD Route generator — used inside the POD feature Navigator.
@@ -105,11 +112,18 @@ class PodRouteGenerator {
         return _errorRoute('PodReviewScreen requires review payload');
 
       case PodRoutes.batchDetail:
-        if (args is Map<String, dynamic>) {
+        if (args is Map<String, dynamic> && args['batchId'] != null) {
+          final rawId = args['batchId'];
+          final batchId = rawId is int
+              ? rawId
+              : int.tryParse(rawId.toString());
+          if (batchId == null) {
+            return _errorRoute('BatchDetailScreen requires batchId');
+          }
           return MaterialPageRoute(
             builder: (_) => BatchDetailScreen(
-              batchId: args['batchId'] as int,
-              batch: args['batch'] as dynamic,
+              batchId: batchId,
+              batch: args['batch'] is Batch ? args['batch'] as Batch : null,
             ),
           );
         }
@@ -186,6 +200,38 @@ class PodRouteGenerator {
           );
         }
         return _errorRoute('StatementDetailScreen requires podId');
+
+      case PodRoutes.multiPageUpload:
+        return MaterialPageRoute(
+          builder: (_) => const SecondarySalesMultiPageUploadScreen(),
+        );
+
+      case PodRoutes.stockCorrection:
+        if (args is Map<String, dynamic> && args['statementId'] != null) {
+          final raw = args['statementId'];
+          final statementId =
+              raw is int ? raw : int.tryParse(raw.toString());
+          if (statementId == null) {
+            return _errorRoute(
+              'SecondarySalesStockCorrectionScreen requires statementId',
+            );
+          }
+          return MaterialPageRoute(
+            builder: (_) => SecondarySalesStockCorrectionScreen(
+              statementId: statementId,
+              stockistName: args['stockistName']?.toString(),
+              statementMonth: args['statementMonth']?.toString(),
+            ),
+          );
+        }
+        return _errorRoute(
+          'SecondarySalesStockCorrectionScreen requires statementId',
+        );
+
+      case PodRoutes.uploadStatusReport:
+        return MaterialPageRoute(
+          builder: (_) => const SecondarySalesUploadStatusReportScreen(),
+        );
 
       default:
         return _errorRoute('Route not found: ${settings.name}');

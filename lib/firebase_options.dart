@@ -1,6 +1,8 @@
-// Firebase Project: zorvia-cc840
+// Firebase Project: secondary-sales-mobile-app
+// Must stay in sync with android/app/google-services.json
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
+import 'package:flutter/foundation.dart'
+    show defaultTargetPlatform, kIsWeb, TargetPlatform;
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 class DefaultFirebaseOptions {
@@ -23,23 +25,24 @@ class DefaultFirebaseOptions {
     }
   }
 
-  /// Firebase Web configuration for project: aurobindo
-
+  /// Web options — no web client in current google-services.json.
+  /// Kept for compile-time web targets; Android is the active mobile config.
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDIofuhNzvLSQ89W3v4Eg_hvpbXwWWapnY',
-    appId: '1:615438101526:web:b912d5db6686b19dfa5937',
-    messagingSenderId: '615438101526',
-    projectId: 'himalaya-e7d22',
-    authDomain: 'himalaya-e7d22.firebaseapp.com',
-    storageBucket: 'himalaya-e7d22.firebasestorage.app',
-    measurementId: 'G-M74BFVDN5X',
+    apiKey: 'AIzaSyChAOFF1fPTQRD-2n4ZF3nbOjM74VG5BM4',
+    appId: '1:875489413283:android:cc63d505a5f09a84f55716',
+    messagingSenderId: '875489413283',
+    projectId: 'secondary-sales-mobile-app',
+    authDomain: 'secondary-sales-mobile-app.firebaseapp.com',
+    storageBucket: 'secondary-sales-mobile-app.firebasestorage.app',
   );
 
+  /// Android — matches android/app/google-services.json
+  /// package: com.globalspace.himalaya
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyAnzOtwTTVjYgHRax4xWn_APMN5gRN8MBY',
-    appId: '1:615438101526:android:5bea291e2c6dca6ffa5937',
-    messagingSenderId: '615438101526',
-    projectId: 'himalaya-e7d22',
-    storageBucket: 'himalaya-e7d22.firebasestorage.app',
+    apiKey: 'AIzaSyChAOFF1fPTQRD-2n4ZF3nbOjM74VG5BM4',
+    appId: '1:875489413283:android:cc63d505a5f09a84f55716',
+    messagingSenderId: '875489413283',
+    projectId: 'secondary-sales-mobile-app',
+    storageBucket: 'secondary-sales-mobile-app.firebasestorage.app',
   );
 }

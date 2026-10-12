@@ -90,6 +90,80 @@ void main() {
       expect(stockists.last.name, 'SUKHMANI TRADERS');
     });
 
+    test('parses address_display and keeps same-name stockists separate', () {
+      final stockists = parseAuthorizedStockists(
+        jsonEncode({
+          'success': true,
+          'data': [
+            {
+              'id': 444,
+              'stockist_id': 444,
+              'name': 'RICHA PHARMA',
+              'stockist_name': 'RICHA PHARMA',
+              'code': '714987',
+              'stockist_code': '714987',
+              'address': {
+                'line1': 'GOLA ROAD',
+                'city': 'HATPAR',
+                'district': 'NAWADA',
+                'state': 'Bihar',
+                'pincode': '805110',
+              },
+              'address_display':
+                  'GOLA ROAD, HOSPITAL ROAD, HATPAR, NAWADA, Bihar - 805110',
+            },
+            {
+              'id': 445,
+              'stockist_id': 445,
+              'name': 'RICHA PHARMA',
+              'code': '714988',
+              'address_display': 'MAIN BAZAR, PATNA, Bihar - 800001',
+            },
+            {
+              'id': 446,
+              'name': 'RICHA PHARMA',
+              'address_display': '',
+            },
+          ],
+          'current_page': 1,
+          'last_page': 1,
+          'per_page': 50,
+          'total': 3,
+        }),
+      );
+      expect(stockists, hasLength(3));
+      expect(stockists.map((s) => s.id), [444, 445, 446]);
+      expect(stockists.every((s) => s.name == 'RICHA PHARMA'), isTrue);
+      expect(
+        stockists[0].displayAddress,
+        'GOLA ROAD, HOSPITAL ROAD, HATPAR, NAWADA, Bihar - 805110',
+      );
+      expect(stockists[0].code, '714987');
+      expect(stockists[0].address?['pincode'], '805110');
+      expect(stockists[1].displayAddress, 'MAIN BAZAR, PATNA, Bihar - 800001');
+      expect(stockists[2].displayAddress, isNull);
+    });
+
+    test('merge does not drop same-name stockists with different IDs', () {
+      final page1 = [
+        const SecondarySalesStockistInfo(
+          id: 444,
+          name: 'RICHA PHARMA',
+          addressDisplay: 'Address A',
+        ),
+      ];
+      final page2 = [
+        const SecondarySalesStockistInfo(
+          id: 445,
+          name: 'RICHA PHARMA',
+          addressDisplay: 'Address B',
+        ),
+      ];
+      final merged = mergeAuthorizedStockists(page1, page2);
+      expect(merged.map((s) => s.id), [444, 445]);
+      expect(merged.map((s) => s.name), ['RICHA PHARMA', 'RICHA PHARMA']);
+    });
+
     test('page 1 URI always sends page=1 and per_page=50', () {
       final uri = authorizedStockistsUri();
       expect(uri.queryParameters['page'], '1');
@@ -744,6 +818,129 @@ void main() {
       expect(find.text('ID: 2134'), findsOneWidget);
       expect(find.text('SUKHMANI TRADERS'), findsOneWidget);
       expect(find.text('ID: 2227'), findsOneWidget);
+    });
+
+    testWidgets(
+      'same-name stockists show distinct IDs and address_display',
+      (tester) async {
+        final service = SecondarySalesStockistService(
+          getter: (_) async => http.Response(
+            jsonEncode(_page(
+              page: 1,
+              lastPage: 1,
+              total: 3,
+              data: [
+                {
+                  'id': 444,
+                  'name': 'RICHA PHARMA',
+                  'address_display':
+                      'GOLA ROAD, HOSPITAL ROAD, HATPAR, NAWADA, Bihar - 805110',
+                },
+                {
+                  'id': 445,
+                  'name': 'RICHA PHARMA',
+                  'address_display': 'MAIN BAZAR, PATNA, Bihar - 800001',
+                },
+                {
+                  'id': 446,
+                  'name': 'RICHA PHARMA',
+                },
+              ],
+            )),
+            200,
+          ),
+        );
+        final controller =
+            SecondarySalesStockistListController(service: service);
+        await controller.refresh();
+        await pumpPicker(tester, controller: controller);
+
+        expect(find.text('RICHA PHARMA'), findsNWidgets(3));
+        expect(find.text('ID: 444'), findsOneWidget);
+        expect(find.text('ID: 445'), findsOneWidget);
+        expect(find.text('ID: 446'), findsOneWidget);
+        expect(
+          find.text(
+            'GOLA ROAD, HOSPITAL ROAD, HATPAR, NAWADA, Bihar - 805110',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.text('MAIN BAZAR, PATNA, Bihar - 800001'),
+          findsOneWidget,
+        );
+        expect(find.text('Address'), findsNothing);
+      },
+    );
+
+    testWidgets('selecting same-name row uses stockist ID, not name',
+        (tester) async {
+      SecondarySalesStockistInfo? selected;
+      final service = SecondarySalesStockistService(
+        getter: (_) async => http.Response(
+          jsonEncode(_page(
+            page: 1,
+            lastPage: 1,
+            total: 2,
+            data: [
+              {
+                'id': 444,
+                'name': 'RICHA PHARMA',
+                'address_display': 'Address A',
+              },
+              {
+                'id': 445,
+                'name': 'RICHA PHARMA',
+                'address_display': 'Address B',
+              },
+            ],
+          )),
+          200,
+        ),
+      );
+      final controller = SecondarySalesStockistListController(service: service);
+      await controller.refresh();
+
+      Future<void> pumpWithSelection() async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SecondarySalesStockistPicker(
+                controller: controller,
+                selected: selected,
+                onSelected: (stockist) {
+                  selected = stockist;
+                },
+                onClear: () {
+                  selected = null;
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+      }
+
+      await pumpWithSelection();
+      await tester.tap(find.text('ID: 445'));
+      await tester.pump();
+      expect(selected?.id, 445);
+      expect(selected?.name, 'RICHA PHARMA');
+      expect(selected?.displayAddress, 'Address B');
+
+      await pumpWithSelection();
+      expect(find.text('Address B'), findsOneWidget);
+      expect(find.text('ID: 445'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Clear selection'));
+      await tester.pump();
+      selected = null;
+      await pumpWithSelection();
+
+      await tester.tap(find.text('ID: 444'));
+      await tester.pump();
+      expect(selected?.id, 444);
+      expect(selected?.displayAddress, 'Address A');
     });
 
     testWidgets('search by name uses the stockists API', (tester) async {
