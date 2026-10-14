@@ -2,22 +2,6 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Voice notes are recorded to capture key call observations after doctor detailing.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>Camera is used to scan and photograph documents, QR codes, and invoices for upload.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Photo library access is needed to select and upload document images and invoices.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Scanned documents may be saved to your photo library for record keeping.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Speech recognition is used to transcribe voice notes into text after a doctor call.</string>
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Your location is used to verify you are within 50 m of the doctor before starting a detailing session.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Your location is used to verify proximity to the doctor during field visits.</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Your location is used to verify proximity to the doctor during field visits.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -42,6 +26,22 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera is used to scan and photograph documents, QR codes, and invoices for upload.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Your location is used to verify proximity to the doctor during field visits.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Your location is used to verify proximity to the doctor during field visits.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Your location is used to verify you are within 50 m of the doctor before starting a detailing session.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Voice notes are recorded to capture key call observations after doctor detailing.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Scanned documents may be saved to your photo library for record keeping.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access is needed to select and upload document images and invoices.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition is used to transcribe voice notes into text after a doctor call.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
