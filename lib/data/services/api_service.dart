@@ -13,7 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Android Emulator uses 10.0.2.2. For Real Device use your PC IP (e.g., 192.168.1.5)
-  static const String baseUrl = 'https://vodoclm-pro.globalspace.in/api';
+  static const String baseUrl = 'https://auropharma.globalspace.in/api';
 
   String _errorMessageFromBody(String body) {
     try {
@@ -47,7 +47,11 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/login'), // Adjust endpoint if needed
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': empId, 'password': password}),
+        body: jsonEncode({
+          'username': empId,
+          'password': password,
+          'platform': 'web',
+        }),
       );
 
       final responseData = jsonDecode(response.body);
