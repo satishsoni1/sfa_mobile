@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -47,7 +47,7 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/login'), // Adjust endpoint if needed
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': empId, 'password': password}),
+        body: jsonEncode({'username': empId, 'password': password, 'platform': 'secondary_sales'}),
       );
 
       final responseData = jsonDecode(response.body);
