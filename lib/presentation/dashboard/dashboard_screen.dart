@@ -1,4 +1,4 @@
-﻿import '../tp_deviation/tp_deviation_history_screen.dart';
+import '../tp_deviation/tp_deviation_history_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -40,7 +40,7 @@ import 'external_links_screen.dart';
 import '../reporting/daily_report_screen.dart';
 import '../reporting/nfw_report_screen.dart';
 import '../cme/cme_history_screen.dart';
-import '../gifts/gift_acceptance_dashboard.dart';
+// import '../gifts/gift_acceptance_dashboard.dart';
 import '../dcr/dcr_unlock_request_screen.dart';
 import '../tour_plan/tour_plan_screen.dart';
 
@@ -74,7 +74,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.84";
+  static const String CURRENT_APP_VERSION = "1.0.85";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -1451,12 +1451,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Colors.pink,
         () => _navigateTo(const DoctorBrandScreen()),
       ),
-      _MenuAction(
-        Icons.card_giftcard,
-        "Gift Acceptance",
-        Colors.teal,
-        () => _navigateTo(const GiftAcceptanceDashboard()),
-      ),
+      // _MenuAction(
+      //   Icons.card_giftcard,
+      //   "Gift Acceptance",
+      //   Colors.teal,
+      //   () => _navigateTo(const GiftAcceptanceDashboard()),
+      // ),
         // _MenuAction(
           //   Icons.business_center,
           //   "Data Upload",

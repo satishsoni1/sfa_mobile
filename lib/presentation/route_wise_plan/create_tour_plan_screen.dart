@@ -260,7 +260,12 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
 
   void _savePlan() async {
     if (!_isActivity && _selectedAreas.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select at least one area.")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select an area.")));
+      return;
+    }
+
+    if (!_isActivity && _selectedAreas.length > 1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("You can only select one area per day.")));
       return;
     }
 
@@ -489,8 +494,12 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                         checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                         onChanged: (val) {
                           setState(() {
-                            if (val == true) _selectedAreas.add(area['id']);
-                            else _selectedAreas.remove(area['id']);
+                            if (val == true) {
+                              _selectedAreas.clear();
+                              _selectedAreas.add(area['id']);
+                            } else {
+                              _selectedAreas.remove(area['id']);
+                            }
                           });
                         },
                         title: Row(

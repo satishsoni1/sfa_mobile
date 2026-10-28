@@ -164,14 +164,15 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
         }
 
         if (p['work_type_id'] != null && p['work_type_id'] != 0) {
-          dayPlan.selectedWorkType = _allWorkTypes.firstWhere(
+          dayPlan.selectedWorkType = _allWorkTypes.cast<dynamic>().firstWhere(
             (w) => w['id']?.toString() == p['work_type_id'].toString(),
-            orElse: () => {'id': p['work_type_id'], 'name': p['activity_name'] ?? 'Unknown'},
+            orElse: () => null,
           );
-        } else if (p['activity_name'] != null) {
-          dayPlan.selectedWorkType = _allWorkTypes.firstWhere(
-            (w) => w['name']?.toString() == p['activity_name'].toString(),
-            orElse: () => {'id': 0, 'name': p['activity_name']},
+        } else if (p['activity_name'] != null && p['activity_name'].toString().trim().isNotEmpty) {
+          final actName = p['activity_name'].toString().trim().toLowerCase();
+          dayPlan.selectedWorkType = _allWorkTypes.cast<dynamic>().firstWhere(
+            (w) => w['name']?.toString().trim().toLowerCase() == actName,
+            orElse: () => null,
           );
         }
       }
@@ -186,6 +187,13 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     if (dayPlan.selectedRoutes.isEmpty && dayPlan.selectedWorkType == null) {
       _showSnack(
           'Please select at least a Route or Work Type before saving.',
+          isError: true);
+      return;
+    }
+
+    if (dayPlan.selectedRoutes.length > 1) {
+      _showSnack(
+          'You can select only one route/area per day.',
           isError: true);
       return;
     }
@@ -758,8 +766,10 @@ class _DayCard extends StatelessWidget {
   Widget _routeSelector(BuildContext context) {
     final count = dayPlan.selectedRoutes.length;
     final label = count == 0
-        ? 'Select Routes'
-        : '$count Route${count > 1 ? 's' : ''} selected';
+        ? 'Select Route'
+        : (count == 1
+            ? (dayPlan.selectedRoutes.first['name']?.toString() ?? '1 Route selected')
+            : '$count Routes selected');
     final hasVal = count > 0;
 
     return _labelledField(
@@ -770,12 +780,13 @@ class _DayCard extends StatelessWidget {
         onTap: canEdit
             ? () => _showMultiSelectSheet(
                   context,
-                  title: 'Select Routes',
+                  title: 'Select Route',
                   allItems: allRoutes,
                   selectedItems: dayPlan.selectedRoutes,
                   displayKey: 'name',
                   idKey: 'id',
                   primaryColor: primaryColor,
+                  maxSelection: 1,
                   displayBuilder: (item) {
                     final name = item['name']?.toString() ?? 'Unknown';
                     final drCount = item['dr_count'];
@@ -898,6 +909,39 @@ class _DayCard extends StatelessWidget {
   }
 
   Widget _workTypeSelector() {
+    // Safely resolve the selected item from allWorkTypes to guarantee reference equality
+    dynamic selectedWorkType;
+    if (dayPlan.selectedWorkType != null) {
+      final selectedId = dayPlan.selectedWorkType is Map
+          ? dayPlan.selectedWorkType['id']?.toString()
+          : dayPlan.selectedWorkType.toString();
+      final selectedName = dayPlan.selectedWorkType is Map
+          ? dayPlan.selectedWorkType['name']?.toString().trim().toLowerCase()
+          : null;
+
+      for (final wt in allWorkTypes) {
+        if (wt is Map) {
+          final wtId = wt['id']?.toString();
+          final wtName = wt['name']?.toString().trim().toLowerCase();
+          if ((selectedId != null && selectedId != '0' && selectedId.isNotEmpty && wtId == selectedId) ||
+              (selectedName != null && selectedName.isNotEmpty && wtName == selectedName)) {
+            selectedWorkType = wt;
+            break;
+          }
+        }
+      }
+    }
+
+    // Deduplicate allWorkTypes to prevent duplicate dropdown values
+    final seen = <String>{};
+    final uniqueItems = <dynamic>[];
+    for (final wt in allWorkTypes) {
+      final key = wt is Map ? (wt['id']?.toString() ?? wt['name']?.toString() ?? '') : wt.toString();
+      if (key.isNotEmpty && seen.add(key)) {
+        uniqueItems.add(wt);
+      }
+    }
+
     return _labelledField(
       label: 'Work Type',
       icon: Icons.work_outline,
@@ -907,25 +951,25 @@ class _DayCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
-            color: dayPlan.selectedWorkType != null
+            color: selectedWorkType != null
                 ? AppColors.primary.withValues(alpha: 0.06)
                 : Colors.grey.shade50,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: dayPlan.selectedWorkType != null
+              color: selectedWorkType != null
                   ? AppColors.primary.withValues(alpha: 0.3)
                   : Colors.grey.shade300,
             ),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<dynamic>(
-              value: dayPlan.selectedWorkType,
+              value: selectedWorkType,
               isExpanded: true,
               hint: Text('Select Work Type',
                   style: GoogleFonts.poppins(
                       fontSize: 12, color: Colors.grey.shade600)),
               icon: const Icon(Icons.keyboard_arrow_down, size: 16),
-              items: allWorkTypes
+              items: uniqueItems
                   .map((wt) => DropdownMenuItem<dynamic>(
                         value: wt,
                         child: Text(wt['name']?.toString() ?? '',
@@ -1021,16 +1065,22 @@ class _DayCard extends StatelessWidget {
         return Row(children: [
           const Icon(Icons.check_circle, color: Colors.green, size: 18),
           const SizedBox(width: 6),
-          Text('Plan saved',
-              style: GoogleFonts.poppins(
-                  fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500)),
+          Expanded(
+            child: Text('Plan saved',
+                style: GoogleFonts.poppins(
+                    fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis),
+          ),
         ]);
       } else {
         return Row(children: [
           Icon(Icons.lock_outline, color: Colors.grey.shade400, size: 16),
           const SizedBox(width: 6),
-          Text('Save previous day first',
-              style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500)),
+          Expanded(
+            child: Text('Save previous day first',
+                style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade500),
+                overflow: TextOverflow.ellipsis),
+          ),
         ]);
       }
     }
@@ -1041,9 +1091,12 @@ class _DayCard extends StatelessWidget {
       return Row(children: [
         const Icon(Icons.check_circle, color: Colors.green, size: 18),
         const SizedBox(width: 6),
-        Text('Plan saved (tap any field to edit)',
-            style: GoogleFonts.poppins(
-                fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500)),
+        Expanded(
+          child: Text('Plan saved (tap any field to edit)',
+              style: GoogleFonts.poppins(
+                  fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis),
+        ),
       ]);
     }
 
@@ -1078,6 +1131,7 @@ class _DayCard extends StatelessWidget {
     required Color primaryColor,
     required ValueChanged<List<dynamic>> onConfirm,
     String Function(dynamic)? displayBuilder,
+    int? maxSelection,
   }) {
     List<dynamic> tempSelected = List.from(selectedItems);
     String searchQuery = '';
@@ -1208,7 +1262,13 @@ class _DayCard extends StatelessWidget {
                               onChanged: (val) {
                                 setSheet(() {
                                   if (val == true) {
-                                    tempSelected.add(item);
+                                    if (maxSelection == 1) {
+                                      tempSelected = [item];
+                                    } else if (maxSelection != null && tempSelected.length >= maxSelection) {
+                                      tempSelected = [item];
+                                    } else {
+                                      tempSelected.add(item);
+                                    }
                                   } else {
                                     tempSelected.removeWhere(
                                         (s) =>

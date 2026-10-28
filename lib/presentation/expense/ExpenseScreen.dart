@@ -389,6 +389,15 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               _hotelBillFlag = true;
             }
           }
+          if (_endLocation == null || _endLocation!.isEmpty) {
+            final apiTo = (data['to_location'] ?? data['longest_location'] ?? data['end_location'])?.toString();
+            if (apiTo != null && apiTo.isNotEmpty) {
+              _endLocation = apiTo;
+              if (_fieldWaypoints.length >= 2) {
+                _fieldWaypoints.last = apiTo;
+              }
+            }
+          }
         } else {
           // New expense: use fresh API values
           _serverDaType   = (data['da_type'] ?? 'HQ').toString().toUpperCase();
@@ -413,13 +422,21 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
           if (apiFrom != null && apiFrom.isNotEmpty) {
             _selectedFrom = apiFrom;
             _fromLocation = apiFrom;
-            if (_fieldWaypoints.isNotEmpty) _fieldWaypoints[0] = apiFrom;
+            if (_fieldWaypoints.isNotEmpty) {
+              _fieldWaypoints[0] = apiFrom;
+            }
           }
           
-          final apiTo = data['to_location']?.toString();
+          final apiTo = (data['to_location'] ?? data['longest_location'] ?? data['end_location'])?.toString();
           if (apiTo != null && apiTo.isNotEmpty) {
             _endLocation = apiTo;
-            if (_fieldWaypoints.length >= 2) _fieldWaypoints.last = apiTo;
+            if (_fieldWaypoints.isEmpty) {
+              _fieldWaypoints = [_selectedFrom ?? _userHq ?? 'HQ', apiTo];
+            } else if (_fieldWaypoints.length == 1) {
+              _fieldWaypoints = [_fieldWaypoints[0] ?? _userHq ?? 'HQ', apiTo];
+            } else {
+              _fieldWaypoints.last = apiTo;
+            }
           }
         }
         _manualKmController.text = _serverTaKm.toStringAsFixed(1);
@@ -2128,7 +2145,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             final isLast  = index == _fieldWaypoints.length - 1;
             // For the "From" slot, fall back to HQ when not yet chosen
             final val  = _fieldWaypoints[index] ?? (isFirst ? _userHq : null);
-            final safe = allLocs.contains(val) ? val : null;
+            final safe = (val != null && val.isNotEmpty) ? val : null;
             final icon    = isFirst ? Icons.my_location : isLast ? Icons.location_on : Icons.radio_button_unchecked;
             final iconColor = isFirst ? Colors.green.shade600 : isLast ? Colors.red.shade600 : Colors.blue.shade400;
             final hint    = isFirst ? 'From' : isLast ? 'To' : 'Via';
@@ -2374,6 +2391,28 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         if (loc.isNotEmpty) locs.add(loc);
       }
     }
+    // Include current waypoints and locations from state & calculation
+    if (_endLocation != null && _endLocation!.isNotEmpty) locs.add(_endLocation!);
+    if (_fromLocation != null && _fromLocation!.isNotEmpty) locs.add(_fromLocation!);
+    if (_selectedFrom != null && _selectedFrom!.isNotEmpty) locs.add(_selectedFrom!);
+    for (final wp in _fieldWaypoints) {
+      if (wp != null && wp.isNotEmpty) locs.add(wp);
+    }
+    if (_calcData != null) {
+      final toLoc = (_calcData!['to_location'] ?? _calcData!['longest_location'])?.toString();
+      if (toLoc != null && toLoc.isNotEmpty) locs.add(toLoc);
+      final fromLoc = _calcData!['from_location']?.toString();
+      if (fromLoc != null && fromLoc.isNotEmpty) locs.add(fromLoc);
+      final route = _calcData!['route'];
+      if (route is List) {
+        for (final stop in route) {
+          if (stop is Map) {
+            final area = stop['area']?.toString();
+            if (area != null && area.isNotEmpty) locs.add(area);
+          }
+        }
+      }
+    }
     return locs.toList()..sort();
   }
 
@@ -2439,8 +2478,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     if (allLocs.isEmpty) return const SizedBox.shrink();
 
     final autoFrom = _selectedFrom ?? _transitFromTown ?? _userHq;
-    final safeFrom = allLocs.contains(autoFrom) ? autoFrom : null;
-    final safeTo = allLocs.contains(_endLocation) ? _endLocation : null;
+    final safeFrom = (autoFrom != null && autoFrom.isNotEmpty) ? autoFrom : (allLocs.contains(autoFrom) ? autoFrom : null);
+    final safeTo = (_endLocation != null && _endLocation!.isNotEmpty) ? _endLocation : (allLocs.contains(_endLocation) ? _endLocation : null);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2722,6 +2761,39 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               ),
             ],
           ),
+          if ((_calcData!['from_location']?.toString().isNotEmpty == true) ||
+              (_calcData!['to_location']?.toString().isNotEmpty == true) ||
+              (_calcData!['longest_location']?.toString().isNotEmpty == true)) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3E5F5),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF4A148C).withValues(alpha: 0.15)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.near_me, size: 14, color: Color(0xFF4A148C)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      [
+                        (_calcData!['from_location'] ?? _selectedFrom ?? _userHq ?? '').toString(),
+                        (_calcData!['to_location'] ?? _calcData!['longest_location'] ?? _endLocation ?? '').toString(),
+                      ].where((s) => s.isNotEmpty).join(' → '),
+                      style: GoogleFonts.poppins(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF4A148C),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           SizedBox(
             height: 90,
