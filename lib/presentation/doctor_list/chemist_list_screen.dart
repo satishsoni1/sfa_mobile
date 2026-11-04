@@ -43,7 +43,8 @@ class _ChemistListScreenState extends State<ChemistListScreen> {
 
   Future<void> _loadSubordinatesAndData() async {
     try {
-      final subs = await _api.getSubordinates();
+      final now = DateTime.now();
+      final subs = await _api.getSubordinates(month: now.month, year: now.year);
       if (mounted) setState(() => _subordinates = subs);
     } catch (e) {
       debugPrint("Error fetching subordinates: $e");
@@ -307,106 +308,13 @@ class _ChemistListScreenState extends State<ChemistListScreen> {
   void _showSubordinatePicker() {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Select Territory",
-                    style: GoogleFonts.poppins(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView(
-                children: [
-                  ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _selectedSubordinate == null
-                          ? _primaryColor
-                          : Colors.grey.shade200,
-                      child: Icon(
-                        Icons.person,
-                        color: _selectedSubordinate == null
-                            ? Colors.white
-                            : Colors.grey,
-                      ),
-                    ),
-                    title: Text(
-                      "My Territory (Self)",
-                      style: TextStyle(
-                        fontWeight: _selectedSubordinate == null
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
-                    ),
-                    trailing: _selectedSubordinate == null
-                        ? Icon(Icons.check_circle, color: _primaryColor)
-                        : null,
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _onSubordinateChanged(null);
-                    },
-                  ),
-                  ..._subordinates.map((sub) {
-                    bool isSelected = _selectedSubordinate?['id'] == sub['id'];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: isSelected
-                            ? _primaryColor
-                            : Colors.grey.shade200,
-                        child: Icon(
-                          Icons.group,
-                          color: isSelected ? Colors.white : Colors.grey,
-                        ),
-                      ),
-                      // --- ADDED NULL SAFETY HERE ---
-                      title: Text(
-                        sub['name']?.toString() ?? 'Unknown',
-                        style: TextStyle(
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                      subtitle: Text(
-                        sub['designation']?.toString() ?? 'Team Member',
-                      ),
-                      // ------------------------------
-                      trailing: isSelected
-                          ? Icon(Icons.check_circle, color: _primaryColor)
-                          : null,
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _onSubordinateChanged(sub);
-                      },
-                    );
-                  }),
-                ],
-              ),
-            ),
-          ],
-        ),
+      isScrollControlled: true,
+      builder: (ctx) => _SubordinateSearchSheet(
+        subordinates: _subordinates,
+        selectedSubordinate: _selectedSubordinate,
+        primaryColor: _primaryColor,
+        onSelect: _onSubordinateChanged,
       ),
     );
   }
@@ -716,6 +624,198 @@ class _ChemistListScreenState extends State<ChemistListScreen> {
           fontWeight: FontWeight.bold,
           color: textCol,
         ),
+      ),
+    );
+  }
+}
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<dynamic> subordinates;
+  final dynamic selectedSubordinate;
+  final Function(dynamic) onSelect;
+  final Color primaryColor;
+
+  const _SubordinateSearchSheet({
+    required this.subordinates,
+    this.selectedSubordinate,
+    required this.onSelect,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() =>
+      _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  String _searchQuery = "";
+  late List<dynamic> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.subordinates;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredList = widget.subordinates.where((sub) {
+        final name = sub['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Territory",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _filteredList.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  if (_searchQuery.isNotEmpty &&
+                      !"myself".contains(_searchQuery.toLowerCase()) &&
+                      !"my territory".contains(_searchQuery.toLowerCase())) {
+                    return const SizedBox.shrink();
+                  }
+                  bool isSelected = widget.selectedSubordinate == null;
+                  return _buildSubordinateTile(
+                    name: "My Territory (Self)",
+                    subtitle: "Myself",
+                    isSelected: isSelected,
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.onSelect(null);
+                    },
+                  );
+                }
+
+                var sub = _filteredList[index - 1];
+                bool isSelected =
+                    widget.selectedSubordinate?['id'] == sub['id'];
+
+                return _buildSubordinateTile(
+                  name: sub['name']?.toString() ?? 'Unknown',
+                  subtitle: sub['designation']?.toString() ?? 'Team Member',
+                  imageUrl: sub['photo']?.toString(),
+                  isSelected: isSelected,
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onSelect(sub);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubordinateTile({
+    required String name,
+    required String subtitle,
+    String? imageUrl,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? widget.primaryColor.withValues(alpha: 0.05)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
+        ),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor: Colors.grey.shade100,
+          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+          child: imageUrl == null
+              ? Icon(Icons.person, color: Colors.grey.shade400)
+              : null,
+        ),
+        title: Text(
+          name,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: isSelected ? widget.primaryColor : Colors.black87,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: widget.primaryColor)
+            : null,
       ),
     );
   }

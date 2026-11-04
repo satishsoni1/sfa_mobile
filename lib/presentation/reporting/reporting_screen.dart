@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../providers/report_provider.dart';
 import '../../data/models/visit_report.dart';
+import 'report_finalize_screen.dart';
 
 class ReportingScreen extends StatefulWidget {
   final String doctorId; // REQUIRED: Unique ID
@@ -300,7 +301,7 @@ class _ReportingScreenState extends State<ReportingScreen> {
     );
   }
 
-  void _submitReport() async {
+  void _onNext() async {
     final provider = Provider.of<ReportProvider>(context, listen: false);
 
     bool isDuplicate = provider.reports.any((report) {
@@ -337,50 +338,21 @@ class _ReportingScreenState extends State<ReportingScreen> {
       return;
     }
 
-    int ptsValue = int.tryParse(_businessValueController.text.trim()) ?? 0;
-    if (_businessValueController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter Doctor Business Value as per PTS")),
-      );
-      return;
-    }
-
-    String finalRemark = _selectedRemark ?? "Met";
-    if (_selectedRemark == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a Visit Outcome / Remark")),
-      );
-      return;
-    }
-    if (_selectedRemark == 'Other') {
-      if (_otherRemarkController.text.trim().isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Please type your remark")),
-        );
-        return;
-      }
-      finalRemark = _otherRemarkController.text.trim();
-    }
-
-    setState(() => _isLoading = true);
-
     List<ProductEntry> finalProductList = _uiProducts
         .where((p) => p['isSelected'] == true)
         .map(
           (p) => ProductEntry(
             productName: p['name'],
             // p['id'] holds the brand_id from the master product list (set during _loadData)
-            // Without this, brandId defaults to 0 and is sent as 0 in every product payload
             brandId:   p['id'] is int ? p['id'] : int.tryParse(p['id'].toString()) ?? 0,
-            pobQty:    p['pob'],    // 1 = Yes, 0 = No  (Brands Added After Last Visit which is sent in payload as new_brands_rxbed)
+            pobQty:    p['pob'],    // 1 = Yes, 0 = No
             sampleQty: p['sample'], // SPL quantity entered by user
-            rxQty:     p['rx'],     // 1 = Yes, 0 = No  (Brands Rxbed which also sent in the payload as prescribed_rx  )
+            rxQty:     p['rx'],     // 1 = Yes, 0 = No
           ),
         )
         .toList();
-        
+
     if (finalProductList.isEmpty) {
-      setState(() => _isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select at least one product")),
       );
@@ -410,45 +382,28 @@ class _ReportingScreenState extends State<ReportingScreen> {
       _selectedTime.minute,
     );
 
-    final report = VisitReport(
-      id: widget.existingReport?.id ?? "",
-      doctorId: widget.existingReport?.doctorId ?? widget.doctorId,
-      doctorName: widget.doctorName,
-      doctorSpeciality: widget.doctorSpeciality,
-      visitTime: finalDateTime,
-      remarks: finalRemark,
-      products: finalProductList,
-      workedWith:      selectedColleagueIds,      // IDs — used for internal selection restore
-      workedWithNames: selectedColleagueDetails,  // [ADDED] id+name — sent in payload
-      businessValuePts: ptsValue,
-      isSubmitted: false,
+    final bool? result = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReportFinalizeScreen(
+          doctorId: widget.existingReport?.doctorId ?? widget.doctorId,
+          doctorName: widget.doctorName,
+          doctorSpeciality: widget.doctorSpeciality,
+          isPlanned: widget.isPlanned,
+          visitDateTime: finalDateTime,
+          existingReport: widget.existingReport,
+          products: finalProductList,
+          workedWithIds: selectedColleagueIds,
+          workedWithDetails: selectedColleagueDetails,
+          initialBusinessValue: _businessValueController.text,
+          initialRemark: _selectedRemark,
+          initialOtherRemark: _otherRemarkController.text,
+        ),
+      ),
     );
 
-    try {
-      if (widget.existingReport != null) {
-        await provider.updateReport(report);
-      } else {
-        await provider.addReport(report);
-      }
-
-      if (mounted) {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Report Saved!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-        ));
-      }
+    if (result == true && mounted) {
+      Navigator.pop(context, true);
     }
   }
 
@@ -754,154 +709,52 @@ class _ReportingScreenState extends State<ReportingScreen> {
                       );
                     }),
                   ),
-
-                  // === BOTTOM SECTION: hidden when keyboard up (unless typing business value) ===
-                  if (MediaQuery.of(context).viewInsets.bottom == 0 || _businessValueFocused)
+                  // === BOTTOM SECTION: NEXT BUTTON ===
                   Container(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       boxShadow: [
                         BoxShadow(
-                          blurRadius: 12,
-                          color: Colors.black.withOpacity(0.07),
-                          offset: const Offset(0, -4),
+                          blurRadius: 10,
+                          color: Colors.black.withValues(alpha: 0.07),
+                          offset: const Offset(0, -3),
                         ),
                       ],
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(20),
-                      ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Business Value
-                        SizedBox(
-                          height: 44,
-                          child: TextField(
-                            controller: _businessValueController,
-                            focusNode: _businessValueFocusNode,
-                            keyboardType: TextInputType.number,
-                            inputFormatters: [
-                              FilteringTextInputFormatter.digitsOnly
-                            ],
-                            style: GoogleFonts.poppins(fontSize: 13),
-                            decoration: InputDecoration(
-                              labelText:
-                                  "Dr. Business Value as per PTS *",
-                              labelStyle: GoogleFonts.poppins(
-                                  fontSize: 11, color: Colors.grey[600]),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade300),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade300),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 0),
-                            ),
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: _onNext,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF4A148C),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
                           ),
+                          elevation: 2,
                         ),
-                        const SizedBox(height: 8),
-                        // Remark Dropdown
-                        SizedBox(
-                          height: 44,
-                          child: DropdownButtonFormField<String>(
-                            value: _selectedRemark,
-                            isExpanded: true,
-                            icon: const Icon(
-                              Icons.arrow_drop_down_circle,
-                              color: Color(0xFF4A148C),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              "NEXT",
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                                fontSize: 14,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Icon(
+                              Icons.arrow_forward,
+                              color: Colors.white,
                               size: 18,
                             ),
-                            items: remarks
-                                .map(
-                                  (r) => DropdownMenuItem(
-                                    value: r,
-                                    child: Text(
-                                      r,
-                                      style:
-                                          GoogleFonts.poppins(fontSize: 12),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) => setState(() {
-                              _selectedRemark = v;
-                              if (v != 'Other')
-                                _otherRemarkController.clear();
-                            }),
-                            decoration: InputDecoration(
-                              labelText: "Visit Outcome / Remark *",
-                              labelStyle: GoogleFonts.poppins(
-                                  fontSize: 11, color: Colors.grey[600]),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade300),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide:
-                                    BorderSide(color: Colors.grey.shade300),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 0),
-                            ),
-                          ),
+                          ],
                         ),
-                        if (_selectedRemark == 'Other') ...[
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            height: 44,
-                            child: TextField(
-                              controller: _otherRemarkController,
-                              style: GoogleFonts.poppins(fontSize: 13),
-                              decoration: InputDecoration(
-                                labelText: "Type custom remark...",
-                                labelStyle: GoogleFonts.poppins(
-                                    fontSize: 11, color: Colors.grey[600]),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                                contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 0),
-                              ),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 10),
-                        ElevatedButton(
-                          onPressed: _submitReport,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4A148C),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            elevation: 2,
-                          ),
-                          child: Text(
-                            widget.existingReport != null
-                                ? "UPDATE REPORT"
-                                : "SUBMIT REPORT",
-                            style: GoogleFonts.poppins(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                              fontSize: 14,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ],

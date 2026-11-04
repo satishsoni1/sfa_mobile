@@ -48,7 +48,7 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
     setState(() => _isLoading = true);
     try {
       // 1. Fetch Hierarchy (Team Members)
-      final subs = await _api.getSubordinates();
+      final subs = await _api.getSubordinates(month: _selectedDate.month, year: _selectedDate.year);
       
       // Auto-select initial subordinate if provided
       if (widget.initialSubordinateId != null) {
@@ -1223,71 +1223,168 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    "Select Team Member",
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
+      builder: (ctx) => _SubordinateSearchSheet(
+        subordinates: _subordinates,
+        selectedSubordinate: _selectedSubordinate,
+        primaryColor: _primaryColor,
+        approvedColor: _approvedColor,
+        pendingColor: _pendingColor,
+        rejectedColor: _rejectedColor,
+        onSelect: _onSubordinateChanged,
+      ),
+    );
+  }
+}
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<dynamic> subordinates;
+  final dynamic selectedSubordinate;
+  final Function(dynamic) onSelect;
+  final Color primaryColor;
+  final Color approvedColor;
+  final Color pendingColor;
+  final Color rejectedColor;
+
+  const _SubordinateSearchSheet({
+    required this.subordinates,
+    this.selectedSubordinate,
+    required this.onSelect,
+    required this.primaryColor,
+    required this.approvedColor,
+    required this.pendingColor,
+    required this.rejectedColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() =>
+      _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  String _searchQuery = "";
+  late List<dynamic> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.subordinates;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredList = widget.subordinates.where((sub) {
+        final name = sub['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          // Header & Drag Handle
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Team Member",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Search TextField
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
                 ),
-                children: [
-                  _buildSubordinateTile(
+              ],
+            ),
+          ),
+
+          // List View
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _filteredList.length + 1, 
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  if (_searchQuery.isNotEmpty && !"myself".contains(_searchQuery.toLowerCase())) {
+                    return const SizedBox.shrink();
+                  }
+                  bool isSelected = widget.selectedSubordinate == null;
+                  return _buildSubordinateTile(
                     name: "Myself",
                     subtitle: "My Territory",
-                    isSelected: _selectedSubordinate == null,
+                    isSelected: isSelected,
                     hasPlan: false,
                     onTap: () {
-                      Navigator.pop(ctx);
-                      _onSubordinateChanged(null);
+                      Navigator.pop(context);
+                      widget.onSelect(null);
                     },
-                  ),
-                  ..._subordinates.map(
-                    (sub) => _buildSubordinateTile(
-                      name: sub['name'],
-                      subtitle: sub['designation'] ?? 'Team Member',
-                      imageUrl: sub['photo'],
-                      isSelected: _selectedSubordinate?['id'] == sub['id'],
-                      hasPlan:
-                          sub['has_plan'] == true, // Check logic from your API
-                      statusLabel: sub['plan_status'] ?? '',
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _onSubordinateChanged(sub);
-                      },
-                    ),
-                  ),
-                ],
-              ),
+                  );
+                }
+
+                var sub = _filteredList[index - 1];
+                bool isSelected = widget.selectedSubordinate?['id'] == sub['id'];
+
+                return _buildSubordinateTile(
+                  name: sub['name']?.toString() ?? 'Unknown',
+                  subtitle: sub['designation']?.toString() ?? 'Team Member',
+                  imageUrl: sub['photo']?.toString(),
+                  isSelected: isSelected,
+                  hasPlan: sub['has_plan'] == true,
+                  statusLabel: sub['plan_status']?.toString() ?? '',
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onSelect(sub);
+                  },
+                );
+              },
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1302,17 +1399,17 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
     required VoidCallback onTap,
   }) {
     Color statusColor = Colors.grey;
-    if (statusLabel.toLowerCase() == 'approved') statusColor = _approvedColor;
-    if (statusLabel.toLowerCase() == 'pending') statusColor = _pendingColor;
-    if (statusLabel.toLowerCase() == 'rejected') statusColor = _rejectedColor;
+    if (statusLabel.toLowerCase() == 'approved') statusColor = widget.approvedColor;
+    if (statusLabel.toLowerCase() == 'pending') statusColor = widget.pendingColor;
+    if (statusLabel.toLowerCase() == 'rejected') statusColor = widget.rejectedColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isSelected ? _primaryColor.withOpacity(0.05) : Colors.white,
+        color: isSelected ? widget.primaryColor.withValues(alpha: 0.05) : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isSelected ? _primaryColor : Colors.grey.shade200,
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
         ),
       ),
       child: ListTile(
@@ -1348,23 +1445,23 @@ class _TourPlanScreenState extends State<TourPlanScreen> {
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.w600,
             fontSize: 15,
-            color: isSelected ? _primaryColor : Colors.black87,
+            color: isSelected ? widget.primaryColor : Colors.black87,
           ),
         ),
         subtitle: Text(
           subtitle,
           style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
         ),
-        trailing: hasPlan
+        trailing: hasPlan && statusLabel.isNotEmpty
             ? Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
+                  color: statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: statusColor.withOpacity(0.3)),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   statusLabel,

@@ -161,7 +161,8 @@ class _DoctorSelectionScreenState extends State<DoctorSelectionScreen>
     setState(() => _isLoading = true);
     try {
       if (widget.isManager) {
-        final subs = await _api.getSubordinates();
+        final now = DateTime.now();
+        final subs = await _api.getSubordinates(month: now.month, year: now.year);
         setState(() => _subordinates = subs);
       }
       await _fetchDoctors();

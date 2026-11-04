@@ -38,12 +38,30 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
   List<dynamic> _subordinates = [];
   bool _isLoadingSubordinates = true;
 
-  final List<String> _activities = [
-    'Meeting',
-    'Leave',
-    'Holiday',
+  bool _isLoadingCampaignCheck = true;
+  List<Map<String, dynamic>> _availableCampaigns = [];
+  int? _selectedCampaignDropdownId;
+  Set<int> _activeCampaignIds = {};
+  Map<int, Set<int>> _campaignSelectedDoctorIds = {}; 
+  Map<int, List<Map<String, dynamic>>> _campaignEligibleDoctors = {}; 
+  Map<int, int?> _campaignMaxDoctors = {}; 
+  Map<int, String> _campaignDoctorIdentification = {}; 
+  Set<int> _loadingDoctorCampaignIds = {};
+
+  bool _isDayLocked = false;
+  bool _isDayUnlocked = false;
+  bool _isEditable = true;
+  String? _unlockReason;
+
+  List<String> _activities = [
+    'Cycle Meeting',
+    'Training',
     'Admin Work',
-    'Transit',
+    'Transit / Traveling',
+    'Conference',
+    'Head Office Meeting',
+    'Meeting',
+    'Closing',
   ];
 
   final Color _primaryColor = const Color(0xFF2E3192);
@@ -68,6 +86,8 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
 
     _loadSubordinates(); // Fetch the manager's team independently
     _loadAreasForUser();
+    _loadCampaignAndLockStatus();
+    _loadNfwActivities();
   }
 
   @override
@@ -76,10 +96,26 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
     super.dispose();
   }
 
+  Future<void> _loadNfwActivities() async {
+    try {
+      final items = await ApiService().getOnlyNfwActivities();
+      if (items.isNotEmpty && mounted) {
+        setState(() {
+          _activities = items;
+          if (_selectedActivity != null && !_activities.contains(_selectedActivity)) {
+            _activities.add(_selectedActivity!);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading NFW activities: $e");
+    }
+  }
+
   // --- NEW: Fetch Subordinates Directly ---
   Future<void> _loadSubordinates() async {
     try {
-      final subs = await ApiService().getSubordinates();
+      final subs = await ApiService().getSubordinates(month: widget.date.month, year: widget.date.year);
       if (mounted) {
         setState(() {
           _subordinates = subs;
@@ -133,7 +169,8 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
     if (mounted) {
       setState(() {
         _availableAreas = areas.map((a) {
-          String displayName = a['name'];
+          String rawName = (a['name'] ?? '').toString();
+          String displayName = rawName;
           if (a['territory_type'] != null && a['territory_type'].toString().trim().isNotEmpty) {
             displayName = "$displayName (${a['territory_type']})";
           }
@@ -150,6 +187,7 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
           return {
             "id": a['id'].toString(),
             "name": displayName,
+            "raw_name": rawName,
             "dr_count": a['dr_count'] ?? 0,
             "planned_by_sub": plannedBySub,
           };
@@ -157,14 +195,49 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
 
         // Restore previously selected areas
         if (widget.existingData != null && !_isActivity && widget.existingData['areas'] != null) {
-          List<String> existingNames = List<String>.from(widget.existingData['areas']);
-          for (var existingName in existingNames) {
+          final rawAreas = widget.existingData['areas'];
+          final List existingList = rawAreas is List ? rawAreas : [rawAreas];
+
+          for (var existing in existingList) {
+            if (existing == null) continue;
+            String existingStr = existing.toString().trim();
+            if (existingStr.isEmpty) continue;
+
+            // 1. Direct ID match
             var matchedArea = _availableAreas.firstWhere(
-              (area) => area['name'].toString().contains(existingName) || existingName.contains(area['name'].toString()),
+              (area) => area['id'].toString() == existingStr,
               orElse: () => {},
             );
-            if (matchedArea.isNotEmpty) {
-              _selectedAreas.add(matchedArea['id']);
+
+            // 2. Exact or normalized name match
+            if (matchedArea.isEmpty) {
+              String norm(String s) {
+                return s
+                    .toLowerCase()
+                    .replaceAll(RegExp(r'\([^)]*\)'), '') // remove (HQ), (OS), etc.
+                    .replaceAll(RegExp(r'[\s\-_–—>]+'), ''); // normalize separators and spaces
+              }
+
+              String targetNorm = norm(existingStr);
+              if (targetNorm.isNotEmpty) {
+                matchedArea = _availableAreas.firstWhere(
+                  (area) {
+                    String aNameNorm = norm(area['name']?.toString() ?? '');
+                    String aRawNorm = norm(area['raw_name']?.toString() ?? '');
+                    return aNameNorm == targetNorm ||
+                        aRawNorm == targetNorm ||
+                        aNameNorm.contains(targetNorm) ||
+                        targetNorm.contains(aNameNorm) ||
+                        aRawNorm.contains(targetNorm) ||
+                        targetNorm.contains(aRawNorm);
+                  },
+                  orElse: () => {},
+                );
+              }
+            }
+
+            if (matchedArea.isNotEmpty && matchedArea['id'] != null) {
+              _selectedAreas.add(matchedArea['id'].toString());
             }
           }
         }
@@ -190,11 +263,269 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
             _selectedAreas.clear(); // Clear areas when switching territory
           });
           _loadAreasForUser(); // Fetch areas for the newly selected person
+          _loadCampaignAndLockStatus(); 
         },
       ),
     );
   }
 
+  Future<void> _loadCampaignAndLockStatus() async {
+    setState(() => _isLoadingCampaignCheck = true);
+    final dateStr = DateFormat('yyyy-MM-dd').format(widget.date);
+    int? targetEmpId = _selectedWorkingWithId != null
+        ? int.tryParse(_selectedWorkingWithId!)
+        : widget.userId;
+
+    try {
+      final lockData = await ApiService().getDayLockStatus(dateStr, employeeId: targetEmpId);
+      if (lockData.isNotEmpty) {
+        _isDayUnlocked = lockData['is_day_unlocked'] == true;
+        bool isMonthLocked = lockData['is_month_locked'] == true;
+        _isEditable = lockData['is_editable'] ?? (!isMonthLocked || _isDayUnlocked);
+        _isDayLocked = isMonthLocked && !_isDayUnlocked;
+        if (lockData['active_unlock'] != null && lockData['active_unlock'] is Map) {
+          _unlockReason = lockData['active_unlock']['reason'];
+        }
+      }
+
+      final campaigns = await ApiService().getAvailableCampaigns(
+        date: dateStr,
+        employeeId: targetEmpId,
+      );
+      _availableCampaigns = campaigns;
+
+      Map<String, dynamic>? dayDetails;
+      if (widget.existingData != null) {
+        dayDetails = await ApiService().getTourDayDetails(dateStr, employeeId: targetEmpId);
+        if (dayDetails != null && dayDetails['areas'] is List) {
+          for (var aId in (dayDetails['areas'] as List)) {
+            if (aId != null) {
+              _selectedAreas.add(aId.toString());
+            }
+          }
+          if (mounted) setState(() {});
+        }
+      }
+
+      bool hasExistingCampaign = widget.existingData != null &&
+          (widget.existingData['has_campaign'] == true ||
+              widget.existingData['has_campaign'] == 1 ||
+              (widget.existingData['campaigns'] is List && (widget.existingData['campaigns'] as List).isNotEmpty));
+
+      if (hasExistingCampaign || (dayDetails != null && dayDetails['campaigns'] != null)) {
+        dynamic rawCampaigns = dayDetails?['campaigns'] ?? widget.existingData?['campaigns'];
+
+        if (rawCampaigns is List && rawCampaigns.isNotEmpty) {
+          for (final c in rawCampaigns) {
+            if (c is Map) {
+              int? campId = int.tryParse(c['campaign_id']?.toString() ?? c['id']?.toString() ?? '');
+              if (campId != null) {
+                _activeCampaignIds.add(campId);
+                _selectedCampaignDropdownId = campId;
+
+                final String cName = c['campaign_name']?.toString() ?? 'Campaign #$campId';
+                final existingCampIndex = _availableCampaigns.indexWhere((ac) => ac['id'] == campId);
+                if (existingCampIndex == -1) {
+                  _availableCampaigns.add({
+                    'id': campId,
+                    'campaign_name': cName,
+                  });
+                } else if (_availableCampaigns[existingCampIndex]['campaign_name'] == null) {
+                  _availableCampaigns[existingCampIndex]['campaign_name'] = cName;
+                }
+
+                if (c['doctors'] is List) {
+                  final docsList = (c['doctors'] as List);
+                  _campaignSelectedDoctorIds[campId] = docsList
+                      .map<int>((d) {
+                        if (d is Map) {
+                          return int.tryParse(d['doctor_id']?.toString() ?? d['id']?.toString() ?? '') ?? 0;
+                        }
+                        return int.tryParse(d.toString()) ?? 0;
+                      })
+                      .where((id) => id > 0)
+                      .toSet();
+
+                  final existingDocs = _campaignEligibleDoctors[campId] ?? [];
+                  for (final d in docsList) {
+                    if (d is Map) {
+                      int docId = int.tryParse(d['doctor_id']?.toString() ?? d['id']?.toString() ?? '') ?? 0;
+                      if (docId > 0 && !existingDocs.any((ed) => ed['doctor_id'] == docId)) {
+                        existingDocs.add({
+                          'doctor_id': docId,
+                          'doctor_name': d['doctor_name'] ?? 'Doctor #$docId',
+                        });
+                      }
+                    }
+                  }
+                  _campaignEligibleDoctors[campId] = existingDocs;
+                }
+              }
+            }
+          }
+        } else if (dayDetails != null && dayDetails['campaign'] != null) {
+          int campId = dayDetails['campaign']['id'];
+          _activeCampaignIds.add(campId);
+          _selectedCampaignDropdownId = campId;
+          if (dayDetails['doctors'] is List) {
+            _campaignSelectedDoctorIds[campId] = (dayDetails['doctors'] as List)
+                .map<int>((d) => int.tryParse(d['doctor_id'].toString()) ?? 0)
+                .where((id) => id > 0)
+                .toSet();
+          }
+        }
+      }
+
+      for (final camp in _availableCampaigns) {
+        final int cId = camp['id'];
+        _fetchDoctorsForCampaign(cId, targetEmpId: targetEmpId, force: true);
+      }
+    } catch (e) {
+      debugPrint("Error loading campaign & lock status: $e");
+    } finally {
+      if (mounted) setState(() => _isLoadingCampaignCheck = false);
+    }
+  }
+
+  Future<void> _fetchDoctorsForCampaign(int campaignId, {int? targetEmpId, bool force = false}) async {
+    if (!force &&
+        _campaignEligibleDoctors.containsKey(campaignId) &&
+        _campaignEligibleDoctors[campaignId]!.isNotEmpty) {
+      return;
+    }
+
+    setState(() => _loadingDoctorCampaignIds.add(campaignId));
+    try {
+      final docData = await ApiService().getCampaignEligibleDoctors(
+        campaignId: campaignId,
+        employeeId: targetEmpId ??
+            (_selectedWorkingWithId != null ? int.tryParse(_selectedWorkingWithId!) : widget.userId),
+      );
+      if (mounted) {
+        setState(() {
+          final rawList = docData['doctors'];
+          if (rawList is List) {
+            final fullList = List<Map<String, dynamic>>.from(rawList);
+            final existing = _campaignEligibleDoctors[campaignId] ?? [];
+            for (final ex in existing) {
+              if (!fullList.any((d) => d['doctor_id'] == ex['doctor_id'])) {
+                fullList.add(ex);
+              }
+            }
+            _campaignEligibleDoctors[campaignId] = fullList;
+          } else if (!_campaignEligibleDoctors.containsKey(campaignId)) {
+            _campaignEligibleDoctors[campaignId] = [];
+          }
+          _campaignDoctorIdentification[campaignId] =
+              docData['doctor_identification']?.toString() ?? 'BOTH';
+
+          final camp = _availableCampaigns.firstWhere((c) => c['id'] == campaignId, orElse: () => {});
+          final dynamic apiLimit = docData['max_doctors_per_day'] ?? camp['max_doctors_per_day'];
+          if (apiLimit != null && int.tryParse(apiLimit.toString()) != null && int.parse(apiLimit.toString()) > 0) {
+            _campaignMaxDoctors[campaignId] = int.parse(apiLimit.toString());
+          } else {
+            _campaignMaxDoctors[campaignId] = null; // Unlimited doctor selection
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching campaign doctors: $e");
+    } finally {
+      if (mounted) setState(() => _loadingDoctorCampaignIds.remove(campaignId));
+    }
+  }
+
+  void _showDoctorPicker(int campaignId) {
+    final camp = _availableCampaigns.firstWhere((c) => c['id'] == campaignId, orElse: () => {});
+    final doctors = _campaignEligibleDoctors[campaignId] ?? [];
+    final selectedIds = _campaignSelectedDoctorIds[campaignId] ?? {};
+    final maxLimit = _campaignMaxDoctors[campaignId];
+    final docIdent = _campaignDoctorIdentification[campaignId] ?? 'BOTH';
+
+    if (doctors.isEmpty && !_loadingDoctorCampaignIds.contains(campaignId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No eligible doctors found for this campaign."), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _CampaignDoctorSearchSheet(
+        campaignName: camp['campaign_name'] ?? 'Campaign Doctors',
+        doctors: doctors,
+        selectedDoctorIds: selectedIds,
+        maxDoctors: maxLimit,
+        doctorIdentification: docIdent,
+        primaryColor: _primaryColor,
+        onSelectionChanged: (newSelections) {
+          setState(() {
+            _campaignSelectedDoctorIds[campaignId] = newSelections;
+          });
+        },
+      ),
+    );
+  }
+
+  Future<void> _onSelectCampaignAndOpenDoctors(int campaignId) async {
+    // If doctors are currently being fetched in background, wait
+    if (_loadingDoctorCampaignIds.contains(campaignId)) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text("Loading doctors..."),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      while (_loadingDoctorCampaignIds.contains(campaignId)) {
+        await Future.delayed(const Duration(milliseconds: 100));
+      }
+      if (mounted) Navigator.pop(context);
+    } else if (!_campaignEligibleDoctors.containsKey(campaignId) ||
+        _campaignEligibleDoctors[campaignId]!.isEmpty) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => const Center(
+          child: Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(width: 16),
+                  Text("Loading doctors..."),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await _fetchDoctorsForCampaign(campaignId);
+      if (mounted) Navigator.pop(context);
+    }
+
+    if (mounted) {
+      _showDoctorPicker(campaignId);
+    }
+  }
+
+  /*
   void _showAddAreaDialog() {
     final TextEditingController newAreaController = TextEditingController();
     String? selectedTerritoryType;
@@ -257,8 +588,19 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
       },
     );
   }
+  */
 
   void _savePlan() async {
+    if (!_isEditable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("This tour date is locked and cannot be modified without an active authorized unlock."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     if (!_isActivity && _selectedAreas.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select at least one area.")));
       return;
@@ -269,14 +611,85 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
       return;
     }
 
-    final payload = {
+    // --- CAMPAIGN VALIDATION (ONLY FOR FIELD WORK) ---
+    bool hasCampaign = !_isActivity && _availableCampaigns.isNotEmpty;
+
+    if (hasCampaign) {
+      if (_activeCampaignIds.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please select at least one campaign for this field work day."),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      for (int campId in _activeCampaignIds) {
+        final docIds = _campaignSelectedDoctorIds[campId] ?? {};
+        final camp = _availableCampaigns.firstWhere((c) => c['id'] == campId, orElse: () => {});
+        final campName = camp['campaign_name'] ?? 'Campaign';
+
+        if (docIds.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Please select at least one doctor for $campName."),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+
+        final maxLimit = _campaignMaxDoctors[campId];
+        if (maxLimit != null && docIds.length > maxLimit) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Doctor selection for $campName exceeds maximum allowed limit of $maxLimit doctors."),
+              backgroundColor: Colors.red,
+            ),
+          );
+          return;
+        }
+      }
+    }
+
+    final payload = <String, dynamic>{
       "plan_date": DateFormat('yyyy-MM-dd').format(widget.date),
       "type": _isActivity ? "activity" : "field",
-      "areas": _selectedAreas.toList(),
-      "activity_name": _selectedActivity,
+      "has_campaign": hasCampaign,
       "remark": _remarkController.text.trim(),
-      "worked_with_id": _selectedWorkingWithId, // Send who the manager is working with to the API
+      "worked_with_id": _selectedWorkingWithId,
     };
+
+    if (!_isActivity) {
+      payload["areas"] = _selectedAreas.map((id) => int.tryParse(id) ?? id).toList();
+    }
+
+    if (_isActivity) {
+      payload["activity_name"] = _selectedActivity;
+    }
+
+    if (hasCampaign && _activeCampaignIds.isNotEmpty) {
+      final campaignList = <Map<String, dynamic>>[];
+
+      for (int campId in _activeCampaignIds) {
+        final ids = _campaignSelectedDoctorIds[campId] ?? {};
+        campaignList.add({
+          "campaign_id": campId,
+          "doctor_ids": ids.toList(),
+        });
+      }
+
+      payload["campaigns"] = campaignList;
+
+      if (_selectedActivity == null || _selectedActivity!.isEmpty) {
+        final names = _activeCampaignIds.map((cid) {
+          final c = _availableCampaigns.firstWhere((item) => item['id'] == cid, orElse: () => {});
+          return c['campaign_name'] ?? 'Campaign';
+        }).join(', ');
+        payload["activity_name"] = names.isNotEmpty ? names : "Campaign Field Work";
+      }
+    }
 
     showDialog(
       context: context,
@@ -284,15 +697,29 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
       builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
 
-    bool success = await ApiService().saveAreaTourPlan(payload);
+    final res = await ApiService().saveAreaTourPlanWithResult(payload);
 
-    Navigator.pop(context);
+    if (mounted) Navigator.pop(context);
 
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Plan Saved Successfully!"), backgroundColor: Colors.green));
-      Navigator.pop(context, true);
+    if (res['success'] == true) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? "Plan Saved Successfully!"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        Navigator.pop(context, true);
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Failed to save plan."), backgroundColor: Colors.red));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(res['message'] ?? "Failed to save plan."),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -313,6 +740,8 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
       ),
       body: Column(
         children: [
+          if (_isDayUnlocked) _buildUnlockBanner(),
+          if (_isDayLocked) _buildLockBanner(),
           Container(
             color: Colors.white,
             padding: const EdgeInsets.all(16),
@@ -325,6 +754,9 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
             ),
           ),
           
+          if (!_isActivity && _isLoadingCampaignCheck)
+            const LinearProgressIndicator(minHeight: 3),
+
           // --- SUBORDINATE SELECTION BAR ---
           if (!_isActivity)
             if (_isLoadingSubordinates)
@@ -366,10 +798,436 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                onPressed: _savePlan,
-                style: ElevatedButton.styleFrom(backgroundColor: _primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-                child: Text("SAVE PLAN", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)),
+                onPressed: _isEditable ? _savePlan : null,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isEditable ? _primaryColor : Colors.grey, 
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                ),
+                child: Text(
+                  _isEditable ? "SAVE PLAN" : "DATE LOCKED", 
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.white)
+                ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignSection() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3E5F5), // Light purple
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF7B1FA2), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "Campaign Day",
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF4A148C),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          Text(
+            "Select Campaign:",
+            style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.purple.shade900),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.purple.shade200, width: 1.2),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int>(
+                isExpanded: true,
+                value: null, 
+                hint: Row(
+                  children: [
+                    const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Select Campaign",
+                      style: GoogleFonts.poppins(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF4A148C),
+                      ),
+                    ),
+                  ],
+                ),
+                icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF4A148C)),
+                items: _availableCampaigns.map((camp) {
+                  final int cid = camp['id'];
+                  final int docCount = (_campaignSelectedDoctorIds[cid] ?? {}).length;
+                  final String campName = camp['campaign_name'] ?? 'Campaign';
+                  final String campCode = camp['campaign_code'] ?? '';
+
+                  return DropdownMenuItem<int>(
+                    value: cid,
+                    child: Row(
+                      children: [
+                        const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            campCode.isNotEmpty ? "$campName ($campCode)" : campName,
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFF4A148C),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (docCount > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.purple.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              "$docCount tagged",
+                              style: TextStyle(fontSize: 10, color: Colors.purple.shade800, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (campId) {
+                  if (campId == null) return;
+                  setState(() {
+                    _selectedCampaignDropdownId = campId;
+                    _activeCampaignIds.add(campId);
+                  });
+                  _onSelectCampaignAndOpenDoctors(campId);
+                },
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          if (_activeCampaignIds.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.touch_app_outlined, size: 16, color: Colors.purple.shade700),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      "Please choose a campaign from the dropdown above to select doctors.",
+                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.purple.shade800, fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._activeCampaignIds.map((campId) {
+              final camp = _availableCampaigns.firstWhere((c) => c['id'] == campId, orElse: () => {});
+              final selectedIds = _campaignSelectedDoctorIds[campId] ?? {};
+              final maxLimit = _campaignMaxDoctors[campId];
+              final doctors = _campaignEligibleDoctors[campId] ?? [];
+              final isLoadingDocs = _loadingDoctorCampaignIds.contains(campId);
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.purple.shade200, width: 1.2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.purple.withOpacity(0.04),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Card Header Headed with Campaign Name
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.shade50,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  camp['campaign_name'] ?? 'Campaign',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF4A148C),
+                                  ),
+                                ),
+                                if (camp['campaign_code'] != null || camp['campaign_type'] != null)
+                                  Text(
+                                    "${camp['campaign_code'] ?? ''} ${camp['campaign_type'] != null ? '• ${camp['campaign_type']}' : ''}".trim(),
+                                    style: GoogleFonts.poppins(fontSize: 10, color: Colors.purple.shade800),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: selectedIds.isNotEmpty ? Colors.green.shade700 : Colors.orange.shade800,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              maxLimit != null 
+                                ? "${selectedIds.length}/$maxLimit Doctors"
+                                : "No Limit",
+                              style: GoogleFonts.poppins(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.close, color: Colors.purple, size: 18),
+                            tooltip: "Remove Campaign",
+                            onPressed: () {
+                              setState(() {
+                                _activeCampaignIds.remove(campId);
+                                _campaignSelectedDoctorIds.remove(campId);
+                                if (_selectedCampaignDropdownId == campId) {
+                                  _selectedCampaignDropdownId = _activeCampaignIds.isNotEmpty ? _activeCampaignIds.last : null;
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Select / Change Doctors button
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: isLoadingDocs ? null : () => _showDoctorPicker(campId),
+                                  icon: isLoadingDocs 
+                                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                    : const Icon(Icons.person_add_alt_1, size: 16),
+                                  label: Text(
+                                    selectedIds.isEmpty 
+                                      ? "Select Doctors" 
+                                      : "Change Doctors (${selectedIds.length})",
+                                    style: GoogleFonts.poppins(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF4A148C),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Individual Good Cards for Each Selected Doctor
+                          if (selectedIds.isEmpty) ...[
+                            const SizedBox(height: 6),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.info_outline, size: 14, color: Colors.grey.shade500),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    "No doctors tagged yet. Tap above to select.",
+                                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else ...[
+                            const SizedBox(height: 10),
+                            Text(
+                              "Tagged Doctors (${selectedIds.length}):",
+                              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+                            ),
+                            const SizedBox(height: 6),
+                            ...selectedIds.map((docId) {
+                              final doc = doctors.firstWhere(
+                                (d) => d['doctor_id'] == docId,
+                                orElse: () => {'doctor_name': 'Doctor #$docId', 'doctor_id': docId},
+                              );
+                              return Card(
+                                elevation: 0,
+                                margin: const EdgeInsets.only(bottom: 6),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  side: BorderSide(color: Colors.purple.shade100),
+                                ),
+                                color: const Color(0xFFFAFAFC),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: const Color(0xFFF3E5F5),
+                                        child: const Icon(Icons.medical_services_outlined, color: Color(0xFF4A148C), size: 16),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    doc['doctor_name'] ?? 'Doctor #$docId',
+                                                    style: GoogleFonts.poppins(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87),
+                                                    maxLines: 1,
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                if (doc['doctor_category'] != null && doc['doctor_category'].toString().isNotEmpty)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.blue.shade50,
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(color: Colors.blue.shade200),
+                                                    ),
+                                                    child: Text(
+                                                      doc['doctor_category'].toString(),
+                                                      style: TextStyle(fontSize: 9, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 1),
+                                            Text(
+                                              "${doc['speciality'] ?? ''} ${doc['qualification'] != null ? '• ${doc['qualification']}' : ''}".trim(),
+                                              style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey.shade700),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Row(
+                                              children: [
+                                                if (doc['area'] != null && doc['area'].toString().isNotEmpty) ...[
+                                                  const Icon(Icons.location_on_outlined, size: 11, color: Colors.grey),
+                                                  const SizedBox(width: 2),
+                                                  Text(
+                                                    "${doc['area']}${doc['town'] != null ? ', ${doc['town']}' : ''}",
+                                                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                ],
+                                                Text("ID: #${doc['doctor_id'] ?? docId}", style: TextStyle(fontSize: 9, color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      IconButton(
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        icon: const Icon(Icons.remove_circle_outline, color: Colors.redAccent, size: 18),
+                                        tooltip: "Remove Doctor",
+                                        onPressed: () {
+                                          setState(() {
+                                            _campaignSelectedDoctorIds[campId]?.remove(docId);
+                                          });
+                                        },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnlockBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.green.shade50,
+      child: Row(
+        children: [
+          Icon(Icons.lock_open, size: 18, color: Colors.green.shade800),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _unlockReason != null && _unlockReason!.isNotEmpty 
+                ? "Date Unlocked: $_unlockReason"
+                : "Active authorized unlock for this tour date",
+              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.green.shade800),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLockBanner() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.red.shade50,
+      child: Row(
+        children: [
+          Icon(Icons.lock, size: 18, color: Colors.red.shade800),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              "Tour date is locked on an approved/pending month. Modification requires manager unlock.",
+              style: GoogleFonts.poppins(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.red.shade800),
             ),
           ),
         ],
@@ -439,11 +1297,15 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
   Widget _buildAreaList() {
     if (_isLoadingAreas) return Center(child: CircularProgressIndicator(color: _primaryColor));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
+        // Campaign Section displayed ONLY during Field Work (Area)
+        if (_availableCampaigns.isNotEmpty)
+          _buildCampaignSection(),
+
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          padding: const EdgeInsets.fromLTRB(0, 8, 0, 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -462,76 +1324,82 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
             ],
           ),
         ),
-        Expanded(
-          child: _availableAreas.isEmpty
-              ? Center(child: Text("No areas available.", style: TextStyle(color: Colors.grey.shade500)))
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _availableAreas.length,
-                  itemBuilder: (ctx, i) {
-                    final area = _availableAreas[i];
-                    final isSelected = _selectedAreas.contains(area['id']);
-                    final isPlannedBySub = area['planned_by_sub'] == true;
 
-                    return Card(
-                      elevation: 0,
-                      margin: const EdgeInsets.only(bottom: 8),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: isSelected ? _primaryColor : (isPlannedBySub ? Colors.green.shade300 : Colors.grey.shade200), 
-                          width: isSelected || isPlannedBySub ? 2 : 1
-                        ),
-                      ),
-                      child: CheckboxListTile(
-                        value: isSelected,
-                        activeColor: _primaryColor,
-                        checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                        onChanged: (val) {
-                          setState(() {
-                            if (val == true) _selectedAreas.add(area['id']);
-                            else _selectedAreas.remove(area['id']);
-                          });
-                        },
-                        title: Row(
+        if (_availableAreas.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 32),
+            child: Center(child: Text("No areas available.", style: TextStyle(color: Colors.grey.shade500))),
+          )
+        else
+          ..._availableAreas.map((area) {
+            final isSelected = _selectedAreas.contains(area['id']);
+            final isPlannedBySub = area['planned_by_sub'] == true;
+
+            return Card(
+              elevation: 0,
+              margin: const EdgeInsets.only(bottom: 8),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide(
+                  color: isSelected ? _primaryColor : (isPlannedBySub ? Colors.green.shade300 : Colors.grey.shade200), 
+                  width: isSelected || isPlannedBySub ? 2 : 1
+                ),
+              ),
+              child: CheckboxListTile(
+                value: isSelected,
+                activeColor: _primaryColor,
+                checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                onChanged: (val) {
+                  setState(() {
+                    if (val == true) {
+                      _selectedAreas.add(area['id']);
+                    } else {
+                      _selectedAreas.remove(area['id']);
+                    }
+                  });
+                },
+                title: Row(
+                  children: [
+                    Expanded(child: Text(area['name'], style: GoogleFonts.poppins(fontWeight: FontWeight.w600))),
+                    
+                    // Highlight if the subordinate has also planned to visit this area today
+                    if (isPlannedBySub)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.green.shade200)),
+                        child: Row(
                           children: [
-                            Expanded(child: Text(area['name'], style: GoogleFonts.poppins(fontWeight: FontWeight.w600))),
-                            
-                            // Highlight if the subordinate has also planned to visit this area today
-                            if (isPlannedBySub)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.green.shade200)),
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.check_circle, size: 10, color: Colors.green.shade700),
-                                    const SizedBox(width: 4),
-                                    Text("Planned by Subordinate", style: TextStyle(fontSize: 9, color: Colors.green.shade800, fontWeight: FontWeight.bold)),
-                                  ],
-                                ),
-                              ),
+                            Icon(Icons.check_circle, size: 10, color: Colors.green.shade700),
+                            const SizedBox(width: 4),
+                            Text("Planned by Subordinate", style: TextStyle(fontSize: 9, color: Colors.green.shade800, fontWeight: FontWeight.bold)),
                           ],
                         ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 4.0),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.medical_services_outlined, size: 14, color: Colors.grey),
-                              const SizedBox(width: 4),
-                              Text("${area['dr_count']} Doctors Tagged", style: const TextStyle(color: Colors.grey)),
-                            ],
-                          ),
-                        ),
                       ),
-                    );
-                  },
+                  ],
                 ),
-        ),
+                subtitle: Padding(
+                  padding: const EdgeInsets.only(top: 4.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.medical_services_outlined, size: 14, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Text("${area['dr_count']} Doctors Tagged", style: const TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
       ],
     );
   }
 
   Widget _buildActivitySelector() {
+    final currentActivities = List<String>.from(_activities);
+    if (_selectedActivity != null && !currentActivities.contains(_selectedActivity)) {
+      currentActivities.add(_selectedActivity!);
+    }
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -547,7 +1415,7 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                 isExpanded: true,
                 hint: const Text("Choose Activity..."),
                 value: _selectedActivity,
-                items: _activities.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
+                items: currentActivities.map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
                 onChanged: (val) => setState(() => _selectedActivity = val),
               ),
             ),
@@ -709,6 +1577,253 @@ class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
         ),
         subtitle: Text(subtitle, style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600)),
         trailing: isSelected ? Icon(Icons.check_circle, color: widget.primaryColor) : null,
+      ),
+    );
+  }
+}
+
+// =========================================================================
+// CUSTOM CAMPAIGN DOCTOR SEARCH BOTTOM SHEET
+// =========================================================================
+
+class _CampaignDoctorSearchSheet extends StatefulWidget {
+  final String campaignName;
+  final List<Map<String, dynamic>> doctors;
+  final Set<int> selectedDoctorIds;
+  final int? maxDoctors;
+  final String doctorIdentification;
+  final Function(Set<int>) onSelectionChanged;
+  final Color primaryColor;
+
+  const _CampaignDoctorSearchSheet({
+    required this.campaignName,
+    required this.doctors,
+    required this.selectedDoctorIds,
+    required this.maxDoctors,
+    required this.doctorIdentification,
+    required this.onSelectionChanged,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_CampaignDoctorSearchSheet> createState() => _CampaignDoctorSearchSheetState();
+}
+
+class _CampaignDoctorSearchSheetState extends State<_CampaignDoctorSearchSheet> {
+  String _searchQuery = "";
+  late Set<int> _currentSelections;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentSelections = Set<int>.from(widget.selectedDoctorIds);
+  }
+
+  List<Map<String, dynamic>> get _filteredDoctors {
+    if (_searchQuery.trim().isEmpty) return widget.doctors;
+    final q = _searchQuery.toLowerCase();
+    return widget.doctors.where((d) {
+      final name = d['doctor_name']?.toString().toLowerCase() ?? '';
+      final id = d['doctor_id']?.toString().toLowerCase() ?? '';
+      final spec = d['speciality']?.toString().toLowerCase() ?? '';
+      final town = d['town']?.toString().toLowerCase() ?? '';
+      final area = d['area']?.toString().toLowerCase() ?? '';
+      return name.contains(q) || id.contains(q) || spec.contains(q) || town.contains(q) || area.contains(q);
+    }).toList();
+  }
+
+  void _toggle(int doctorId) {
+    setState(() {
+      if (_currentSelections.contains(doctorId)) {
+        _currentSelections.remove(doctorId);
+      } else {
+        if (widget.maxDoctors != null && _currentSelections.length >= widget.maxDoctors!) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Maximum ${widget.maxDoctors} doctors allowed for this campaign."),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+        _currentSelections.add(doctorId);
+      }
+    });
+    widget.onSelectionChanged(_currentSelections);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.85,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.grey.shade200))),
+            child: Column(
+              children: [
+                Container(height: 4, width: 40, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(10))),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3E5F5),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 22),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.campaignName, 
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 15, 
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF4A148C),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  widget.maxDoctors != null
+                                    ? "Selected: ${_currentSelections.length} / ${widget.maxDoctors} Doctors"
+                                    : "Selected: ${_currentSelections.length} Doctors (No Limit)",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11, 
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4A148C),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                      child: Text("Done", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  onChanged: (q) => setState(() => _searchQuery = q),
+                  decoration: InputDecoration(
+                    hintText: "Search by doctor name, speciality, area...",
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF4A148C)),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _filteredDoctors.isEmpty
+                ? Center(
+                    child: Text(
+                      widget.doctors.isEmpty 
+                        ? "No eligible doctors found." 
+                        : "No matching doctors found.",
+                      style: TextStyle(color: Colors.grey.shade500),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _filteredDoctors.length,
+                    itemBuilder: (context, index) {
+                      final doc = _filteredDoctors[index];
+                      final int docId = int.tryParse(doc['doctor_id']?.toString() ?? '0') ?? 0;
+                      final isSelected = _currentSelections.contains(docId);
+
+                      return Card(
+                        elevation: 0,
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(
+                            color: isSelected ? const Color(0xFF4A148C) : Colors.grey.shade200,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        child: CheckboxListTile(
+                          value: isSelected,
+                          activeColor: const Color(0xFF4A148C),
+                          checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                          onChanged: (_) => _toggle(docId),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  doc['doctor_name'] ?? 'Doctor #$docId',
+                                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                                ),
+                              ),
+                              if (doc['doctor_category'] != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: Colors.blue.shade200),
+                                  ),
+                                  child: Text(
+                                    doc['doctor_category'].toString(),
+                                    style: TextStyle(fontSize: 10, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 2),
+                              Text(
+                                "${doc['speciality'] ?? ''} ${doc['qualification'] != null ? '• ${doc['qualification']}' : ''}",
+                                style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade700),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  if (doc['area'] != null) ...[
+                                    const Icon(Icons.location_on, size: 12, color: Colors.grey),
+                                    const SizedBox(width: 2),
+                                    Text("${doc['area']}${doc['town'] != null ? ', ${doc['town']}' : ''}", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Text("ID: #$docId", style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }

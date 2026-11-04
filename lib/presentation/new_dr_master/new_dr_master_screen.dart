@@ -188,7 +188,8 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
 
   Future<void> _loadSubordinates() async {
     try {
-      final list = await ApiService().getSubordinates();
+      final now = DateTime.now();
+      final list = await ApiService().getSubordinates(month: now.month, year: now.year);
       
       if (widget.initialEmployeeId != null) {
         try {
@@ -1404,34 +1405,70 @@ class _NewDrMasterScreenState extends State<NewDrMasterScreen>
     );
   }
 
-  Widget _buildSubordinatePicker() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+  void _showSubordinatePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _SubordinateSearchSheet(
+        subordinates: _subordinates,
+        selectedSubId: _selectedSubId,
+        primaryColor: _purple,
+        onSelect: (val) {
+          setState(() {
+            _selectedSubId = val;
+            _subDoctors = [];
+            _subApprovalStatus = null;
+            _subRejectionReason = null;
+          });
+          _loadSubDoctors(val);
+        },
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _selectedSubId,
-          isExpanded: true,
-          hint: Text('Select team member',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-          icon: Icon(Icons.expand_more, color: Colors.grey.shade500),
-          items: _subordinates.map((s) => DropdownMenuItem<int>(
-            value: s['id'] as int,
-            child: Text(s['name'] ?? '', style: const TextStyle(fontSize: 14)),
-          )).toList(),
-          onChanged: (val) {
-            setState(() {
-              _selectedSubId      = val;
-              _subDoctors         = [];
-              _subApprovalStatus  = null;
-              _subRejectionReason = null;
-            });
-            if (val != null) _loadSubDoctors(val);
-          },
+    );
+  }
+
+  Widget _buildSubordinatePicker() {
+    final selectedSub = _subordinates.firstWhere(
+      (s) => (int.tryParse(s['id']?.toString() ?? '0') ?? 0) == _selectedSubId,
+      orElse: () => null,
+    );
+    final selectedName = selectedSub != null
+        ? selectedSub['name']?.toString() ?? 'Unknown'
+        : 'Select team member';
+
+    return InkWell(
+      onTap: _showSubordinatePicker,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.person_search, color: _purple, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                selectedName,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: selectedSub != null ? FontWeight.w600 : FontWeight.normal,
+                  color: selectedSub != null ? Colors.black87 : Colors.grey.shade500,
+                ),
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600),
+          ],
         ),
       ),
     );
@@ -1618,4 +1655,180 @@ class _TableRow {
     required this.status,
     this.remaining,
   });
+}
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<dynamic> subordinates;
+  final int? selectedSubId;
+  final Function(int) onSelect;
+  final Color primaryColor;
+
+  const _SubordinateSearchSheet({
+    required this.subordinates,
+    this.selectedSubId,
+    required this.onSelect,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() => _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  late List<dynamic> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.subordinates;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _filteredList = widget.subordinates.where((sub) {
+        final name = sub['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Team Member",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _filteredList.isEmpty
+                ? Center(
+                    child: Text(
+                      "No team members found",
+                      style: GoogleFonts.poppins(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _filteredList.length,
+                    itemBuilder: (context, index) {
+                      var sub = _filteredList[index];
+                      final id = int.tryParse(sub['id']?.toString() ?? '0') ?? 0;
+                      bool isSelected = widget.selectedSubId == id;
+
+                      return _buildSubordinateTile(
+                        name: sub['name']?.toString() ?? 'Unknown',
+                        subtitle: sub['designation']?.toString() ?? 'Team Member',
+                        imageUrl: sub['photo']?.toString(),
+                        isSelected: isSelected,
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onSelect(id);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubordinateTile({
+    required String name,
+    required String subtitle,
+    String? imageUrl,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected ? widget.primaryColor.withValues(alpha: 0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
+        ),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor: Colors.grey.shade100,
+          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+          child: imageUrl == null
+              ? Icon(Icons.person, color: Colors.grey.shade400)
+              : null,
+        ),
+        title: Text(
+          name,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: isSelected ? widget.primaryColor : Colors.black87,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: widget.primaryColor)
+            : null,
+      ),
+    );
+  }
 }

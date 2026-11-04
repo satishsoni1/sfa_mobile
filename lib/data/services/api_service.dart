@@ -1,19 +1,22 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:io';
 import 'package:intl/intl.dart';
 import 'package:zforce/data/models/attendance_models.dart';
 import 'package:zforce/data/models/visit_report.dart';
 import '../models/doctor.dart' show Doctor;
 import '../models/tour_plan.dart' show TourPlan;
 import '../models/user_model.dart';
+import '../models/campaign_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   // Android Emulator uses 10.0.2.2. For Real Device use your PC IP (e.g., 192.168.1.5)
   static const String baseUrl = 'https://zorvia.globalspace.in/api';
+
+  static List<CampaignFieldDefinition>? _cachedCampaignFields;
+  static final Map<String, Map<String, dynamic>> _cachedMonthlyPlans = {};
 
   String _errorMessageFromBody(String body) {
     try {
@@ -47,7 +50,11 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/login'), // Adjust endpoint if needed
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'username': empId, 'password': password}),
+        body: jsonEncode({
+          'username': empId,
+          'password': password,
+          'platform': 'web',
+        }),
       );
 
       final responseData = jsonDecode(response.body);
@@ -611,13 +618,59 @@ class ApiService {
     }
   }
 
-  Future<List<dynamic>> getSubordinates() async {
+  Future<List<dynamic>> getSubordinates({
+    dynamic month,
+    dynamic year,
+    DateTime? date,
+  }) async {
     final token = await getToken();
+
+    String? monthStr;
+    String? yearStr;
+
+    if (date != null) {
+      monthStr = date.month.toString();
+      yearStr = date.year.toString();
+    } else if (month is DateTime) {
+      monthStr = month.month.toString();
+      yearStr = (year != null) ? year.toString() : month.year.toString();
+    } else {
+      if (month != null) {
+        monthStr = month.toString();
+      }
+      if (year != null) {
+        yearStr = year.toString();
+      }
+    }
+
+    String url = '$baseUrl/app/manager/subordinates';
+    final queryParams = <String, String>{};
+    if (monthStr != null && monthStr.isNotEmpty) {
+      queryParams['month'] = monthStr;
+    }
+    if (yearStr != null && yearStr.isNotEmpty) {
+      queryParams['year'] = yearStr;
+    }
+
+    if (queryParams.isNotEmpty) {
+      final uri = Uri.parse(url).replace(queryParameters: queryParams);
+      url = uri.toString();
+    }
+
     final response = await http.get(
-      Uri.parse('$baseUrl/app/manager/subordinates'),
-      headers: {'Authorization': 'Bearer $token'},
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
     );
-    return jsonDecode(response.body)['data'];
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      final rawData = decoded is Map ? decoded['data'] : decoded;
+      if (rawData is List) return rawData;
+      return [];
+    }
+    return [];
   }
 
   Uri getMclDoctorCsvExportUri(String employeeCode) {
@@ -625,11 +678,51 @@ class ApiService {
         .replace(queryParameters: {'employee_code': employeeCode});
   }
 
-  Future<List<Map<String, String>>> getSubordinatesUpload() async {
+  Future<List<Map<String, String>>> getSubordinatesUpload({
+    dynamic month,
+    dynamic year,
+    DateTime? date,
+  }) async {
     final token = await getToken();
+
+    String? monthStr;
+    String? yearStr;
+
+    if (date != null) {
+      monthStr = date.month.toString();
+      yearStr = date.year.toString();
+    } else if (month is DateTime) {
+      monthStr = month.month.toString();
+      yearStr = (year != null) ? year.toString() : month.year.toString();
+    } else {
+      if (month != null) {
+        monthStr = month.toString();
+      }
+      if (year != null) {
+        yearStr = year.toString();
+      }
+    }
+
+    String url = '$baseUrl/app/manager/subordinates';
+    final queryParams = <String, String>{};
+    if (monthStr != null && monthStr.isNotEmpty) {
+      queryParams['month'] = monthStr;
+    }
+    if (yearStr != null && yearStr.isNotEmpty) {
+      queryParams['year'] = yearStr;
+    }
+
+    if (queryParams.isNotEmpty) {
+      final uri = Uri.parse(url).replace(queryParameters: queryParams);
+      url = uri.toString();
+    }
+
     final response = await http.get(
-      Uri.parse('$baseUrl/app/manager/subordinates'),
-      headers: {'Authorization': 'Bearer $token'},
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
     );
 
     if (response.statusCode == 200) {
@@ -2665,19 +2758,184 @@ Future<void> submitFullMonth(int month, int year) async {
   }
 
   Future<bool> saveAreaTourPlan(Map<String, dynamic> payload) async {
+    final result = await saveAreaTourPlanWithResult(payload);
+    return result['success'] == true;
+  }
+
+  Future<Map<String, dynamic>> saveAreaTourPlanWithResult(Map<String, dynamic> payload) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/tour-plan/save'),
         headers: await _getHeaders(),
         body: json.encode(payload),
       );
-      return response.statusCode == 200;
+      final decoded = json.decode(response.body);
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'statusCode': 200,
+          'message': decoded['message'] ?? 'Plan Saved Successfully',
+          'data': decoded['data'],
+        };
+      } else {
+        String errMsg = decoded['message'] ?? 'Failed to save plan';
+        if (decoded['errors'] != null && decoded['errors'] is Map) {
+          final errMap = decoded['errors'] as Map;
+          if (errMap['doctor_ids'] is List) {
+            errMsg = (errMap['doctor_ids'] as List).join('\n');
+          }
+        }
+        return {
+          'success': false,
+          'statusCode': response.statusCode,
+          'message': errMsg,
+        };
+      }
     } catch (e) {
       debugPrint("Error saving plan: $e");
-      return false;
+      return {
+        'success': false,
+        'statusCode': 500,
+        'message': e.toString(),
+      };
     }
   }
 
+  Future<Map<String, dynamic>> getDayLockStatus(String date, {int? employeeId}) async {
+    try {
+      String url = '$baseUrl/tour-plan/day-lock-status?date=$date';
+      if (employeeId != null) {
+        url += '&employee_id=$employeeId';
+      }
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        return Map<String, dynamic>.from(decoded['data'] ?? {});
+      }
+    } catch (e) {
+      debugPrint("Error getting day lock status: $e");
+    }
+    return {};
+  }
+
+  Future<List<Map<String, dynamic>>> getAvailableCampaigns({
+    required String date,
+    String? town,
+    int? employeeId,
+  }) async {
+    try {
+      String url = '$baseUrl/tour-plan/campaigns/available?date=$date';
+      if (town != null && town.isNotEmpty) {
+        url += '&town=${Uri.encodeComponent(town)}';
+      }
+      if (employeeId != null) {
+        url += '&employee_id=$employeeId';
+      }
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        final campaigns = decoded['campaigns'];
+        if (campaigns is List) {
+          return List<Map<String, dynamic>>.from(campaigns);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error getting available campaigns: $e");
+    }
+    return [];
+  }
+
+  Future<Map<String, dynamic>> getCampaignEligibleDoctors({
+    required int campaignId,
+    String? search,
+    int? employeeId,
+  }) async {
+    try {
+      String url = '$baseUrl/tour-plan/campaigns/$campaignId/doctors';
+      List<String> queryParams = [];
+      if (search != null && search.isNotEmpty) {
+        queryParams.add('search=${Uri.encodeComponent(search)}');
+      }
+      if (employeeId != null) {
+        queryParams.add('employee_id=$employeeId');
+      }
+      if (queryParams.isNotEmpty) {
+        url += '?${queryParams.join('&')}';
+      }
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        return Map<String, dynamic>.from(decoded);
+      }
+    } catch (e) {
+      debugPrint("Error getting eligible campaign doctors: $e");
+    }
+    return {'doctors': []};
+  }
+
+  Future<Map<String, dynamic>?> getTourDayDetails(String date, {int? employeeId}) async {
+    try {
+      String url = '$baseUrl/tour-plan/day/details?date=$date';
+      if (employeeId != null) {
+        url += '&employee_id=$employeeId';
+      }
+      final response = await http.get(
+        Uri.parse(url),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        if (decoded['data'] is Map) {
+          return Map<String, dynamic>.from(decoded['data']);
+        }
+      }
+    } catch (e) {
+      debugPrint("Error getting tour day details: $e");
+    }
+    return null;
+  }
+
+  Future<List<String>> getOnlyNfwActivities() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/nfw/only-nfw'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final decoded = json.decode(response.body);
+        final rawData = decoded is Map ? decoded['data'] : decoded;
+        if (rawData is List) {
+          final list = rawData
+              .map<String>((item) {
+                if (item is Map) {
+                  return (item['name'] ??
+                          item['value'] ??
+                          item['activity'] ??
+                          item['title'] ??
+                          '')
+                      .toString();
+                }
+                return item.toString();
+              })
+              .where((s) => s.trim().isNotEmpty)
+              .toList();
+          if (list.isNotEmpty) return list;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error getting only NFW activities: $e");
+    }
+    return [];
+  }
 
   Future<bool> bulkActionAreaPlan({
     required String action, // 'Approved' or 'Rejected'
@@ -2903,12 +3161,46 @@ Future<void> submitFullMonth(int month, int year) async {
       if (response.statusCode == 200) {
         final resData = json.decode(response.body);
         // Expecting backend to return { "data": { "month_status": "Pending", "plans": {...} } }
-        return Map<String, dynamic>.from(resData['data']);
+        if (resData is Map<String, dynamic>) {
+          final data = resData['data'] ?? resData;
+          if (data is Map<String, dynamic>) {
+            return Map<String, dynamic>.from(data);
+          }
+        }
       }
     } catch (e) {
       debugPrint("Error fetching monthly plans: $e");
     }
     return {};
+  }
+
+ 
+  Future<List<CampaignFieldDefinition>> getCampaignAllFields({
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh && _cachedCampaignFields != null && _cachedCampaignFields!.isNotEmpty) {
+      return _cachedCampaignFields!;
+    }
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/tour-plan/campaigns/all-fields'),
+        headers: await _getHeaders(),
+      );
+      if (response.statusCode == 200) {
+        final resData = json.decode(response.body);
+        final List list = (resData is Map)
+            ? (resData['data'] ?? resData['campaigns'] ?? [])
+            : (resData is List ? resData : []);
+        _cachedCampaignFields = list
+            .whereType<Map<String, dynamic>>()
+            .map((e) => CampaignFieldDefinition.fromJson(e))
+            .toList();
+        return _cachedCampaignFields!;
+      }
+    } catch (e) {
+      debugPrint("Error fetching campaign fields: $e");
+    }
+    return _cachedCampaignFields ?? [];
   }
 
   // 2. USER SUBMITS ENTIRE MONTH

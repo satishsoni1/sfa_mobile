@@ -38,7 +38,8 @@ class _TeamTerritoryScreenState extends State<TeamTerritoryScreen> {
 
   void _loadSubordinates() async {
     try {
-      final data = await ApiService().getSubordinates();
+      final now = DateTime.now();
+      final data = await ApiService().getSubordinates(month: now.month, year: now.year);
       setState(() {
         _allSubordinates = data;
       });

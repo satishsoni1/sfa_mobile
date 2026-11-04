@@ -100,24 +100,32 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
       );
 
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Month Plan $action Successfully!"),
-            backgroundColor: action == 'Approved' ? Colors.green : Colors.red,
-          ),
-        );
-        Navigator.pop(context, true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Month Plan $action Successfully!"),
+              backgroundColor: action == 'Approved' ? Colors.green : Colors.red,
+            ),
+          );
+          Navigator.pop(context, true);
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Failed to update status."), backgroundColor: Colors.red),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Failed to update status."), backgroundColor: Colors.red),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+        );
+      }
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
   }
 
@@ -125,6 +133,14 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
   Widget build(BuildContext context) {
     int daysInMonth = DateTime(widget.currentMonth.year, widget.currentMonth.month + 1, 0).day;
     final bool isManager = widget.userId != null;
+
+    int campaignDaysCount = widget.monthlyPlans.values.where((p) {
+      if (p == null) return false;
+      return p['has_campaign'] == true ||
+          p['campaign_id'] != null ||
+          (p['campaign_ids'] is List && (p['campaign_ids'] as List).isNotEmpty) ||
+          (p['campaigns'] is List && (p['campaigns'] as List).isNotEmpty);
+    }).length;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -145,6 +161,7 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSummaryStat("Days Planned", "${widget.monthlyPlans.length}/$daysInMonth", Colors.blue),
+                _buildSummaryStat("Campaign Days", "$campaignDaysCount", const Color(0xFF7B1FA2)),
                 _buildSummaryStat("Overall Status", widget.monthStatus, _getStatusColor(widget.monthStatus)),
               ],
             ),
@@ -199,27 +216,337 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
     bool isSunday = date.weekday == DateTime.sunday;
     List<String> areaNames = plan != null && plan['areas'] != null ? List<String>.from(plan['areas']) : [];
 
+    bool hasCampaign = plan != null &&
+        (plan['has_campaign'] == true ||
+            plan['campaign_id'] != null ||
+            (plan['campaign_ids'] is List && (plan['campaign_ids'] as List).isNotEmpty) ||
+            (plan['campaigns'] is List && (plan['campaigns'] as List).isNotEmpty));
+
+    String? campaignLabel;
+    int? doctorCount;
+    String? doctorNamesLabel;
+
+    if (hasCampaign) {
+      if (plan['campaign_names'] is List && (plan['campaign_names'] as List).isNotEmpty) {
+        campaignLabel = (plan['campaign_names'] as List).join(', ');
+      } else if (plan['campaign_name'] != null && plan['campaign_name'].toString().isNotEmpty) {
+        campaignLabel = plan['campaign_name'].toString();
+      } else if (plan['campaigns'] is List && (plan['campaigns'] as List).isNotEmpty) {
+        campaignLabel = (plan['campaigns'] as List).map((c) {
+          if (c is Map) return c['campaign_name'] ?? 'Campaign #${c['campaign_id']}';
+          return c.toString();
+        }).join(', ');
+      } else if (plan['activity_name'] != null &&
+          plan['activity_name'].toString().isNotEmpty &&
+          plan['type'] != 'activity') {
+        campaignLabel = plan['activity_name'].toString();
+      } else {
+        campaignLabel = "Campaign Day";
+      }
+
+      if (plan['doctor_ids'] is List) {
+        doctorCount = (plan['doctor_ids'] as List).length;
+      } else if (plan['doctors'] is List) {
+        doctorCount = (plan['doctors'] as List).length;
+      } else if (plan['doctor_count'] != null) {
+        doctorCount = int.tryParse(plan['doctor_count'].toString());
+      } else if (plan['campaign_doctors_count'] != null) {
+        doctorCount = int.tryParse(plan['campaign_doctors_count'].toString());
+      }
+
+      if (plan['campaigns'] is List) {
+        int total = 0;
+        bool found = false;
+        final docNames = <String>{};
+        for (var c in plan['campaigns']) {
+          if (c is Map) {
+            if (c['doctors'] is List) {
+              for (var d in (c['doctors'] as List)) {
+                if (d is Map) {
+                  final name = d['doctor_name']?.toString() ?? d['name']?.toString();
+                  if (name != null && name.trim().isNotEmpty) {
+                    docNames.add(name.trim());
+                  }
+                }
+              }
+              total += (c['doctors'] as List).length;
+              found = true;
+            } else if (c['doctor_ids'] is List) {
+              total += (c['doctor_ids'] as List).length;
+              found = true;
+            }
+          }
+        }
+        if (found) doctorCount = total;
+        if (docNames.isNotEmpty) {
+          doctorNamesLabel = docNames.join(', ');
+        }
+      }
+    }
+
+    bool hasRemark = plan != null && plan['remark'] != null && plan['remark'].toString().trim().isNotEmpty;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: isSunday ? Colors.red.shade50 : Colors.white,
-        border: Border.all(color: Colors.grey.shade200),
-        borderRadius: BorderRadius.circular(8),
+        color: isSunday
+            ? Colors.red.shade50
+            : (hasCampaign ? const Color(0xFFFAF5FC) : Colors.white),
+        border: Border.all(
+          color: hasCampaign
+              ? const Color(0xFF7B1FA2).withValues(alpha: 0.35)
+              : Colors.grey.shade200,
+          width: hasCampaign ? 1.5 : 1,
+        ),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: ListTile(
-        leading: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(DateFormat('EEE').format(date), style: TextStyle(fontSize: 10, color: isSunday ? Colors.red : Colors.grey)),
-            Text(DateFormat('dd').format(date), style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isSunday ? Colors.red : Colors.black87)),
-          ],
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSunday
+                ? Colors.red.shade100
+                : (hasCampaign ? const Color(0xFFF3E5F5) : Colors.grey.shade100),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                DateFormat('EEE').format(date),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: isSunday ? Colors.red : (hasCampaign ? const Color(0xFF4A148C) : Colors.grey.shade700),
+                ),
+              ),
+              Text(
+                DateFormat('dd').format(date),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: isSunday ? Colors.red : (hasCampaign ? const Color(0xFF4A148C) : Colors.black87),
+                ),
+              ),
+            ],
+          ),
         ),
         title: plan != null
             ? Text(
-                plan['type'] == 'activity' ? plan['activity_name'] ?? 'Activity' : areaNames.join(', '),
-                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
+                plan['type'] == 'activity'
+                    ? plan['activity_name'] ?? 'Activity'
+                    : (areaNames.isNotEmpty ? areaNames.join(', ') : "Field Work"),
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
               )
-            : Text(isSunday ? "Holiday / Sunday" : "Unplanned", style: TextStyle(color: Colors.grey.shade500, fontStyle: FontStyle.italic)),
+            : Text(
+                isSunday ? "Holiday / Sunday" : "Unplanned",
+                style: TextStyle(
+                  color: isSunday ? Colors.red : Colors.grey.shade500,
+                  fontStyle: FontStyle.italic,
+                  fontSize: 13,
+                ),
+              ),
+        subtitle: (hasCampaign || hasRemark)
+            ? Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (hasCampaign) ...[
+                      if (plan['campaigns'] is List && (plan['campaigns'] as List).isNotEmpty)
+                        for (var c in (plan['campaigns'] as List))
+                          Builder(
+                            builder: (_) {
+                              if (c is! Map) return const SizedBox.shrink();
+                              final String cName = c['campaign_name']?.toString() ?? 'Campaign #${c['campaign_id'] ?? ''}';
+                              final List docsList = c['doctors'] is List ? (c['doctors'] as List) : [];
+                              final List<String> cDocNames = [];
+                              for (var d in docsList) {
+                                if (d is Map) {
+                                  final name = d['doctor_name']?.toString() ?? d['name']?.toString();
+                                  if (name != null && name.trim().isNotEmpty) {
+                                    cDocNames.add(name.trim());
+                                  }
+                                } else if (d != null && d.toString().trim().isNotEmpty) {
+                                  cDocNames.add(d.toString().trim());
+                                }
+                              }
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF3E5F5),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.purple.shade200),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.campaign, size: 16, color: Color(0xFF4A148C)),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            cName,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w600,
+                                              color: const Color(0xFF4A148C),
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (cDocNames.isNotEmpty) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF4A148C),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              "${cDocNames.length} ${cDocNames.length == 1 ? 'Doc' : 'Docs'}",
+                                              style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    if (cDocNames.isNotEmpty) ...[
+                                      const SizedBox(height: 6),
+                                      Wrap(
+                                        spacing: 6,
+                                        runSpacing: 4,
+                                        children: cDocNames.map((name) {
+                                          return Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(color: Colors.purple.shade200),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.person, size: 10, color: Color(0xFF4A148C)),
+                                                const SizedBox(width: 3),
+                                                Text(
+                                                  name,
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Color(0xFF4A148C),
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        }).toList(),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              );
+                            },
+                          )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3E5F5),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.purple.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.campaign, size: 14, color: Color(0xFF4A148C)),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      campaignLabel ?? "Campaign Day",
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF4A148C),
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (doctorCount != null && doctorCount > 0) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF4A148C),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        "$doctorCount Docs",
+                                        style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              if (doctorNamesLabel != null && doctorNamesLabel.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Wrap(
+                                  spacing: 4,
+                                  runSpacing: 4,
+                                  children: doctorNamesLabel.split(', ').map((name) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: Colors.purple.shade200),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.person, size: 10, color: Color(0xFF4A148C)),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            name,
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              color: Color(0xFF4A148C),
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                    ],
+                    if (hasRemark)
+                      Padding(
+                        padding: EdgeInsets.only(top: hasCampaign ? 4 : 0),
+                        child: Text(
+                          plan['remark'].toString(),
+                          style: TextStyle(fontSize: 11, color: Colors.grey.shade600, fontStyle: FontStyle.italic),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                ),
+              )
+            : null,
       ),
     );
   }
@@ -239,7 +566,7 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color)),
       child: Center(child: Text(text, style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: color))),
     );
   }

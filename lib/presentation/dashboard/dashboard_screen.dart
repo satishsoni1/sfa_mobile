@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -81,6 +81,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isLoadingAction = false;
   bool _isRefreshing = false;
   bool? _attendanceWebDcrAllowed;
+  Map<String, dynamic>? _dcrAccess;
 
   // Expense Data
   String _expClaimed = "0";
@@ -127,7 +128,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (reqType != null && empIdStr != null) {
           int? empId = int.tryParse(empIdStr);
           if (empId != null) {
-            // Re-construct a mock request map to reuse our handler
             final mockRequest = {
               'request_type': reqType,
               'employee_id': empId
@@ -145,9 +145,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  /// Shows an in-app SnackBar when an FCM push message arrives while the
-  /// Flutter Web tab is open and focused (foreground message).
-  /// Background messages are handled by the Firebase Messaging Service Worker.
   void _showFcmForegroundSnackbar(RemoteMessage message) {
     if (!mounted) return;
     final title = message.notification?.title ?? 'New Notification';
@@ -318,7 +315,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       // 1. Parallel Data Fetching
       await Future.wait([
-        // _checkAppVersion(apiService), // Version check is now bundled into _fetchDcrRequests
         reportProvider.fetchTodayData(),
         _fetchAttendance(apiService),
         _fetchExpenseSummary(apiService),
@@ -451,13 +447,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user == null) return;
 
-      // ── Use the enriched endpoint that now bundles version + dcr_access ──
       final enriched = await api.fetchDcrRequestsEnriched(
         employeeId: user.employeeId,
       );
       if (!mounted) return;
 
-      // 1. Extract the requests list for the notification badge (unchanged behaviour)
+      // 1. Extract the requests list for the notification badge 
       final data = enriched['data'];
       List<Map<String, dynamic>> requests = [];
       if (data is Map<String, dynamic>) {
@@ -469,16 +464,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
               .toList();
         }
 
-        // 2. Extract dcr_access permission flags merged by the server ──────────
+        // 2. Extract dcr_access permission flags merged by the server 
         final dcrAccess = data['dcr_access'];
-        if (dcrAccess is Map<String, dynamic>) {
-          final webAllowed = _flagEnabled(dcrAccess['is_web_dcr_allowed']);
+        if (dcrAccess is Map) {
+          final dcrMap = Map<String, dynamic>.from(dcrAccess);
+          final webAllowed = _flagEnabled(dcrMap['is_web_dcr_allowed']);
           if (mounted) {
-            setState(() => _attendanceWebDcrAllowed = webAllowed);
+            setState(() {
+              _dcrAccess = dcrMap;
+              _attendanceWebDcrAllowed = webAllowed;
+            });
           }
         }
 
-        // 3. Extract version bundled into this response and check for update ──
+        // 3. Extract version bundled into this response and check for update 
         final serverVersion = data['vesion']?.toString()             ??
             data['version']?.toString();   
         if (kIsWeb &&
@@ -490,7 +489,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       setState(() => _dcrRequests = requests);
     } catch (_) {
-      // Silently ignore — notification badge simply stays at 0
     }
   }
 
@@ -506,7 +504,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _expPending = fmt.format(summary['total_pending'] ?? 0);
       });
     } catch (e) {
-      // Handle silently
     }
   }
 
@@ -915,52 +912,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildVisitsOverview() {
     final visitCount = Provider.of<ReportProvider>(context).visitCount;
     final notifCount = _dcrRequests.length;
-    return Row(
-      children: [
-        // ── Visits card (full width, standalone) ─────────────────────────────
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.shade100,
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.people_outline, color: Colors.blue, size: 22),
-                const SizedBox(height: 6),
-                Text(
-                  '$visitCount',
-                  style: GoogleFonts.poppins(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'Visits',
-                  style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        // ── Notification bell card (replaces Online timer) ────────────────────
-        Expanded(
-          child: GestureDetector(
-            onTap: _showDcrRequestsSheet,
-            behavior: HitTestBehavior.opaque,
+    final dcr = _dcrAccess;
+    final bool isTabLocked = dcr != null &&
+        (dcr['is_tab_dcr_locked'] == 1 || dcr['is_tab_dcr_locked']?.toString() == '1');
+    final bool isWebAllowed = _flagEnabled(dcr?['is_web_dcr_allowed'] ?? _attendanceWebDcrAllowed);
+    final bool isAllGood = !isTabLocked && isWebAllowed;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Visits card ─────────────────────────────
+          Expanded(
             child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 16),
+              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
@@ -976,75 +941,494 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Bell with red count badge on top-right
-                  Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      Icon(
-                        Icons.notifications_outlined,
-                        color: primaryColor,
-                        size: 26,
-                      ),
-                      if (notifCount > 0)
-                        Positioned(
-                          top: -6,
-                          right: -8,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            decoration: const BoxDecoration(
-                              color: Colors.red,
-                              shape: BoxShape.circle,
-                            ),
-                            constraints: const BoxConstraints(
-                              minWidth: 16,
-                              minHeight: 16,
-                            ),
-                            child: Text(
-                              '$notifCount',
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                  const Icon(Icons.people_outline, color: Colors.blue, size: 22),
                   const SizedBox(height: 6),
                   Text(
-                    'Notifications',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey,
+                    '$visitCount',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  if (_isFetchingDcrSheet)
-                    SizedBox(
-                      width: 40,
-                      height: 2,
-                      child: LinearProgressIndicator(
-                        backgroundColor: primaryColor.withOpacity(0.2),
-                        valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
-                      ),
-                    )
-                  else
-                    const SizedBox(height: 2),
+                  Text(
+                    'Visits',
+                    style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                  ),
                 ],
               ),
             ),
           ),
+          const SizedBox(width: 8),
+
+          // ── DCR Status card (between Visits and Notifications) ─────────────────────
+          Expanded(
+            child: GestureDetector(
+              onTap: _showDcrAccessDetailsSheet,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.shade100,
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      isAllGood ? Icons.lock_open_rounded : Icons.lock_outline_rounded,
+                      color: Colors.orange,
+                      size: 22,
+                    ),
+                    const SizedBox(height: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: "Web: ",
+                              style: GoogleFonts.poppins(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            TextSpan(
+                              text: isWebAllowed ? "Unlocked" : "Locked",
+                              style: GoogleFonts.poppins(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: isWebAllowed ? Colors.green.shade700 : Colors.red.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text.rich(
+                        TextSpan(
+                          children: [
+                            TextSpan(
+                              text: "Tab: ",
+                              style: GoogleFonts.poppins(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            TextSpan(
+                              text: isTabLocked ? "Locked" : "Unlocked",
+                              style: GoogleFonts.poppins(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: isTabLocked ? Colors.red.shade700 : Colors.green.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        "Tap to view details",
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // ── Notification bell card ────────────────────
+          Expanded(
+            child: GestureDetector(
+              onTap: _showDcrRequestsSheet,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.shade100,
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Bell with red count badge on top-right
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.notifications_outlined,
+                          color: primaryColor,
+                          size: 24,
+                        ),
+                        if (notifCount > 0)
+                          Positioned(
+                            top: -6,
+                            right: -8,
+                            child: Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: const BoxDecoration(
+                                color: Colors.red,
+                                shape: BoxShape.circle,
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 16,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                '$notifCount',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Notifications',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 4),
+                    if (_isFetchingDcrSheet)
+                      SizedBox(
+                        width: 40,
+                        height: 2,
+                        child: LinearProgressIndicator(
+                          backgroundColor: primaryColor.withValues(alpha: 0.2),
+                          valueColor: AlwaysStoppedAnimation<Color>(primaryColor),
+                        ),
+                      )
+                    else
+                      const SizedBox(height: 2),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateStr(dynamic dateStr) {
+    if (dateStr == null || dateStr.toString().trim().isEmpty) return '--';
+    try {
+      final parsed = DateTime.parse(dateStr.toString().trim());
+      return DateFormat('dd MMM yyyy').format(parsed);
+    } catch (_) {
+      return dateStr.toString();
+    }
+  }
+
+  void _showDcrAccessDetailsSheet() {
+    final dcr = _dcrAccess;
+    final bool isTabLocked = dcr != null &&
+        (dcr['is_tab_dcr_locked'] == 1 || dcr['is_tab_dcr_locked']?.toString() == '1');
+    final bool isWebAllowed = _flagEnabled(dcr?['is_web_dcr_allowed'] ?? _attendanceWebDcrAllowed);
+    final String fromDate = _formatDateStr(dcr?['web_dcr_allowed_from_date']);
+    final String toDate = _formatDateStr(dcr?['web_dcr_allowed_to_date']);
+    final String expiryHours = (dcr?['dcr_expiry_after'] ?? '48').toString();
+    final String pendingReqs = (dcr?['pending_dcr_access_requests'] ?? '0').toString();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        // ── Online timer card commented out (check-in removed) ────────────────
-        // const SizedBox(width: 12),
-        // _buildSummaryItem(
-        //   'Online',
-        //   _elapsedTime,
-        //   Icons.timer_outlined,
-        //   Colors.orange,
-        // ),
-      ],
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Header row
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: primaryColor.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.verified_user_outlined, color: primaryColor, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "DCR Access Details",
+                        style: GoogleFonts.poppins(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      Text(
+                        "Permission & validity rules",
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Quick Status Row (Web & Tab)
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: isWebAllowed ? Colors.green.shade50 : Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isWebAllowed ? Colors.green.shade200 : Colors.red.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isWebAllowed ? Icons.check_circle : Icons.cancel,
+                          size: 16,
+                          color: isWebAllowed ? Colors.green.shade700 : Colors.red.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Web DCR",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                isWebAllowed ? "Unlocked" : "Locked",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: isWebAllowed ? Colors.green.shade800 : Colors.red.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: !isTabLocked ? Colors.green.shade50 : Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: !isTabLocked ? Colors.green.shade200 : Colors.red.shade200,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          !isTabLocked ? Icons.check_circle : Icons.lock,
+                          size: 16,
+                          color: !isTabLocked ? Colors.green.shade700 : Colors.red.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Tab DCR",
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text(
+                                !isTabLocked ? "Unlocked" : "Locked",
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: !isTabLocked ? Colors.green.shade800 : Colors.red.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            // Remaining Details List
+            _buildDcrDetailTile(
+              icon: Icons.calendar_month_outlined,
+              iconColor: primaryColor,
+              title: "Allowed Window (Web DCR)",
+              subtitle: "$fromDate to $toDate",
+            ),
+            const SizedBox(height: 10),
+            _buildDcrDetailTile(
+              icon: Icons.timer_outlined,
+              iconColor: Colors.orange.shade700,
+              title: "DCR Expiry Window",
+              subtitle: "$expiryHours Hours to submit after visit",
+            ),
+            const SizedBox(height: 10),
+            _buildDcrDetailTile(
+              icon: Icons.hourglass_top_outlined,
+              iconColor: pendingReqs != '0' ? Colors.amber.shade800 : Colors.blue.shade700,
+              title: "Pending Access Requests",
+              subtitle: "$pendingReqs Requests pending approval",
+            ),
+            const SizedBox(height: 20),
+            // Unlock Request Shortcut button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _navigateTo(const DcrUnlockRequestScreen());
+                },
+                icon: const Icon(Icons.lock_open, size: 18),
+                label: Text(
+                  "Request DCR Unlock / Access",
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  elevation: 0,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDcrDetailTile({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.poppins(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

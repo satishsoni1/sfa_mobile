@@ -41,7 +41,8 @@ class _DataUploadScreenState extends State<DataUploadScreen> {
   Future<void> _fetchSubordinates() async {
     setState(() => _isLoadingSubordinates = true);
     try {
-      final subs = await ApiService().getSubordinatesUpload();
+      final now = DateTime.now();
+      final subs = await ApiService().getSubordinatesUpload(month: now.month, year: now.year);
       setState(() {
         _subordinates = subs;
         _isLoadingSubordinates = false;

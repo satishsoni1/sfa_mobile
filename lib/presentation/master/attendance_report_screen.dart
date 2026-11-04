@@ -158,6 +158,20 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
     );
   }
 
+  void _showEmployeePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _SubordinateSearchSheet(
+        teamMembers: _teamMembers,
+        selectedEmployeeId: _selectedEmployeeId,
+        primaryColor: AppColors.primary,
+        onSelect: _selectEmployee,
+      ),
+    );
+  }
+
   Widget _buildFiltersCard() {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -183,30 +197,50 @@ class _AttendanceReportScreenState extends State<AttendanceReportScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF7F9FB),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: _selectedEmployeeId.isEmpty ? null : _selectedEmployeeId,
-                isExpanded: true,
-                items: _teamMembers.map((member) {
-                    return DropdownMenuItem<String>(
-                      value: member.employeeId,
-                      child: Text(
-                        member.name,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    );
-                  }).toList(),
-                onChanged: (value) {
-                  if (value == null) return;
-                  _selectEmployee(value);
-                },
+          InkWell(
+            onTap: _showEmployeePicker,
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF7F9FB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.person_search, color: AppColors.primary, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final selectedMember = _teamMembers.firstWhere(
+                          (m) => m.employeeId == _selectedEmployeeId,
+                          orElse: () => _AttendanceTeamMember(
+                            employeeId: '',
+                            employeeCode: '',
+                            name: 'Select Employee',
+                            designation: '',
+                            headQtr: '',
+                            division: '',
+                            zone: '',
+                            state: '',
+                          ),
+                        );
+                        return Text(
+                          selectedMember.name.isNotEmpty ? selectedMember.name : 'Select Employee',
+                          style: GoogleFonts.poppins(
+                            fontSize: 14,
+                            fontWeight: selectedMember.employeeId.isNotEmpty ? FontWeight.w600 : FontWeight.normal,
+                            color: selectedMember.employeeId.isNotEmpty ? Colors.black87 : Colors.grey.shade500,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        );
+                      },
+                    ),
+                  ),
+                  Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600),
+                ],
               ),
             ),
           ),
@@ -921,3 +955,185 @@ const List<Color> _summaryColors = [
   Colors.teal,
   Colors.indigo,
 ];
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<_AttendanceTeamMember> teamMembers;
+  final String selectedEmployeeId;
+  final Function(String) onSelect;
+  final Color primaryColor;
+
+  const _SubordinateSearchSheet({
+    required this.teamMembers,
+    required this.selectedEmployeeId,
+    required this.onSelect,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() =>
+      _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  late List<_AttendanceTeamMember> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.teamMembers;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _filteredList = widget.teamMembers.where((emp) {
+        final name = emp.name.toLowerCase();
+        final designation = emp.designation.toLowerCase();
+        final hq = emp.headQtr.toLowerCase();
+        final q = query.toLowerCase();
+        return name.contains(q) || designation.contains(q) || hq.contains(q);
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Team Member",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name, designation, HQ...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _filteredList.isEmpty
+                ? Center(
+                    child: Text(
+                      "No team members found",
+                      style: GoogleFonts.poppins(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _filteredList.length,
+                    itemBuilder: (context, index) {
+                      var emp = _filteredList[index];
+                      bool isSelected = widget.selectedEmployeeId == emp.employeeId;
+
+                      final subtitle = [
+                        if (emp.designation.isNotEmpty) emp.designation,
+                        if (emp.headQtr.isNotEmpty) emp.headQtr,
+                      ].join(' • ');
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? widget.primaryColor.withValues(alpha: 0.05)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: isSelected
+                                ? widget.primaryColor
+                                : Colors.grey.shade200,
+                          ),
+                        ),
+                        child: ListTile(
+                          onTap: () {
+                            Navigator.pop(context);
+                            widget.onSelect(emp.employeeId);
+                          },
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 4),
+                          leading: CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Colors.grey.shade100,
+                            child: Icon(
+                              Icons.person,
+                              color: isSelected
+                                  ? widget.primaryColor
+                                  : Colors.grey.shade500,
+                            ),
+                          ),
+                          title: Text(
+                            emp.name,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: isSelected
+                                  ? widget.primaryColor
+                                  : Colors.black87,
+                            ),
+                          ),
+                          subtitle: subtitle.isNotEmpty
+                              ? Text(
+                                  subtitle,
+                                  style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600),
+                                )
+                              : null,
+                          trailing: isSelected
+                              ? Icon(Icons.check_circle,
+                                  color: widget.primaryColor)
+                              : null,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}

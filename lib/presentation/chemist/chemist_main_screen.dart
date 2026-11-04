@@ -185,7 +185,8 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
 
   Future<void> _loadSubordinates() async {
     try {
-      final list = await ApiService().getSubordinates();
+      final now = DateTime.now();
+      final list = await ApiService().getSubordinates(month: now.month, year: now.year);
       int? autoSelectId;
       String? autoSelectName;
       if (widget.initialEmployeeId != null) {
@@ -494,150 +495,189 @@ class _ChemistMainScreenState extends State<ChemistMainScreen>
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        minChildSize: 0.35,
-        maxChildSize: 0.85,
-        builder: (_, scrollCtrl) => Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            children: [
-              // Handle
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(2),
+      builder: (_) {
+        String searchQuery = "";
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            final filteredSubs = _subordinates.where((sub) {
+              final name = sub['name']?.toString().toLowerCase() ?? '';
+              return name.contains(searchQuery.toLowerCase());
+            }).toList();
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.65,
+              minChildSize: 0.35,
+              maxChildSize: 0.90,
+              builder: (_, scrollCtrl) => Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                 ),
-              ),
-              const SizedBox(height: 14),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Row(
+                child: Column(
                   children: [
-                    const Icon(Icons.people_outline, color: _purple, size: 20),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Select Team Member',
-                      style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: _purple,
+                    // Handle
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: TextButton.styleFrom(
-                        foregroundColor: Colors.grey.shade700,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        minimumSize: Size.zero,
+                    const SizedBox(height: 14),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.people_outline, color: _purple, size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Select Team Member',
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                              color: _purple,
+                            ),
+                          ),
+                          const Spacer(),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.grey.shade700,
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: Size.zero,
+                            ),
+                            child: const Text('Cancel'),
+                          ),
+                        ],
                       ),
-                      child: const Text('Cancel'),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: TextField(
+                        onChanged: (q) {
+                          setModalState(() {
+                            searchQuery = q;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          hintText: "Search name...",
+                          prefixIcon: const Icon(Icons.search, color: _purple),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Divider(color: Colors.grey.shade200, height: 1),
+                    Expanded(
+                      child: filteredSubs.isEmpty
+                          ? Center(
+                              child: Text(
+                                "No team members found",
+                                style: GoogleFonts.poppins(color: Colors.grey),
+                              ),
+                            )
+                          : ListView.separated(
+                              controller: scrollCtrl,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
+                              ),
+                              itemCount: filteredSubs.length,
+                              separatorBuilder: (_, _) => const SizedBox(height: 6),
+                              itemBuilder: (_, i) {
+                                final sub = filteredSubs[i];
+                                final id = int.tryParse(sub['id']?.toString() ?? '0') ?? 0;
+                                final name = sub['name']?.toString() ?? 'Unknown';
+                                final isSelected = _selectedSubId == id;
+                                final initial = name.isNotEmpty
+                                    ? name[0].toUpperCase()
+                                    : '?';
+                                return InkWell(
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    setState(() {
+                                      _selectedSubId = id;
+                                      _selectedSubName = name;
+                                    });
+                                    _loadTeamData(id);
+                                  },
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 150),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 12,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? _purple.withValues(alpha: 0.06)
+                                          : Colors.white,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? _purple.withValues(alpha: 0.4)
+                                            : Colors.grey.shade200,
+                                        width: isSelected ? 1.5 : 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        CircleAvatar(
+                                          radius: 20,
+                                          backgroundColor: isSelected
+                                              ? _purple.withValues(alpha: 0.15)
+                                              : Colors.grey.shade100,
+                                          child: Text(
+                                            initial,
+                                            style: TextStyle(
+                                              color: isSelected
+                                                  ? _purple
+                                                  : Colors.grey.shade600,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Text(
+                                            name,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14,
+                                              color: isSelected
+                                                  ? _purple
+                                                  : Colors.grey.shade800,
+                                            ),
+                                          ),
+                                        ),
+                                        if (isSelected)
+                                          const Icon(
+                                            Icons.check_circle,
+                                            color: _purple,
+                                            size: 20,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
-              Divider(color: Colors.grey.shade200, height: 1),
-              Expanded(
-                child: ListView.separated(
-                  controller: scrollCtrl,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  itemCount: _subordinates.length,
-                  separatorBuilder: (_, _) => const SizedBox(height: 6),
-                  itemBuilder: (_, i) {
-                    final sub = _subordinates[i];
-                    final id = int.tryParse(sub['id']?.toString() ?? '0') ?? 0;
-                    final name = sub['name']?.toString() ?? 'Unknown';
-                    final isSelected = _selectedSubId == id;
-                    final initial = name.isNotEmpty
-                        ? name[0].toUpperCase()
-                        : '?';
-                    return InkWell(
-                      onTap: () {
-                        Navigator.pop(context);
-                        setState(() {
-                          _selectedSubId = id;
-                          _selectedSubName = name;
-                        });
-                        _loadTeamData(id);
-                      },
-                      borderRadius: BorderRadius.circular(12),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? _purple.withValues(alpha: 0.06)
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected
-                                ? _purple.withValues(alpha: 0.4)
-                                : Colors.grey.shade200,
-                            width: isSelected ? 1.5 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            CircleAvatar(
-                              radius: 20,
-                              backgroundColor: isSelected
-                                  ? _purple.withValues(alpha: 0.15)
-                                  : Colors.grey.shade100,
-                              child: Text(
-                                initial,
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? _purple
-                                      : Colors.grey.shade600,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                name,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 14,
-                                  color: isSelected
-                                      ? _purple
-                                      : Colors.grey.shade800,
-                                ),
-                              ),
-                            ),
-                            if (isSelected)
-                              const Icon(
-                                Icons.check_circle,
-                                color: _purple,
-                                size: 20,
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 

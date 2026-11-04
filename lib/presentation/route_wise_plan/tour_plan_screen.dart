@@ -55,7 +55,10 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
     try {
-      _subordinates = await _api.getSubordinates();
+      _subordinates = await _api.getSubordinates(
+        month: _selectedDate.month,
+        year: _selectedDate.year,
+      );
       
       if (widget.initialSubordinateId != null) {
         try {
@@ -72,6 +75,28 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
       debugPrint("Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadSubordinatesForMonth(DateTime monthDate) async {
+    try {
+      final subs = await _api.getSubordinates(
+        month: monthDate.month,
+        year: monthDate.year,
+      );
+      if (mounted) {
+        setState(() {
+          _subordinates = subs;
+          if (_selectedSubordinate != null) {
+            final stillPresent = _subordinates.any((sub) => sub['id'] == _selectedSubordinate['id']);
+            if (!stillPresent) {
+              _selectedSubordinate = null;
+            }
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading subordinates for month: $e");
     }
   }
 
@@ -198,8 +223,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
         ],
       ),
       
-      // Hide FAB if manager is viewing OR if the employee's month is locked
-      floatingActionButton: (isManagerView || isMonthLocked)
+      floatingActionButton: (isManagerView || (isMonthLocked && (todaysPlan == null || (todaysPlan['is_day_unlocked'] != true && todaysPlan['is_editable'] != true))))
           ? null 
           : FloatingActionButton.extended(
               onPressed: () async {
@@ -216,10 +240,17 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
                 );
                 if (result == true) _fetchMonthlyPlans();
               },
-              backgroundColor: _primaryColor,
-              icon: const Icon(Icons.map, color: Colors.white),
+              backgroundColor: (isMonthLocked && todaysPlan?['is_day_unlocked'] == true)
+                  ? Colors.green.shade700
+                  : _primaryColor,
+              icon: Icon(
+                (isMonthLocked && todaysPlan?['is_day_unlocked'] == true)
+                    ? Icons.lock_open
+                    : Icons.map,
+                color: Colors.white,
+              ),
               label: Text(
-                "Plan Day",
+                todaysPlan != null ? "Edit Plan" : "Plan Day",
                 style: GoogleFonts.poppins(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -258,12 +289,13 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
                   ),
                 );
               }).toList(),
-              onChanged: (newMonth) {
+              onChanged: (newMonth) async {
                 if (newMonth != null) {
                   setState(() {
                     // Switch to the 1st of the selected month
                     _selectedDate = newMonth;
                   });
+                  await _loadSubordinatesForMonth(newMonth);
                   _fetchMonthlyPlans();
                 }
               },
@@ -307,7 +339,13 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           final isSelected = DateUtils.isSameDay(date, _selectedDate);
 
           String dKey = DateFormat('yyyy-MM-dd').format(date);
-          bool hasPlan = _monthlyPlans.containsKey(dKey);
+          final planData = _monthlyPlans[dKey];
+          bool hasPlan = planData != null;
+          bool hasCampaign = planData != null &&
+              (planData['has_campaign'] == true ||
+                  (planData['campaigns'] is List && (planData['campaigns'] as List).isNotEmpty) ||
+                  planData['campaign_id'] != null);
+          bool isDayUnlocked = planData != null && planData['is_day_unlocked'] == true;
           
           Color dotColor = Colors.transparent;
           if (hasPlan) {
@@ -347,13 +385,26 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: dotColor,
-                      shape: BoxShape.circle,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          color: dotColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      if (hasCampaign) ...[
+                        const SizedBox(width: 2),
+                        Icon(Icons.campaign, size: 9, color: isSelected ? Colors.amberAccent : const Color(0xFF7B1FA2)),
+                      ],
+                      if (isDayUnlocked) ...[
+                        const SizedBox(width: 2),
+                        Icon(Icons.lock_open, size: 9, color: isSelected ? Colors.greenAccent : Colors.green),
+                      ],
+                    ],
                   ),
                 ],
               ),
@@ -414,10 +465,186 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     }
 
     bool isActivity = plan['type'] == 'activity';
+    bool hasCampaign = plan['has_campaign'] == true ||
+        (plan['campaigns'] is List && (plan['campaigns'] as List).isNotEmpty) ||
+        plan['campaign_id'] != null;
+    bool isDayUnlocked = plan['is_day_unlocked'] == true;
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        if (isDayUnlocked)
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.green.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.green.shade200),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lock_open, color: Colors.green.shade800, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text("Date-Wise Unlock Active", style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: Colors.green.shade900, fontSize: 13)),
+                      Text("This date is open for modifications.", style: TextStyle(color: Colors.green.shade800, fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        if (hasCampaign) ...[
+          if (plan['campaigns'] is List && (plan['campaigns'] as List).isNotEmpty)
+            for (var c in (plan['campaigns'] as List))
+              Builder(
+                builder: (_) {
+                  if (c is! Map) return const SizedBox.shrink();
+                  final String cName = c['campaign_name']?.toString() ?? 'Campaign #${c['campaign_id'] ?? ''}';
+                  final List docsList = c['doctors'] is List ? (c['doctors'] as List) : [];
+                  final List<String> docNames = [];
+                  for (var d in docsList) {
+                    if (d is Map) {
+                      final name = d['doctor_name']?.toString() ?? d['name']?.toString();
+                      if (name != null && name.trim().isNotEmpty) {
+                        docNames.add(name.trim());
+                      }
+                    } else if (d != null && d.toString().trim().isNotEmpty) {
+                      docNames.add(d.toString().trim());
+                    }
+                  }
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E5F5),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF7B1FA2)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 24),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                cName,
+                                style: GoogleFonts.poppins(
+                                  fontWeight: FontWeight.bold,
+                                  color: const Color(0xFF4A148C),
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF4A148C),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                docNames.isNotEmpty
+                                    ? "${docNames.length} ${docNames.length == 1 ? 'Doctor' : 'Doctors'}"
+                                    : "Campaign Day",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (docNames.isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: docNames.map((name) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(color: const Color(0xFFBA68C8)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.purple.withValues(alpha: 0.08),
+                                      blurRadius: 2,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.person, size: 12, color: Color(0xFF4A148C)),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      name,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF4A148C),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                },
+              )
+          else
+            Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3E5F5),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF7B1FA2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 24),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          plan['activity_name'] ?? (plan['campaign_name'] ?? "Campaign Field Work"),
+                          style: GoogleFonts.poppins(fontWeight: FontWeight.bold, color: const Color(0xFF4A148C), fontSize: 13),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: const Color(0xFF4A148C), borderRadius: BorderRadius.circular(12)),
+                        child: const Text("Campaign Day", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  if (plan['campaign_id'] != null) ...[
+                    const SizedBox(height: 4),
+                    Text("Campaign ID: #${plan['campaign_id']}", style: TextStyle(color: Colors.purple.shade900, fontSize: 11)),
+                  ],
+                ],
+              ),
+            ),
+        ],
+
         if (isActivity)
           Card(
             elevation: 0,

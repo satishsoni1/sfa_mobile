@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert'; // For utf8.encode
 import 'package:flutter/foundation.dart'; // For kIsWeb
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -204,6 +205,24 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
       ),
     );
   }
+
+  void _showEmployeePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _SubordinateSearchSheet(
+        teamMembers: _teamMembers,
+        selectedEmployeeId: _selectedEmployeeId,
+        primaryColor: AppColors.primary,
+        onSelect: (val) {
+          setState(() => _selectedEmployeeId = val);
+          _fetchReportData();
+        },
+      ),
+    );
+  }
+
   // --- TOP FILTER (DYNAMIC) ---
   Widget _buildHierarchyFilter() {
     return Container(
@@ -215,43 +234,39 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
       child: Column(
         children: [
           // 1. Employee Dropdown
-          Row(
-            children: [
-              const Icon(Icons.people_alt_outlined, color: AppColors.primary),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedEmployeeId,
-                    isExpanded: true,
-                    icon: const Icon(
-                      Icons.arrow_drop_down,
-                      color: AppColors.primary,
-                    ),
-                    items: _teamMembers
-                        .map(
-                          (emp) => DropdownMenuItem(
-                            value: emp['id'],
-                            child: Text(
-                              emp['name']!,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
+          InkWell(
+            onTap: _showEmployeePicker,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.people_alt_outlined, color: AppColors.primary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Builder(
+                      builder: (context) {
+                        final selectedMember = _teamMembers.firstWhere(
+                          (emp) => emp['id'] == _selectedEmployeeId,
+                          orElse: () => {'id': _selectedEmployeeId, 'name': _selectedEmployeeId},
+                        );
+                        return Text(
+                          selectedMember['name'] ?? _selectedEmployeeId,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: Colors.black87,
                           ),
-                        )
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() => _selectedEmployeeId = val);
-                        _fetchReportData();
-                      }
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
+                  const Icon(
+                    Icons.arrow_drop_down,
+                    color: AppColors.primary,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
           const Divider(height: 16),
           // 2. Date Picker
@@ -481,17 +496,21 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
         // --- CHECK BOTH OLD AND NEW KEYS ---
         final String avg =
             row['call_avg']?.toString() ?? row['avg']?.toString() ?? '0';
-        final String totalCalls =
-            row['total_drs_met']?.toString() ??
+        final String totalDrCalls =
+            row['dr_calls']?.toString() ??
             row['total_calls']?.toString() ??
+            row['total_drs_met']?.toString() ??
             '0';
+        final String uniqueDrsMet =
+            row['unique_drs_met']?.toString() ?? '0';
         final String fDays =
             row['no_of_days_worked']?.toString() ??
             row['fdays']?.toString() ??
             '0';
 
-        final String leaves = row['leave']?.toString() ?? '0';
-        final String deviations = row['deviation']?.toString() ?? '0';
+        final String leaves = row['leave']?.toString() ?? row['leaves']?.toString() ?? '0';
+        final String nfw = row['nfw']?.toString() ?? '0';
+        final String deviations = row['deviation']?.toString() ?? row['deviations']?.toString() ?? '0';
 
         final bool hasDetails =
             row.containsKey('details') && (row['details'] as List).isNotEmpty;
@@ -594,14 +613,19 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
                     runSpacing: 16,
                     alignment: WrapAlignment.spaceBetween,
                     children: [
-                      // FIXED: These now use the properly extracted variables
                       _dataPoint(
-                        "Total Drs Met",
-                        totalCalls,
+                        "Total Dr. Calls",
+                        totalDrCalls,
                         color: AppColors.primary,
+                      ),
+                      _dataPoint(
+                        "Unique Drs Met",
+                        uniqueDrsMet,
+                        color: Colors.blue,
                       ),
                       _dataPoint("Days Worked", fDays, color: Colors.green),
                       _dataPoint("Leaves", leaves, color: Colors.orange),
+                      _dataPoint("NFW", nfw, color: Colors.purple),
                       _dataPoint("Deviations", deviations, color: Colors.red),
                     ],
                   ),
@@ -2481,6 +2505,181 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<Map<String, String>> teamMembers;
+  final String selectedEmployeeId;
+  final Function(String) onSelect;
+  final Color primaryColor;
+
+  const _SubordinateSearchSheet({
+    required this.teamMembers,
+    required this.selectedEmployeeId,
+    required this.onSelect,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() =>
+      _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  late List<Map<String, String>> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.teamMembers;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _filteredList = widget.teamMembers.where((emp) {
+        final name = emp['name']?.toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Employee",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _filteredList.isEmpty
+                ? Center(
+                    child: Text(
+                      "No team members found",
+                      style: GoogleFonts.poppins(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _filteredList.length,
+                    itemBuilder: (context, index) {
+                      var emp = _filteredList[index];
+                      final id = emp['id'] ?? '';
+                      final name = emp['name'] ?? '';
+                      bool isSelected = widget.selectedEmployeeId == id;
+
+                      return _buildEmployeeTile(
+                        id: id,
+                        name: name,
+                        isSelected: isSelected,
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onSelect(id);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmployeeTile({
+    required String id,
+    required String name,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final bool isAllTeam = id == 'All Team';
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? widget.primaryColor.withValues(alpha: 0.05)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
+        ),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor: Colors.grey.shade100,
+          child: Icon(
+            isAllTeam ? Icons.groups : Icons.person,
+            color: isSelected ? widget.primaryColor : Colors.grey.shade500,
+          ),
+        ),
+        title: Text(
+          name,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: isSelected ? widget.primaryColor : Colors.black87,
+          ),
+        ),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: widget.primaryColor)
+            : null,
       ),
     );
   }

@@ -238,7 +238,7 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
   String? _selectedActivity;
   bool _isLoading = false;
 
-  final List<String> _activities = [
+  List<String> _activities = [
     "Head Office Meeting",
     "Cycle Meeting",
     "Training",
@@ -248,6 +248,28 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
     "Meeting",
     "Closing",
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadActivities();
+  }
+
+  Future<void> _loadActivities() async {
+    try {
+      final items = await ApiService().getOnlyNfwActivities();
+      if (items.isNotEmpty && mounted) {
+        setState(() {
+          _activities = items;
+          if (_selectedActivity != null && !_activities.contains(_selectedActivity)) {
+            _activities.add(_selectedActivity!);
+          }
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading NFW activities: $e");
+    }
+  }
 
   Future<void> _submit() async {
     if (_selectedActivity == null || _locationController.text.isEmpty) {
@@ -337,9 +359,15 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
             DropdownButtonFormField<String>(
               value: _selectedActivity,
               decoration: _inputDecoration("Select Activity"),
-              items: _activities
-                  .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                  .toList(),
+              items: (() {
+                final list = List<String>.from(_activities);
+                if (_selectedActivity != null && !list.contains(_selectedActivity)) {
+                  list.add(_selectedActivity!);
+                }
+                return list
+                    .map((a) => DropdownMenuItem(value: a, child: Text(a)))
+                    .toList();
+              })(),
               onChanged: (val) {
                 setState(() {
                   _selectedActivity = val;

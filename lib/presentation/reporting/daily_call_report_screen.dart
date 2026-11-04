@@ -36,7 +36,7 @@ class _CallReportScreenState extends State<CallReportScreen> {
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
     try {
-      final subs = await _api.getSubordinates();
+      final subs = await _api.getSubordinates(month: _selectedDateRange.end.month, year: _selectedDateRange.end.year);
       setState(() => _hierarchy = subs);
       await _fetchReportData();
     } catch (e) {

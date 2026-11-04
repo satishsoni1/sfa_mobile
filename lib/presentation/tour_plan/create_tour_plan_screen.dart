@@ -74,7 +74,7 @@ class _CreateTourPlanScreenState extends State<CreateTourPlanScreen> {
     setState(() => _isLoading = true);
     try {
       if (!widget.isReadOnly && widget.targetUserId == null) {
-        final subs = await ApiService().getSubordinates();
+        final subs = await ApiService().getSubordinates(month: widget.initialDate.month, year: widget.initialDate.year);
         if (mounted) setState(() => _subordinates = subs);
       }
       await _fetchDoctorsForContext(_selectedContextUserId);
@@ -254,41 +254,9 @@ class _CreateTourPlanScreenState extends State<CreateTourPlanScreen> {
                           setState(() => _selectedActivityType = val),
                     )
                   else ...[
-                    // Subordinate Dropdown
+                    // Subordinate Dropdown / Picker
                     if (_subordinates.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.grey.shade300),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<int?>(
-                            value: _selectedContextUserId,
-                            isExpanded: true,
-                            icon: Icon(
-                              Icons.person_search,
-                              color: _primaryColor,
-                            ),
-                            hint: const Text("Select Territory / User"),
-                            items: [
-                              const DropdownMenuItem(
-                                value: null,
-                                child: Text("Myself (My Territory)"),
-                              ),
-                              ..._subordinates.map(
-                                (sub) => DropdownMenuItem<int>(
-                                  value: sub['id'] as int,
-                                  child: Text("${sub['name']} (Subordinate)"),
-                                ),
-                              ),
-                            ],
-                            onChanged: _fetchDoctorsForContext,
-                          ),
-                        ),
-                      ),
+                      _buildSubordinatePicker(),
 
                     // Area Filter
                     Container(
@@ -564,6 +532,256 @@ class _CreateTourPlanScreenState extends State<CreateTourPlanScreen> {
           ),
         );
       },
+    );
+  }
+
+  void _showSubordinatePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _SubordinateSearchSheet(
+        subordinates: _subordinates,
+        selectedUserId: _selectedContextUserId,
+        primaryColor: _primaryColor,
+        onSelect: _fetchDoctorsForContext,
+      ),
+    );
+  }
+
+  Widget _buildSubordinatePicker() {
+    final selectedSub = _selectedContextUserId == null
+        ? null
+        : _subordinates.firstWhere(
+            (s) => s['id'] == _selectedContextUserId,
+            orElse: () => null,
+          );
+    final selectedText = _selectedContextUserId == null
+        ? "Myself (My Territory)"
+        : "${selectedSub?['name'] ?? 'Unknown'} (Subordinate)";
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: _showSubordinatePicker,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.person_search, color: _primaryColor, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  selectedText,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.black87,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<dynamic> subordinates;
+  final int? selectedUserId;
+  final Function(int?) onSelect;
+  final Color primaryColor;
+
+  const _SubordinateSearchSheet({
+    required this.subordinates,
+    this.selectedUserId,
+    required this.onSelect,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() => _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  String _searchQuery = "";
+  late List<dynamic> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.subordinates;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredList = widget.subordinates.where((sub) {
+        final name = sub['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Territory / User",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: _filteredList.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  if (_searchQuery.isNotEmpty &&
+                      !"myself".contains(_searchQuery.toLowerCase()) &&
+                      !"my territory".contains(_searchQuery.toLowerCase())) {
+                    return const SizedBox.shrink();
+                  }
+                  bool isSelected = widget.selectedUserId == null;
+                  return _buildSubordinateTile(
+                    name: "Myself (My Territory)",
+                    subtitle: "Self",
+                    isSelected: isSelected,
+                    onTap: () {
+                      Navigator.pop(context);
+                      widget.onSelect(null);
+                    },
+                  );
+                }
+
+                var sub = _filteredList[index - 1];
+                final id = sub['id'] as int;
+                bool isSelected = widget.selectedUserId == id;
+
+                return _buildSubordinateTile(
+                  name: "${sub['name']} (Subordinate)",
+                  subtitle: sub['designation']?.toString() ?? 'Team Member',
+                  imageUrl: sub['photo']?.toString(),
+                  isSelected: isSelected,
+                  onTap: () {
+                    Navigator.pop(context);
+                    widget.onSelect(id);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubordinateTile({
+    required String name,
+    required String subtitle,
+    String? imageUrl,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? widget.primaryColor.withValues(alpha: 0.05)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
+        ),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor: Colors.grey.shade100,
+          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+          child: imageUrl == null
+              ? Icon(Icons.person, color: Colors.grey.shade400)
+              : null,
+        ),
+        title: Text(
+          name,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: isSelected ? widget.primaryColor : Colors.black87,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: widget.primaryColor)
+            : null,
+      ),
     );
   }
 }

@@ -6,7 +6,9 @@ import '../data/models/visit_report.dart'; // Ensure you have this model
 import '../data/models/doctor.dart'; // Ensure you have this model
 import '../data/models/tour_plan.dart'; // Ensure you have this model
 import '../data/models/chemist.dart';
-//import 'dart:convert';
+import 'dart:convert';
+import 'package:intl/intl.dart';
+import '../data/models/campaign_models.dart';
 class ReportProvider with ChangeNotifier {
   // Service Injection
   final ApiService _apiService = ApiService();
@@ -27,6 +29,14 @@ class ReportProvider with ChangeNotifier {
   bool get isDaySubmitted => _isDaySubmitted;
   bool get isLoading => _isLoading;
   int get visitCount => _dailyReports.length;
+
+  List<CampaignFieldDefinition> _activeCampaigns = [];
+  Map<int, Map<String, dynamic>> _campaignFormValues = {};
+  bool _isLoadingCampaigns = false;
+
+  List<CampaignFieldDefinition> get activeCampaigns => _activeCampaigns;
+  Map<int, Map<String, dynamic>> get campaignFormValues => _campaignFormValues;
+  bool get isLoadingCampaigns => _isLoadingCampaigns;
 
   // ===============================================
   // 1. INITIALIZATION & FETCHING
@@ -370,6 +380,148 @@ class ReportProvider with ChangeNotifier {
       _chemistReports = [];
       notifyListeners();
     }
+  }
+
+  // ===============================================
+  // 6. DYNAMIC CAMPAIGN MODULE
+  // ===============================================
+
+  Future<void> loadCampaignsForDoctor({
+    required String doctorId,
+    required DateTime visitDateTime,
+  }) async {
+    _isLoadingCampaigns = true;
+    _activeCampaigns = [];
+    _campaignFormValues = {};
+    notifyListeners();
+
+    if (doctorId.isEmpty) {
+      _isLoadingCampaigns = false;
+      notifyListeners();
+      return;
+    }
+
+    try {
+      final String planDate = DateFormat('yyyy-MM-dd').format(visitDateTime);
+
+      // 1. Fetch monthly tour plan
+      final monthlyData = await _apiService.getMonthlyAreaPlans(visitDateTime);
+      final monthStatus = monthlyData['month_status']?.toString().toLowerCase();
+
+      if (monthStatus == 'approved' && monthlyData['plans'] is Map) {
+        final plans = monthlyData['plans'] as Map<String, dynamic>;
+        final dayPlan = plans[planDate];
+
+        if (dayPlan is Map && dayPlan['has_campaign'] == true) {
+          final campaigns = dayPlan['campaigns'] as List? ?? [];
+          final List<int> matchedCampaignIds = [];
+
+          for (final c in campaigns) {
+            if (c is! Map) continue;
+            final doctors = c['doctors'] as List? ?? [];
+            final isAssigned = doctors.any((d) =>
+                d is Map && d['doctor_id']?.toString() == doctorId.toString());
+
+            if (isAssigned) {
+              final cId = int.tryParse(c['campaign_id']?.toString() ?? '') ?? 0;
+              if (cId > 0 && !matchedCampaignIds.contains(cId)) {
+                matchedCampaignIds.add(cId);
+              }
+            }
+          }
+
+          if (matchedCampaignIds.isNotEmpty) {
+            // 2. Fetch all dynamic field schemas
+            final allSchemas = await _apiService.getCampaignAllFields();
+            for (final cId in matchedCampaignIds) {
+              final schema = allSchemas.firstWhere(
+                (s) => s.campaignId == cId,
+                orElse: () {
+                  final matchedRaw = campaigns.firstWhere(
+                    (c) => int.tryParse(c['campaign_id']?.toString() ?? '') == cId,
+                    orElse: () => {},
+                  );
+                  return CampaignFieldDefinition(
+                    campaignId: cId,
+                    campaignName: matchedRaw['campaign_name']?.toString() ?? 'Campaign $cId',
+                    dynamicFields: const [],
+                  );
+                },
+              );
+              _activeCampaigns.add(schema);
+              _campaignFormValues[cId] = {};
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading campaigns for doctor: $e");
+    } finally {
+      _isLoadingCampaigns = false;
+      notifyListeners();
+    }
+  }
+
+  void setCampaignFieldValue(int campaignId, String fieldName, dynamic value) {
+    _campaignFormValues[campaignId] ??= {};
+    _campaignFormValues[campaignId]![fieldName] = value;
+    notifyListeners();
+  }
+
+  String? validateCampaignFields() {
+    for (final campaign in _activeCampaigns) {
+      final values = _campaignFormValues[campaign.campaignId] ?? {};
+      for (final field in campaign.dynamicFields) {
+        if (field.isRequired) {
+          final val = values[field.fieldName];
+          if (val == null || val.toString().trim().isEmpty) {
+            return "Please fill '${field.fieldLabel}' in ${campaign.campaignName.isNotEmpty ? campaign.campaignName : 'Campaign'}";
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> buildCampaignDataPayload() {
+    if (_activeCampaigns.isEmpty) return const [];
+
+    return _activeCampaigns.map((c) => {
+      "campaign_id": c.campaignId,
+      "campaign_name": c.campaignName,
+      "schema_version": c.schemaVersion ?? "",
+      "fields": _campaignFormValues[c.campaignId] ?? {},
+    }).toList();
+  }
+
+  void restoreCampaignData(dynamic savedData) {
+    if (savedData == null) return;
+    List<dynamic> list = [];
+    if (savedData is List) {
+      list = savedData;
+    } else if (savedData is String && savedData.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(savedData);
+        if (decoded is List) list = decoded;
+      } catch (_) {}
+    }
+
+    for (final item in list) {
+      if (item is Map) {
+        final cId = int.tryParse(item['campaign_id']?.toString() ?? '') ?? 0;
+        if (cId > 0 && item['fields'] is Map) {
+          _campaignFormValues[cId] = Map<String, dynamic>.from(item['fields']);
+        }
+      }
+    }
+    notifyListeners();
+  }
+
+  void clearCampaignData() {
+    _activeCampaigns = [];
+    _campaignFormValues = {};
+    _isLoadingCampaigns = false;
+    notifyListeners();
   }
 
   // Save the report
