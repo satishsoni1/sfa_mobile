@@ -588,9 +588,29 @@ class ApiService {
     DateTime date,
     String activity,
     String location,
-    String remarks,
-  ) async {
+    String remarks, {
+    dynamic areaId,
+    String? areaName,
+  }) async {
     final url = Uri.parse('$baseUrl/app/nfw-submit');
+    final String resolvedAreaName = (areaName != null && areaName.isNotEmpty)
+        ? areaName
+        : location;
+    final dynamic parsedAreaId = areaId != null
+        ? (int.tryParse(areaId.toString()) ?? areaId)
+        : null;
+
+    final Map<String, dynamic> body = {
+      'report_date': DateFormat('yyyy-MM-dd').format(date),
+      'activity': activity,
+      if (parsedAreaId != null) ...{
+        'area_id': parsedAreaId,
+        'area_name': resolvedAreaName,
+      } else ...{
+        'location': resolvedAreaName,
+      },
+      'remarks': remarks,
+    };
 
     final response = await http.post(
       url,
@@ -598,12 +618,7 @@ class ApiService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${await getToken()}',
       },
-      body: jsonEncode({
-        'report_date': DateFormat('yyyy-MM-dd').format(date),
-        'activity': activity,
-        'location': location,
-        'remarks': remarks,
-      }),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
@@ -2972,7 +2987,11 @@ Future<void> submitFullMonth(int month, int year) async {
       
       if (response.statusCode == 200) {
         final resData = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(resData['data']);
+        if (resData is List) {
+          return List<Map<String, dynamic>>.from(resData);
+        } else if (resData is Map && resData['data'] is List) {
+          return List<Map<String, dynamic>>.from(resData['data']);
+        }
       }
     } catch (e) {
       debugPrint("Error fetching areas: $e");

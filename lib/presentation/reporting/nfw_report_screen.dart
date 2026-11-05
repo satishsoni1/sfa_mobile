@@ -28,11 +28,9 @@ class _NfwReportScreenState extends State<NfwReportScreen> {
   Future<void> _fetchHistory() async {
     setState(() => _isLoading = true);
     try {
-      // Ensure ApiService has a method: Future<List<dynamic>> getNfwHistory()
       final data = await _api.getNfwHistory();
       setState(() => _reports = data);
     } catch (e) {
-      // Handle error cleanly
       debugPrint("Error fetching NFW history: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -116,6 +114,11 @@ class _NfwReportScreenState extends State<NfwReportScreen> {
       /* ignore */
     }
 
+    final String locationDisplay = item['location']?.toString() ??
+        item['area_name']?.toString() ??
+        (item['area'] is Map ? item['area']['name']?.toString() : null) ??
+        "No Location";
+
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 12),
@@ -132,7 +135,7 @@ class _NfwReportScreenState extends State<NfwReportScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                color: const Color(0xFF4A148C).withOpacity(0.1),
+                color: const Color(0xFF4A148C).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Column(
@@ -181,11 +184,14 @@ class _NfwReportScreenState extends State<NfwReportScreen> {
                         color: Colors.grey,
                       ),
                       const SizedBox(width: 4),
-                      Text(
-                        item['location'] ?? "No Location",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade700,
+                      Expanded(
+                        child: Text(
+                          locationDisplay,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -222,7 +228,7 @@ class _NfwReportScreenState extends State<NfwReportScreen> {
 }
 
 // ==========================================
-// 2. ADD FORM SCREEN (Your Existing Logic)
+// 2. ADD FORM SCREEN
 // ==========================================
 class AddNfwReportScreen extends StatefulWidget {
   const AddNfwReportScreen({super.key});
@@ -232,11 +238,15 @@ class AddNfwReportScreen extends StatefulWidget {
 }
 
 class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
-  final _locationController = TextEditingController();
   final _remarksController = TextEditingController();
   DateTime _selectedDate = DateTime.now();
   String? _selectedActivity;
   bool _isLoading = false;
+
+  List<Map<String, dynamic>> _areas = [];
+  bool _isLoadingAreas = false;
+  dynamic _selectedAreaId;
+  Map<String, dynamic>? _selectedArea;
 
   final List<String> _activities = [
     "Head Office Meeting",
@@ -249,11 +259,62 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
     "Closing",
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _fetchAreas();
+  }
+
+  @override
+  void dispose() {
+    _remarksController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _fetchAreas() async {
+    setState(() => _isLoadingAreas = true);
+    try {
+      final areas = await ApiService().fetchUserAreas();
+      if (!mounted) return;
+
+      // Deduplicate by ID to guarantee unique dropdown items
+      final seenIds = <String>{};
+      final uniqueAreas = <Map<String, dynamic>>[];
+      for (final a in areas) {
+        final idStr = a['id']?.toString() ?? '';
+        if (idStr.isNotEmpty && !seenIds.contains(idStr)) {
+          seenIds.add(idStr);
+          uniqueAreas.add(a);
+        }
+      }
+
+      setState(() {
+        _areas = uniqueAreas;
+        _isLoadingAreas = false;
+      });
+    } catch (e) {
+      debugPrint("Error fetching areas: $e");
+      if (mounted) {
+        setState(() => _isLoadingAreas = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
-    if (_selectedActivity == null || _locationController.text.isEmpty) {
+    if (_selectedActivity == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please select activity and enter location"),
+          content: Text("Please select an activity"),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedAreaId == null || _selectedArea == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please select an area"),
           backgroundColor: Colors.red,
         ),
       );
@@ -262,13 +323,18 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
 
     setState(() => _isLoading = true);
 
+    final areaId = _selectedArea!['id'];
+    final String areaName = _selectedArea!['name']?.toString() ?? '';
+
     try {
-      // Call your API
+      // Call API with date, activity, location/area_name, remarks, areaId, and areaName
       await ApiService().submitNfwReport(
         _selectedDate,
         _selectedActivity!,
-        _locationController.text,
-        _remarksController.text,
+        areaName,
+        _remarksController.text.trim(),
+        areaId: areaId,
+        areaName: areaName,
       );
 
       if (mounted) {
@@ -343,22 +409,87 @@ class _AddNfwReportScreenState extends State<AddNfwReportScreen> {
               onChanged: (val) {
                 setState(() {
                   _selectedActivity = val;
-                  if (val == "Head Office Meeting")
-                    _locationController.text = "Head Office";
-                  if (val == "Work from Home")
-                    _locationController.text = "Home";
                 });
               },
             ),
             const SizedBox(height: 24),
 
-            _buildLabel("Location / City"),
-            TextField(
-              controller: _locationController,
-              decoration: _inputDecoration(
-                "e.g. Mumbai",
-              ).copyWith(prefixIcon: const Icon(Icons.location_on_outlined)),
-            ),
+            _buildLabel("Area *"),
+            if (_isLoadingAreas)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Row(
+                  children: [
+                    SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF4A148C),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Text(
+                      "Loading areas...",
+                      style: TextStyle(color: Colors.grey, fontSize: 14),
+                    ),
+                  ],
+                ),
+              )
+            else if (_areas.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  "No areas found",
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                ),
+              )
+            else
+              DropdownButtonFormField<dynamic>(
+                value: _areas.any((a) => a['id'] == _selectedAreaId)
+                    ? _selectedAreaId
+                    : null,
+                isExpanded: true,
+                decoration: _inputDecoration("Select Area").copyWith(
+                  prefixIcon: const Icon(
+                    Icons.location_on_outlined,
+                    color: Color(0xFF4A148C),
+                  ),
+                ),
+                items: _areas.map((area) {
+                  final name = area['name']?.toString() ?? 'Unnamed Area';
+                  final territoryType = area['territory_type']?.toString().trim();
+                  final display = (territoryType != null && territoryType.isNotEmpty)
+                      ? "$name ($territoryType)"
+                      : name;
+                  return DropdownMenuItem<dynamic>(
+                    value: area['id'],
+                    child: Text(
+                      display,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  );
+                }).toList(),
+                onChanged: (val) {
+                  setState(() {
+                    _selectedAreaId = val;
+                    _selectedArea = _areas.firstWhere(
+                      (a) => a['id'] == val || a['id'].toString() == val.toString(),
+                      orElse: () => {},
+                    );
+                  });
+                },
+              ),
             const SizedBox(height: 24),
 
             _buildLabel("Remarks"),
