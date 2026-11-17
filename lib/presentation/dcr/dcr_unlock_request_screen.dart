@@ -30,9 +30,10 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
   bool _isSubmitting = false;
   DateTime? _fromDate;
 
-  // to_date is always today's date (sent silently in API, shown as read-only)
-  DateTime? get _toDate =>
-      _fromDate != null ? DateTime.now() : null;
+  // to_date is automatically set to 2 days after the selected from_date
+  DateTime? get _toDate => _fromDate != null
+      ? DateTime(_fromDate!.year, _fromDate!.month, _fromDate!.day + 2)
+      : null;
 
   // ── Derived helpers ────────────────────────────────────────────────────────
   bool get _isTabLocked    => _tabStatus?['locked'] == true;
@@ -227,7 +228,7 @@ class _DcrUnlockRequestScreenState extends State<DcrUnlockRequestScreen> {
                       const SizedBox(height: 8),
                       _buildDateField(
                         label: _toDate == null
-                            ? '${DateFormat('dd MMM yyyy').format(DateTime.now())}'
+                            ? 'Select From Date first'
                             : DateFormat('dd MMM yyyy').format(_toDate!),
                         icon: Icons.lock_outline,
                         onTap: null, // Disabled, since it's auto-calculated

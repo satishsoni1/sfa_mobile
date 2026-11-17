@@ -611,20 +611,10 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
       return;
     }
 
-    // --- CAMPAIGN VALIDATION (ONLY FOR FIELD WORK) ---
-    bool hasCampaign = !_isActivity && _availableCampaigns.isNotEmpty;
+    // --- CAMPAIGN VALIDATION (OPTIONAL FOR FIELD WORK) ---
+    final bool hasCampaign = !_isActivity && _activeCampaignIds.isNotEmpty;
 
     if (hasCampaign) {
-      if (_activeCampaignIds.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Please select at least one campaign for this field work day."),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
       for (int campId in _activeCampaignIds) {
         final docIds = _campaignSelectedDoctorIds[campId] ?? {};
         final camp = _availableCampaigns.firstWhere((c) => c['id'] == campId, orElse: () => {});
@@ -689,6 +679,8 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
         }).join(', ');
         payload["activity_name"] = names.isNotEmpty ? names : "Campaign Field Work";
       }
+    } else {
+      payload["campaigns"] = [];
     }
 
     showDialog(
@@ -926,25 +918,8 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-
-          if (_activeCampaignIds.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Row(
-                children: [
-                  Icon(Icons.touch_app_outlined, size: 16, color: Colors.purple.shade700),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      "Please choose a campaign from the dropdown above to select doctors.",
-                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.purple.shade800, fontStyle: FontStyle.italic),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
+          if (_activeCampaignIds.isNotEmpty) ...[
+            const SizedBox(height: 12),
             ..._activeCampaignIds.map((campId) {
               final camp = _availableCampaigns.firstWhere((c) => c['id'] == campId, orElse: () => {});
               final selectedIds = _campaignSelectedDoctorIds[campId] ?? {};
@@ -1187,7 +1162,8 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                   ],
                 ),
               );
-            }).toList(),
+            }),
+          ],
         ],
       ),
     );

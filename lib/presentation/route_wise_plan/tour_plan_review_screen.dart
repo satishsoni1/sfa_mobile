@@ -29,30 +29,273 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
   Future<void> _submitPlan() async {
     setState(() => _isSubmitting = true);
     try {
-      await _api.submitMonthPlan(widget.currentMonth);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Month Plan Submitted for Approval!"),
-            backgroundColor: Colors.green,
-          ),
-        );
-        Navigator.pop(context, true);
+      final res = await _api.submitMonthPlan(widget.currentMonth);
+      if (res['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message']?.toString() ?? "Month Plan Submitted for Approval!"),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context, true);
+        }
+      } else {
+        if (mounted) {
+          _showValidationErrorsDialog(
+            message: res['message']?.toString(),
+            errors: res['errors'],
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e.toString().replaceAll('Exception: ', '')),
-            backgroundColor: Colors.red,
-          ),
+        _showValidationErrorsDialog(
+          message: e.toString().replaceAll('Exception: ', ''),
         );
       }
     } finally {
       if (mounted) {
-      setState(() => _isSubmitting = false);
+        setState(() => _isSubmitting = false);
       }
     }
+  }
+
+  void _showValidationErrorsDialog({String? message, dynamic errors}) {
+    final List<String> errorList = [];
+
+    if (errors != null) {
+      if (errors is List) {
+        for (var item in errors) {
+          if (item != null && item.toString().trim().isNotEmpty) {
+            errorList.add(item.toString().trim());
+          }
+        }
+      } else if (errors is Map) {
+        for (var val in errors.values) {
+          if (val is List) {
+            for (var sub in val) {
+              if (sub != null && sub.toString().trim().isNotEmpty) {
+                errorList.add(sub.toString().trim());
+              }
+            }
+          } else if (val != null && val.toString().trim().isNotEmpty) {
+            errorList.add(val.toString().trim());
+          }
+        }
+      }
+    }
+
+    if (errorList.isEmpty && message != null && message.trim().isNotEmpty) {
+      String cleanMsg = message.trim();
+      if (cleanMsg.startsWith("Campaign Tour Plan validation failed: ")) {
+        cleanMsg = cleanMsg.replaceFirst("Campaign Tour Plan validation failed: ", "");
+      }
+      final parts = cleanMsg.split(RegExp(r'\.\s+(?=[A-Z])'));
+      for (var p in parts) {
+        String trimmed = p.trim();
+        if (trimmed.isNotEmpty) {
+          if (!trimmed.endsWith('.')) trimmed += '.';
+          errorList.add(trimmed);
+        }
+      }
+      if (errorList.isEmpty) {
+        errorList.add(cleanMsg);
+      }
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.75,
+              maxWidth: 480,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Dialog Header ──────────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                    border: Border(bottom: BorderSide(color: Colors.red.shade100)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.error_outline, color: Colors.red.shade700, size: 22),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Validation Failed",
+                              style: GoogleFonts.poppins(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red.shade900,
+                              ),
+                            ),
+                            Text(
+                              errorList.length > 1
+                                  ? "${errorList.length} issues found in campaign plan"
+                                  : "Action required before submission",
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                        onPressed: () => Navigator.pop(ctx),
+                        tooltip: "Close",
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Instruction Banner ─────────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  color: const Color(0xFFFFFBEB),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 16, color: Colors.amber.shade900),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Please correct these errors in your tour dates and resubmit:",
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.amber.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // ── Scrollable List of Errors ──────────────────────────────
+                Flexible(
+                  child: errorList.isEmpty
+                      ? Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Text(
+                            message ?? "An unexpected validation error occurred.",
+                            style: GoogleFonts.poppins(fontSize: 13, color: Colors.black87),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.all(16),
+                          shrinkWrap: true,
+                          itemCount: errorList.length,
+                          separatorBuilder: (_, _) => const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            final err = errorList[index];
+                            return Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFAF5FC),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.purple.shade100),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 22,
+                                    height: 22,
+                                    margin: const EdgeInsets.only(top: 2),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF4A148C),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        "${index + 1}",
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      err,
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12.5,
+                                        height: 1.4,
+                                        color: Colors.grey.shade900,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+
+                // ── Bottom Action Button ───────────────────────────────────
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  ),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 46,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF4A148C),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        "I UNDERSTAND, LET ME UPDATE",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   // --- 2. Manager Action: Approve / Reject Entire Month ---

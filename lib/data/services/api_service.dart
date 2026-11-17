@@ -595,9 +595,29 @@ class ApiService {
     DateTime date,
     String activity,
     String location,
-    String remarks,
-  ) async {
+    String remarks, {
+    dynamic areaId,
+    String? areaName,
+  }) async {
     final url = Uri.parse('$baseUrl/app/nfw-submit');
+    final String resolvedAreaName = (areaName != null && areaName.isNotEmpty)
+        ? areaName
+        : location;
+    final dynamic parsedAreaId = areaId != null
+        ? (int.tryParse(areaId.toString()) ?? areaId)
+        : null;
+
+    final Map<String, dynamic> body = {
+      'report_date': DateFormat('yyyy-MM-dd').format(date),
+      'activity': activity,
+      if (parsedAreaId != null) ...{
+        'area_id': parsedAreaId,
+        'area_name': resolvedAreaName,
+      } else ...{
+        'location': resolvedAreaName,
+      },
+      'remarks': remarks,
+    };
 
     final response = await http.post(
       url,
@@ -605,12 +625,7 @@ class ApiService {
         'Content-Type': 'application/json',
         'Authorization': 'Bearer ${await getToken()}',
       },
-      body: jsonEncode({
-        'report_date': DateFormat('yyyy-MM-dd').format(date),
-        'activity': activity,
-        'location': location,
-        'remarks': remarks,
-      }),
+      body: jsonEncode(body),
     );
 
     if (response.statusCode != 200 && response.statusCode != 201) {
@@ -3204,24 +3219,33 @@ Future<void> submitFullMonth(int month, int year) async {
   }
 
   // 2. USER SUBMITS ENTIRE MONTH
-  Future<void> submitMonthPlan(DateTime month) async {
+  Future<Map<String, dynamic>> submitMonthPlan(DateTime month) async {
+    try {
       String monthStr = DateFormat('yyyy-MM').format(month);
       final response = await http.post(
         Uri.parse('$baseUrl/tour-plan/submit-month'),
         headers: await _getHeaders(),
         body: json.encode({'month': monthStr}),
       );
-    
-    try {
+
       final decoded = json.decode(response.body);
-      if (response.statusCode != 200 || decoded['success'] == false) {
-        throw Exception(decoded['message'] ?? 'Failed to submit month plan.');
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      } else if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
       }
+      return {
+        'success': response.statusCode == 200,
+        'message': response.statusCode == 200
+            ? 'Month Plan Submitted for Approval!'
+            : 'Failed to submit month plan (Status: ${response.statusCode}).',
+      };
     } catch (e) {
-      if (e is FormatException) {
-        throw Exception('Server error: ${response.statusCode}');
-      }
-      rethrow;
+      debugPrint("Error submitting month plan: $e");
+      return {
+        'success': false,
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
     }
   }
 
@@ -3264,7 +3288,11 @@ Future<void> submitFullMonth(int month, int year) async {
       
       if (response.statusCode == 200) {
         final resData = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(resData['data']);
+        if (resData is List) {
+          return List<Map<String, dynamic>>.from(resData);
+        } else if (resData is Map && resData['data'] is List) {
+          return List<Map<String, dynamic>>.from(resData['data']);
+        }
       }
     } catch (e) {
       debugPrint("Error fetching areas: $e");
