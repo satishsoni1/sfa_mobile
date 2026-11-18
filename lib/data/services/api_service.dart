@@ -3274,6 +3274,37 @@ Future<void> submitFullMonth(int month, int year) async {
       return false;
     }
   }
+
+  // 4. FETCH TOUR PLAN CAMPAIGN VALIDATION SUMMARY
+  Future<Map<String, dynamic>> fetchTourPlanCampaignValidation({
+    required int employeeId,
+    required String month, // 'YYYY-MM'
+  }) async {
+    try {
+      final url = Uri.parse('$baseUrl/tour-plan/campaign-visits/validate?employee_id=$employeeId&month=$month');
+      final response = await http.get(
+        url,
+        headers: await _getHeaders(),
+      );
+
+      final decoded = json.decode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      } else if (decoded is Map) {
+        return Map<String, dynamic>.from(decoded);
+      }
+      return {
+        'success': response.statusCode == 200,
+        'message': response.statusCode == 200 ? 'Success' : 'Server error: ${response.statusCode}',
+      };
+    } catch (e) {
+      debugPrint("Error validating campaign visits: $e");
+      return {
+        'success': false,
+        'message': e.toString().replaceAll('Exception: ', ''),
+      };
+    }
+  }
   Future<List<Map<String, dynamic>>> fetchUserAreas({int? userId}) async {
     try {
       String url = '$baseUrl/areas';

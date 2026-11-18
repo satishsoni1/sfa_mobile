@@ -1100,19 +1100,19 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),
-                                                if (doc['doctor_category'] != null && doc['doctor_category'].toString().isNotEmpty)
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                                    decoration: BoxDecoration(
-                                                      color: Colors.blue.shade50,
-                                                      borderRadius: BorderRadius.circular(4),
-                                                      border: Border.all(color: Colors.blue.shade200),
-                                                    ),
-                                                    child: Text(
-                                                      doc['doctor_category'].toString(),
-                                                      style: TextStyle(fontSize: 9, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
-                                                    ),
-                                                  ),
+                                                // if (doc['doctor_category'] != null && doc['doctor_category'].toString().isNotEmpty)
+                                                //   Container(
+                                                //     padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                                //     decoration: BoxDecoration(
+                                                //       color: Colors.blue.shade50,
+                                                //       borderRadius: BorderRadius.circular(4),
+                                                //       border: Border.all(color: Colors.blue.shade200),
+                                                //     ),
+                                                //     child: Text(
+                                                //       doc['doctor_category'].toString(),
+                                                //       style: TextStyle(fontSize: 9, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                                                //     ),
+                                                //   ),
                                               ],
                                             ),
                                             const SizedBox(height: 1),
@@ -1757,19 +1757,19 @@ class _CampaignDoctorSearchSheetState extends State<_CampaignDoctorSearchSheet> 
                                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 14),
                                 ),
                               ),
-                              if (doc['doctor_category'] != null)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.shade50,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: Colors.blue.shade200),
-                                  ),
-                                  child: Text(
-                                    doc['doctor_category'].toString(),
-                                    style: TextStyle(fontSize: 10, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
+                              // if (doc['doctor_category'] != null)
+                              //   Container(
+                              //     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              //     decoration: BoxDecoration(
+                              //       color: Colors.blue.shade50,
+                              //       borderRadius: BorderRadius.circular(4),
+                              //       border: Border.all(color: Colors.blue.shade200),
+                              //     ),
+                              //     child: Text(
+                              //       doc['doctor_category'].toString(),
+                              //       style: TextStyle(fontSize: 10, color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                              //     ),
+                              //   ),
                             ],
                           ),
                           subtitle: Column(

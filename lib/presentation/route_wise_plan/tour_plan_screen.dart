@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../data/services/api_service.dart';
+import '../../providers/auth_provider.dart';
 import 'create_tour_plan_screen.dart';
+import 'tour_plan_campaign_summary_screen.dart';
 import 'tour_plan_review_screen.dart';
 
 class RouteTourPlanScreen extends StatefulWidget {
@@ -29,6 +32,8 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
 
   Map<String, dynamic> _monthlyPlans = {};
   String _monthStatus = 'Draft'; // NEW: Tracks the status of the entire month
+  Map<String, dynamic>? _campaignValidationSummary;
+  bool _isLoadingSummary = false;
 
   final Color _primaryColor = const Color(0xFF2E3192);
   final Color _bgColor = const Color(0xFFF4F6F9);
@@ -145,6 +150,64 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+    // Fetch campaign validation summary in parallel
+    _fetchCampaignSummary();
+  }
+
+  int? get _currentEmployeeId {
+    if (_selectedSubordinate != null && _selectedSubordinate['id'] != null) {
+      return int.tryParse(_selectedSubordinate['id'].toString());
+    }
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    return user?.employeeId;
+  }
+
+  Future<void> _fetchCampaignSummary() async {
+    final empId = _currentEmployeeId;
+    if (empId == null) return;
+    setState(() => _isLoadingSummary = true);
+    try {
+      final monthStr = DateFormat('yyyy-MM').format(_selectedDate);
+      final res = await _api.fetchTourPlanCampaignValidation(
+        employeeId: empId,
+        month: monthStr,
+      );
+      if (mounted) {
+        setState(() {
+          if (res['success'] == true && res['data'] != null) {
+            _campaignValidationSummary = res;
+          } else {
+            _campaignValidationSummary = null;
+          }
+          _isLoadingSummary = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching campaign summary: $e");
+      if (mounted) setState(() => _isLoadingSummary = false);
+    }
+  }
+
+  void _openCampaignSummary() async {
+    final empId = _currentEmployeeId;
+    if (empId == null) return;
+    final user = Provider.of<AuthProvider>(context, listen: false).user;
+    final String myName = user != null ? "${user.firstName} ${user.lastName ?? ''}".trim() : "My Territory";
+    final empName = _selectedSubordinate?['name']?.toString() ??
+        (myName.isNotEmpty ? myName : "My Territory");
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TourPlanCampaignSummaryScreen(
+          employeeId: empId,
+          employeeName: empName,
+          month: _selectedDate,
+          initialData: _campaignValidationSummary,
+        ),
+      ),
+    );
+    _fetchMonthlyPlans();
   }
 
   @override
@@ -180,6 +243,11 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.analytics_outlined, color: Colors.white),
+            onPressed: _openCampaignSummary,
+            tooltip: "Campaign & Call Summary",
+          ),
           if (_subordinates.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.people_alt, color: Colors.white),
@@ -212,6 +280,9 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
                 ),
               ),
             ),
+
+          // Quick Pill Banner for Campaign & Call Summary
+          _buildCampaignSummaryQuickPill(),
 
           _buildDateStrip(),
 
@@ -317,6 +388,183 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCampaignSummaryQuickPill() {
+    if (_isLoadingSummary && _campaignValidationSummary == null) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF4A148C)),
+            ),
+            SizedBox(width: 8),
+            Text(
+              "Validating campaign targets...",
+              style: TextStyle(fontSize: 11, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_campaignValidationSummary == null) {
+      return Container(
+        margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+        child: InkWell(
+          onTap: _openCampaignSummary,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF4A148C).withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.campaign, color: Color(0xFF4A148C), size: 18),
+                const SizedBox(width: 8),
+                Text(
+                  "Campaign & Call Summary",
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF4A148C),
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  "Tap to view ›",
+                  style: GoogleFonts.poppins(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF4A148C),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final data = _campaignValidationSummary!['data'] as Map<String, dynamic>? ?? {};
+    final summary = data['summary'] as Map<String, dynamic>? ?? {};
+    final bool isValid = summary['is_valid'] == true || _campaignValidationSummary!['is_valid'] == true;
+    final int plannedCalls = int.tryParse(summary['planned_calls']?.toString() ?? '0') ?? 0;
+    final int expectedCalls = int.tryParse(summary['expected_calls']?.toString() ?? '0') ?? 0;
+    final int targetDrs = int.tryParse(summary['target_doctors_count']?.toString() ?? '0') ?? 0;
+    final int uniqueDrs = int.tryParse(summary['unique_doctors_planned']?.toString() ?? '0') ?? 0;
+    final int campCount = int.tryParse(summary['campaigns_count']?.toString() ?? '0') ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openCampaignSummary,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: isValid ? const Color(0xFFFAF5FC) : const Color(0xFFFFF3E0),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isValid ? const Color(0xFFBA68C8).withValues(alpha: 0.4) : Colors.orange.shade300,
+                width: 1.2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: BoxDecoration(
+                    color: isValid ? Colors.green.shade50 : Colors.orange.shade100,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isValid ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                    size: 16,
+                    color: isValid ? Colors.green.shade700 : Colors.orange.shade900,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: isValid ? Colors.green.shade100 : Colors.orange.shade200,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isValid ? "VALID" : "ISSUES",
+                              style: TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.bold,
+                                color: isValid ? Colors.green.shade900 : Colors.orange.shade900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              "Calls: $plannedCalls/$expectedCalls • $uniqueDrs/$targetDrs Drs • $campCount Campaigns",
+                              style: GoogleFonts.poppins(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade900,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Tap to view detailed campaign & call breakdown ›",
+                        style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF4A148C),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 13,
+                  color: Color(0xFF4A148C),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
