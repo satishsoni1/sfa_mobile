@@ -704,9 +704,9 @@ class _TourPlanCampaignSummaryScreenState extends State<TourPlanCampaignSummaryS
                               color: _purpleColor,
                             ),
                           ),
-                          if (camp['campaign_code'] != null)
+                          if (camp['campaign_type'] != null && camp['campaign_type'].toString().trim().isNotEmpty)
                             Text(
-                              camp['campaign_code'].toString(),
+                              camp['campaign_type'].toString().trim(),
                               style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
                             ),
                         ],

@@ -880,7 +880,6 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                   final int cid = camp['id'];
                   final int docCount = (_campaignSelectedDoctorIds[cid] ?? {}).length;
                   final String campName = camp['campaign_name'] ?? 'Campaign';
-                  final String campCode = camp['campaign_code'] ?? '';
 
                   return DropdownMenuItem<int>(
                     value: cid,
@@ -890,7 +889,7 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            campCode.isNotEmpty ? "$campName ($campCode)" : campName,
+                            campName,
                             style: GoogleFonts.poppins(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
@@ -975,9 +974,9 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
                                     color: const Color(0xFF4A148C),
                                   ),
                                 ),
-                                if (camp['campaign_code'] != null || camp['campaign_type'] != null)
+                                if (camp['campaign_type'] != null && camp['campaign_type'].toString().trim().isNotEmpty)
                                   Text(
-                                    "${camp['campaign_code'] ?? ''} ${camp['campaign_type'] != null ? '• ${camp['campaign_type']}' : ''}".trim(),
+                                    camp['campaign_type'].toString().trim(),
                                     style: GoogleFonts.poppins(fontSize: 10, color: Colors.purple.shade800),
                                   ),
                               ],
