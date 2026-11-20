@@ -32,6 +32,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
 
   Map<String, dynamic> _monthlyPlans = {};
   String _monthStatus = 'Draft'; // NEW: Tracks the status of the entire month
+  bool _isCampaignTpEligible = true;
   Map<String, dynamic>? _campaignValidationSummary;
   bool _isLoadingSummary = false;
 
@@ -114,6 +115,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           monthlyPlans: _monthlyPlans,
           monthStatus: _monthStatus, 
           userId: _selectedSubordinate?['id'],
+          isCampaignTpEligible: _isCampaignTpEligible,
         ),
       ),
     );
@@ -121,27 +123,57 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   }
 
   // --- API CALL ---
- Future<void> _fetchMonthlyPlans() async {
+  Future<void> _fetchMonthlyPlans() async {
     setState(() => _isLoading = true);
     try {
       final response = await _api.getMonthlyAreaPlans(
         _selectedDate,
         userId: _selectedSubordinate?['id'],
+        employeeId: _currentEmployeeId,
       );
       if (mounted) {
         setState(() {
           _monthStatus = response['month_status'] ?? 'Draft';
           
-          // --- THE FIX IS HERE ---
+          // Parse is_campaign_tp_eligible (default true, but false if explicitly false)
+          bool isEligible = true;
+          if (response.containsKey('is_campaign_tp_eligible')) {
+            final val = response['is_campaign_tp_eligible'];
+            if (val is bool) {
+              isEligible = val;
+            } else if (val is int) {
+              isEligible = val == 1;
+            } else if (val is String) {
+              isEligible = val.toLowerCase() == 'true' || val == '1';
+            }
+          } else if (response.containsKey('campaign_tp_enabled')) {
+            final val = response['campaign_tp_enabled'];
+            if (val is bool) {
+              isEligible = val;
+            } else if (val is int) {
+              isEligible = val == 1;
+            } else if (val is String) {
+              isEligible = val.toLowerCase() == 'true' || val == '1';
+            }
+          }
+          _isCampaignTpEligible = isEligible;
+
           var plansData = response['plans'];
           
-          if (plansData == null || plansData is List) {
-            // Laravel returned [] (List) because it was empty. 
-            // Force it to be an empty Map {} so Dart doesn't crash.
+          if (plansData == null) {
             _monthlyPlans = {}; 
-          } else {
-            // It has data, so it correctly came back as a Map
+          } else if (plansData is Map) {
             _monthlyPlans = Map<String, dynamic>.from(plansData);
+          } else if (plansData is List) {
+            _monthlyPlans = {};
+            for (var item in plansData) {
+              if (item is Map) {
+                final d = item['plan_date']?.toString() ?? item['date']?.toString();
+                if (d != null && d.isNotEmpty) {
+                  _monthlyPlans[d] = item;
+                }
+              }
+            }
           }
         });
       }
@@ -150,8 +182,17 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-    // Fetch campaign validation summary in parallel
-    _fetchCampaignSummary();
+    // Fetch campaign validation summary in parallel only if eligible
+    if (_isCampaignTpEligible) {
+      _fetchCampaignSummary();
+    } else {
+      if (mounted) {
+        setState(() {
+          _campaignValidationSummary = null;
+          _isLoadingSummary = false;
+        });
+      }
+    }
   }
 
   int? get _currentEmployeeId {
@@ -163,6 +204,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   }
 
   Future<void> _fetchCampaignSummary() async {
+    if (!_isCampaignTpEligible) return;
     final empId = _currentEmployeeId;
     if (empId == null) return;
     setState(() => _isLoadingSummary = true);
@@ -189,6 +231,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   }
 
   void _openCampaignSummary() async {
+    if (!_isCampaignTpEligible) return;
     final empId = _currentEmployeeId;
     if (empId == null) return;
     final user = Provider.of<AuthProvider>(context, listen: false).user;
@@ -243,11 +286,12 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.analytics_outlined, color: Colors.white),
-            onPressed: _openCampaignSummary,
-            tooltip: "Campaign & Call Summary",
-          ),
+          if (_isCampaignTpEligible)
+            IconButton(
+              icon: const Icon(Icons.analytics_outlined, color: Colors.white),
+              onPressed: _openCampaignSummary,
+              tooltip: "Campaign & Call Summary",
+            ),
           if (_subordinates.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.people_alt, color: Colors.white),
@@ -282,7 +326,8 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
             ),
 
           // Quick Pill Banner for Campaign & Call Summary
-          _buildCampaignSummaryQuickPill(),
+          if (_isCampaignTpEligible)
+            _buildCampaignSummaryQuickPill(),
 
           _buildDateStrip(),
 
@@ -306,6 +351,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
                       userId: _selectedSubordinate?['id'],
                       userName: _selectedSubordinate?['name'] ?? "Myself",
                       existingData: todaysPlan,
+                      isCampaignTpEligible: _isCampaignTpEligible,
                     ),
                   ),
                 );
@@ -589,7 +635,7 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
           String dKey = DateFormat('yyyy-MM-dd').format(date);
           final planData = _monthlyPlans[dKey];
           bool hasPlan = planData != null;
-          bool hasCampaign = planData != null &&
+          bool hasCampaign = _isCampaignTpEligible && planData != null &&
               (planData['has_campaign'] == true ||
                   (planData['campaigns'] is List && (planData['campaigns'] as List).isNotEmpty) ||
                   planData['campaign_id'] != null);
@@ -713,9 +759,9 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     }
 
     bool isActivity = plan['type'] == 'activity';
-    bool hasCampaign = plan['has_campaign'] == true ||
+    bool hasCampaign = _isCampaignTpEligible && (plan['has_campaign'] == true ||
         (plan['campaigns'] is List && (plan['campaigns'] as List).isNotEmpty) ||
-        plan['campaign_id'] != null;
+        plan['campaign_id'] != null);
     bool isDayUnlocked = plan['is_day_unlocked'] == true;
 
     return ListView(

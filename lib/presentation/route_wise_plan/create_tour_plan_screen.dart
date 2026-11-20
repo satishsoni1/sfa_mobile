@@ -8,12 +8,14 @@ class CreateRouteTourPlanScreen extends StatefulWidget {
   final int? userId;
   final String userName;
   final dynamic existingData;
+  final bool isCampaignTpEligible;
 
   const CreateRouteTourPlanScreen({
     required this.date,
     this.userId,
     required this.userName,
     this.existingData,
+    this.isCampaignTpEligible = true,
     super.key,
   });
 
@@ -288,11 +290,15 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
         }
       }
 
-      final campaigns = await ApiService().getAvailableCampaigns(
-        date: dateStr,
-        employeeId: targetEmpId,
-      );
-      _availableCampaigns = campaigns;
+      if (widget.isCampaignTpEligible) {
+        final campaigns = await ApiService().getAvailableCampaigns(
+          date: dateStr,
+          employeeId: targetEmpId,
+        );
+        _availableCampaigns = campaigns;
+      } else {
+        _availableCampaigns = [];
+      }
 
       Map<String, dynamic>? dayDetails;
       if (widget.existingData != null) {
@@ -307,12 +313,12 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
         }
       }
 
-      bool hasExistingCampaign = widget.existingData != null &&
+      bool hasExistingCampaign = widget.isCampaignTpEligible && widget.existingData != null &&
           (widget.existingData['has_campaign'] == true ||
               widget.existingData['has_campaign'] == 1 ||
               (widget.existingData['campaigns'] is List && (widget.existingData['campaigns'] as List).isNotEmpty));
 
-      if (hasExistingCampaign || (dayDetails != null && dayDetails['campaigns'] != null)) {
+      if (hasExistingCampaign || (widget.isCampaignTpEligible && dayDetails != null && dayDetails['campaigns'] != null)) {
         dynamic rawCampaigns = dayDetails?['campaigns'] ?? widget.existingData?['campaigns'];
 
         if (rawCampaigns is List && rawCampaigns.isNotEmpty) {
@@ -376,9 +382,11 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
         }
       }
 
-      for (final camp in _availableCampaigns) {
-        final int cId = camp['id'];
-        _fetchDoctorsForCampaign(cId, targetEmpId: targetEmpId, force: true);
+      if (widget.isCampaignTpEligible) {
+        for (final camp in _availableCampaigns) {
+          final int cId = camp['id'];
+          _fetchDoctorsForCampaign(cId, targetEmpId: targetEmpId, force: true);
+        }
       }
     } catch (e) {
       debugPrint("Error loading campaign & lock status: $e");
@@ -612,7 +620,7 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
     }
 
     // --- CAMPAIGN VALIDATION (OPTIONAL FOR FIELD WORK) ---
-    final bool hasCampaign = !_isActivity && _activeCampaignIds.isNotEmpty;
+    final bool hasCampaign = widget.isCampaignTpEligible && !_isActivity && _activeCampaignIds.isNotEmpty;
 
     if (hasCampaign) {
       for (int campId in _activeCampaignIds) {
@@ -773,7 +781,7 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
             child: TextField(
               controller: _remarkController,
               decoration: InputDecoration(
-                labelText: "Add Remark (Optional)",
+                labelText: "Add Remark ",
                 prefixIcon: const Icon(Icons.notes, color: Colors.grey),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -1277,7 +1285,7 @@ class _CreateRouteTourPlanScreenState extends State<CreateRouteTourPlanScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
         // Campaign Section displayed ONLY during Field Work (Area)
-        if (_availableCampaigns.isNotEmpty)
+        if (widget.isCampaignTpEligible && _availableCampaigns.isNotEmpty)
           _buildCampaignSection(),
 
         Padding(

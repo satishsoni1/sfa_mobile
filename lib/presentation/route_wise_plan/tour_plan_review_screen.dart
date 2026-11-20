@@ -8,12 +8,14 @@ class TourPlanReviewScreen extends StatefulWidget {
   final Map<String, dynamic> monthlyPlans;
   final String monthStatus;
   final int? userId; // If null = Employee View. If provided = Manager View
+  final bool isCampaignTpEligible;
 
   const TourPlanReviewScreen({
     required this.currentMonth,
     required this.monthlyPlans,
     required this.monthStatus,
     this.userId,
+    this.isCampaignTpEligible = true,
     super.key,
   });
 
@@ -154,7 +156,9 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
                             ),
                             Text(
                               errorList.length > 1
-                                  ? "${errorList.length} issues found in campaign plan"
+                                  ? (widget.isCampaignTpEligible
+                                      ? "${errorList.length} issues found in campaign plan"
+                                      : "${errorList.length} issues found in tour plan")
                                   : "Action required before submission",
                               style: GoogleFonts.poppins(
                                 fontSize: 12,
@@ -404,7 +408,8 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildSummaryStat("Days Planned", "${widget.monthlyPlans.length}/$daysInMonth", Colors.blue),
-                _buildSummaryStat("Campaign Days", "$campaignDaysCount", const Color(0xFF7B1FA2)),
+                if (widget.isCampaignTpEligible)
+                  _buildSummaryStat("Campaign Days", "$campaignDaysCount", const Color(0xFF7B1FA2)),
                 _buildSummaryStat("Overall Status", widget.monthStatus, _getStatusColor(widget.monthStatus)),
               ],
             ),
@@ -459,7 +464,7 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
     bool isSunday = date.weekday == DateTime.sunday;
     List<String> areaNames = plan != null && plan['areas'] != null ? List<String>.from(plan['areas']) : [];
 
-    bool hasCampaign = plan != null &&
+    bool hasCampaign = widget.isCampaignTpEligible && plan != null &&
         (plan['has_campaign'] == true ||
             plan['campaign_id'] != null ||
             (plan['campaign_ids'] is List && (plan['campaign_ids'] as List).isNotEmpty) ||

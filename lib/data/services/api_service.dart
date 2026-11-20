@@ -3159,11 +3159,35 @@ Future<void> submitFullMonth(int month, int year) async {
   Future<Map<String, dynamic>> getMonthlyAreaPlans(
     DateTime month, {
     int? userId,
+    int? employeeId,
   }) async { 
     try {
       String monthStr = DateFormat('yyyy-MM').format(month);
       // Adjusted to ensure /app/ prefix is used
       String url = '$baseUrl/tour-plan/monthly?month=$monthStr';
+
+      int? empId = employeeId;
+      if (empId == null) {
+        final currentUser = await getUser();
+        if (currentUser != null && currentUser.employeeId > 0) {
+          empId = currentUser.employeeId;
+        } else {
+          final prefs = await SharedPreferences.getInstance();
+          final userString = prefs.getString('user_data');
+          if (userString != null) {
+            try {
+              final map = jsonDecode(userString);
+              if (map is Map) {
+                empId = int.tryParse(map['employee_id']?.toString() ?? map['id']?.toString() ?? '');
+              }
+            } catch (_) {}
+          }
+        }
+      }
+
+      if (empId != null && empId > 0) {
+        url += '&employee_id=$empId';
+      }
       if (userId != null) {
         url += '&user_id=$userId';
       }
