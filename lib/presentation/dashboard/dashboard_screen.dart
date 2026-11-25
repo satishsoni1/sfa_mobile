@@ -1,4 +1,4 @@
-﻿import '../tp_deviation/tp_deviation_history_screen.dart';
+import '../tp_deviation/tp_deviation_history_screen.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -561,8 +561,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             col1Top: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                _buildAttendanceCard(),
-                                const SizedBox(height: 24),
+                                // _buildAttendanceCard(),
+                                // const SizedBox(height: 24),
                                 _buildVisitsOverview(),
                                 const SizedBox(height: 24),
                               ],
@@ -570,7 +570,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             col2Top: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                _buildExecutionReportCard(),
+                                _buildExecutionReportCard(isDesktop: true),
                                 const SizedBox(height: 24),
                               ],
                             ),
@@ -600,7 +600,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           left: 20,
                           right: 20,
                         ),
-                        child: _buildAttendanceCard(),
+                        // _buildAttendanceCard() hidden; showing _buildVisitsOverview() here to keep header overlap clean
+                        // child: _buildAttendanceCard(),
+                        child: _buildVisitsOverview(),
                       ),
                     ],
                   ),
@@ -611,8 +613,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _buildVisitsOverview(),
-                        const SizedBox(height: 24),
+                        // Moved into header overlap above while _buildAttendanceCard() is hidden
+                        // _buildVisitsOverview(),
+                        // const SizedBox(height: 24),
                         _buildExecutionReportCard(),
                         const SizedBox(height: 24),
                         _buildQuickActions(false), // pass false for mobile
@@ -890,7 +893,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildExecutionReportCard() {
+  Widget _buildExecutionReportCard({bool isDesktop = false}) {
     final summary = _executionData['summary'] ?? {};
     final int plannedVisited = summary['planned_visited'] ?? 0;
     final int unplannedVisited = summary['unplanned_visited'] ?? 0;
@@ -899,7 +902,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final int planned = summary['total_planned'] ?? 0;
     final int totalVisited = summary['total_visited'] ?? 0;
     final double productivity = (summary['productivity'] ?? 0).toDouble();
+    final double chartCap = isDesktop ? 255 : 220;
     return Container(
+      // Match desktop height of Visits/Notifications + Field Operations (~462px) without fixed-height overflow
+      constraints: isDesktop ? const BoxConstraints(minHeight: 462) : null,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -914,6 +920,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: isDesktop && !_isFetchingExecution
+            ? MainAxisAlignment.spaceBetween
+            : MainAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -961,23 +970,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          if (!isDesktop || _isFetchingExecution) const SizedBox(height: 12),
           if (_isFetchingExecution)
-            const Center(
+            Center(
               child: Padding(
-                padding: EdgeInsets.all(20.0),
-                child: CircularProgressIndicator(),
+                padding: EdgeInsets.symmetric(
+                  vertical: isDesktop ? 150 : 20,
+                  horizontal: 20,
+                ),
+                child: const CircularProgressIndicator(),
               ),
             )
-          else
-            Column(
+          else ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // PIE CHART
-                    Expanded(
-                      flex: 5,
+                // PIE CHART
+                Expanded(
+                  flex: 5,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: chartCap,
+                        maxHeight: chartCap,
+                      ),
                       child: AspectRatio(
                         aspectRatio: 1.0,
                         child: InteractivePieChart(
@@ -1002,26 +1018,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 20),
-                    // LEGEND & BADGES (Right side)
-                    Expanded(
-                      flex: 5,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // _buildExecBadge("KBL Met", kblMet, Colors.purple),
-                          // const SizedBox(height: 8),
-                          // _buildExecBadge("FRD Met", frdMet, Colors.indigo),
-                          // const SizedBox(height: 8),
-                          _buildExecBadge("Planned", plannedVisited, Colors.teal),
-                          const SizedBox(height: 16),
-                          _buildExecBadge("Unplanned", unplannedVisited, Colors.orange),
-                        ],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(width: 20),
+                // LEGEND & BADGES (Right side)
+                Expanded(
+                  flex: 5,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // _buildExecBadge("KBL Met", kblMet, Colors.purple),
+                      // const SizedBox(height: 8),
+                      // _buildExecBadge("FRD Met", frdMet, Colors.indigo),
+                      // const SizedBox(height: 8),
+                      _buildExecBadge("Planned", plannedVisited, Colors.teal),
+                      const SizedBox(height: 16),
+                      _buildExecBadge("Unplanned", unplannedVisited, Colors.orange),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (!isDesktop) const SizedBox(height: 12),
+            Column(
+              children: [
                 Divider(height: 1, color: Colors.grey.shade200),
                 const SizedBox(height: 12),
                 Row(
@@ -1039,6 +1059,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
+          ],
         ],
       ),
     );
@@ -1083,7 +1104,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         // ── Visits + Notification card (split 50/50 inside one card) ─────────
         Expanded(
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
@@ -1129,7 +1150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   // ── Divider ────────────────────────────────────────────────
                   VerticalDivider(
-                    width: 1,
+                    width: 24,
                     thickness: 1,
                     color: Colors.grey.shade200,
                     indent: 8,
@@ -1211,14 +1232,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        // ── Online card ──────────────────────────────────────────────────────
-        _buildSummaryItem(
-          'Online',
-          _elapsedTime,
-          Icons.timer_outlined,
-          Colors.orange,
-        ),
+        // const SizedBox(width: 12),
+        // // ── Online card ──────────────────────────────────────────────────────
+        // _buildSummaryItem(
+        //   'Online',
+        //   _elapsedTime,
+        //   Icons.timer_outlined,
+        //   Colors.orange,
+        // ),
       ],
     );
   }
@@ -1319,11 +1340,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           "Web DCR",
           Colors.purple,
           () {
-            if (_isCheckedIn) {
+            // if (_isCheckedIn) {
               _navigateTo(const DoctorListScreen());
-            } else {
-              _showSnack("Please Check In first!");
-            }
+            // } else {
+            //   _showSnack("Please Check In first!");
+            // }
           },
         ),
       _MenuAction(
