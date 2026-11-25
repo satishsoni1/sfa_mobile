@@ -78,6 +78,7 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
   String? _dateOfBirth;
   String? _marriageAnniversary;
   final _clinicOpeningDayCtrl = TextEditingController();
+  final _clinicTimingCtrl = TextEditingController();
   final _interestsCtrl = TextEditingController();
   String? _prescriptionMode; // 'Online' / 'Offline'
 
@@ -178,6 +179,7 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
       _dateOfBirth = d.dateOfBirth;
       _marriageAnniversary = d.marriageAnniversary;
       _clinicOpeningDayCtrl.text = d.clinicOpeningDay ?? '';
+      _clinicTimingCtrl.text = d.clinicTiming ?? '';
       _interestsCtrl.text = d.interests ?? '';
       _prescriptionMode = d.prescriptionMode;
       _linkedinCtrl.text = d.linkedin ?? '';
@@ -354,7 +356,7 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
       _firstNameCtrl, _surnameCtrl, _specQualCtrl, _patientsPerDayCtrl,
       _mobileCtrl, _whatsappCtrl, _emailCtrl, _addressCtrl, _townCtrl,
       _cityCtrl, _pinCtrl, _businessPotentialCtrl, _regNoCtrl,
-      _clinicOpeningDayCtrl, _interestsCtrl,
+      _clinicOpeningDayCtrl, _clinicTimingCtrl, _interestsCtrl,
       _linkedinCtrl, _instagramCtrl, _websiteCtrl, _youtubeCtrl,
     ]) {
       c.dispose();
@@ -549,6 +551,8 @@ class _AddEditNewDoctorScreenState extends State<AddEditNewDoctorScreen> {
         marriageAnniversary: _marriageAnniversary,
         clinicOpeningDay: _clinicOpeningDayCtrl.text.trim().isEmpty
             ? null : _clinicOpeningDayCtrl.text.trim(),
+        clinicTiming: _clinicTimingCtrl.text.trim().isEmpty
+            ? null : _clinicTimingCtrl.text.trim(),
         interests: _interestsCtrl.text.trim().isEmpty
             ? null : _interestsCtrl.text.trim(),
         prescriptionMode: _prescriptionMode,
@@ -853,6 +857,10 @@ Future<void> _pickDate(
               const SizedBox(height: 14),
               _textField(_clinicOpeningDayCtrl, 'Clinic Opening Day',
                   hint: 'e.g. Monday, 1st of month…'),
+              const SizedBox(height: 14),
+              _textField(_clinicTimingCtrl, 'Clinic Timing',
+                  hint: 'e.g. 10:00 AM - 01:00 PM, 05:00 PM - 09:00 PM',
+                  prefixIcon: Icons.access_time_outlined),
               const SizedBox(height: 14),
               _textField(_interestsCtrl, 'Interests / Hobbies', maxLines: 2),
               const SizedBox(height: 14),

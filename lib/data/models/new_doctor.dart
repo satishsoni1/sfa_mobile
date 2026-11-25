@@ -36,6 +36,7 @@ class NewDoctor {
   final String? dateOfBirth;
   final String? marriageAnniversary;
   final String? clinicOpeningDay;
+  final String? clinicTiming;
   final String? interests;
   final String? prescriptionMode; // 'Online' / 'Offline'
 
@@ -94,6 +95,7 @@ class NewDoctor {
     this.dateOfBirth,
     this.marriageAnniversary,
     this.clinicOpeningDay,
+    this.clinicTiming,
     this.interests,
     this.prescriptionMode,
     this.linkedin,
@@ -176,6 +178,7 @@ class NewDoctor {
       dateOfBirth: json['date_of_birth'],
       marriageAnniversary: json['marriage_anniversary'],
       clinicOpeningDay: json['clinic_opening_day'],
+      clinicTiming: json['clinic_timing'],
       interests: json['interests'],
       prescriptionMode: json['prescription_mode'],
       linkedin: json['linkedin'],
@@ -227,6 +230,7 @@ class NewDoctor {
       'date_of_birth': dateOfBirth,
       'marriage_anniversary': marriageAnniversary,
       'clinic_opening_day': clinicOpeningDay,
+      'clinic_timing': clinicTiming,
       'interests': interests,
       'prescription_mode': prescriptionMode,
       'linkedin': linkedin,

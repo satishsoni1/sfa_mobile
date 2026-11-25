@@ -528,8 +528,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final user = Provider.of<AuthProvider>(context).user;
-    const double headerHeight = 240;
-    const double cardOverlap = 60;
+    // Original dimensions when check-in card is displayed:
+    // const double headerHeight = 240;
+    // const double cardOverlap = 60;
+    const double headerHeight = 160;
+    const double cardOverlap = 30;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -561,8 +564,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             col1Top: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                _buildAttendanceCard(),
-                                const SizedBox(height: 24),
+                                // Commented check-in box as requested:
+                                // _buildAttendanceCard(),
+                                // const SizedBox(height: 24),
                                 _buildVisitsOverview(),
                                 const SizedBox(height: 24),
                               ],
@@ -588,23 +592,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
               physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
                 children: [
-                  // HEADER
-                  Stack(
-                    clipBehavior: Clip.none,
-                    alignment: Alignment.topCenter,
-                    children: [
-                      _buildHeaderBackground(user, headerHeight),
-                      Container(
-                        margin: EdgeInsets.only(
-                          top: headerHeight - cardOverlap,
-                          left: 20,
-                          right: 20,
-                        ),
-                        child: _buildAttendanceCard(),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
+                  // HEADER - Check-in box commented as requested
+                  // Stack(
+                  //   clipBehavior: Clip.none,
+                  //   alignment: Alignment.topCenter,
+                  //   children: [
+                  //     _buildHeaderBackground(user, headerHeight),
+                  //     Container(
+                  //       margin: EdgeInsets.only(
+                  //         top: headerHeight - cardOverlap,
+                  //         left: 20,
+                  //         right: 20,
+                  //       ),
+                  //       child: _buildAttendanceCard(),
+                  //     ),
+                  //   ],
+                  // ),
+                  _buildHeaderBackground(user, 150),
+                  const SizedBox(height: 16),
                   // BODY
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -612,9 +617,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _buildVisitsOverview(),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         _buildExecutionReportCard(),
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 20),
                         _buildQuickActions(false), // pass false for mobile
                       ],
                     ),
@@ -900,7 +905,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final int totalVisited = summary['total_visited'] ?? 0;
     final double productivity = (summary['productivity'] ?? 0).toDouble();
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -934,7 +939,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onTap: _selectExecutionDate,
                 child: Row(
                   children: [
-                    Icon(Icons.calendar_today, color: primaryColor, size: 16),
+                    Icon(Icons.calendar_today, color: primaryColor, size: 15),
                     const SizedBox(width: 6),
                     Text(
                       _executionDateRange.start.day ==
@@ -951,7 +956,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           : "${DateFormat('dd MMM').format(_executionDateRange.start)}-${DateFormat('dd MMM').format(_executionDateRange.end)}"
                                 .toUpperCase(),
                       style: GoogleFonts.poppins(
-                        fontSize: 13,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: primaryColor,
                       ),
@@ -961,7 +966,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           if (_isFetchingExecution)
             const Center(
               child: Padding(
@@ -975,55 +980,67 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // PIE CHART
+                    // PIE CHART - Increased height as requested
                     Expanded(
                       flex: 5,
-                      child: AspectRatio(
-                        aspectRatio: 1.0,
-                        child: InteractivePieChart(
-                          values: [
-                            plannedVisited.toDouble(),
-                            unplannedVisited.toDouble(),
-                            frdMet.toDouble(),
-                            kblMet.toDouble(),
-                          ],
-                          labels: ["Planned", "Unplanned", "FRD Met", "KBL Met"],
-                          colors: [
-                            Colors.teal,
-                            Colors.orange,
-                            Colors.indigo,
-                            Colors.purple,
-                          ],
+                      child: SizedBox(
+                        height: 175,
+                        child: Center(
+                          child: AspectRatio(
+                            aspectRatio: 1.0,
+                            child: InteractivePieChart(
+                              values: [
+                                plannedVisited.toDouble(),
+                                unplannedVisited.toDouble(),
+                                // Commented KBL met and FRD met as requested:
+                                // frdMet.toDouble(),
+                                // kblMet.toDouble(),
+                              ],
+                              labels: [
+                                "Planned",
+                                "Unplanned",
+                                // "FRD Met",
+                                // "KBL Met",
+                              ],
+                              colors: [
+                                Colors.teal,
+                                Colors.orange,
+                                // Colors.indigo,
+                                // Colors.purple,
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
                     const SizedBox(width: 20),
-                    // LEGEND & BADGES (Right side)
+                    // LEGEND & BADGES (Right side - Managed Planned and Unplanned)
                     Expanded(
                       flex: 5,
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _buildExecBadge("KBL Met", kblMet, Colors.purple),
-                          const SizedBox(height: 8),
-                          _buildExecBadge("FRD Met", frdMet, Colors.indigo),
-                          const SizedBox(height: 8),
+                          // Commented KBL met and FRD met badges as requested:
+                          // _buildExecBadge("KBL Met", kblMet, Colors.purple),
+                          // const SizedBox(height: 8),
+                          // _buildExecBadge("FRD Met", frdMet, Colors.indigo),
+                          // const SizedBox(height: 8),
                           _buildExecBadge("Planned", plannedVisited, Colors.teal),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 16),
                           _buildExecBadge("Unplanned", unplannedVisited, Colors.orange),
                         ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Divider(height: 1, color: Colors.grey.shade200),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildStatCircle(productivity, "Productivity", Colors.green),
-                    Container(height: 50, width: 1, color: Colors.grey.shade200),
+                    Container(height: 52, width: 1, color: Colors.grey.shade200),
                     _buildSimpleStat(
                       "$totalVisited / $planned",
                       "Executed / Planned",
@@ -1073,148 +1090,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildVisitsOverview() {
     final visitCount = Provider.of<ReportProvider>(context).visitCount;
     final notifCount = _dcrRequests.length;
-    return Row(
-      children: [
-        // ── Visits + Notification card (split 50/50 inside one card) ─────────
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.grey.shade200),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.shade100,
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IntrinsicHeight(
-              child: Row(
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Visits card ──────────────────────────────────────────────
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.grey.shade200),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.shade100,
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // ── Left half: Visit count ─────────────────────────────────
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.people_outline,
-                          color: Colors.blue,
-                          size: 22,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '$visitCount',
-                          style: GoogleFonts.poppins(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Text(
-                          'Visits',
-                          style: GoogleFonts.poppins(
-                            fontSize: 11,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
+                  const Icon(
+                    Icons.people_outline,
+                    color: Colors.blue,
+                    size: 26,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '$visitCount',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  // ── Divider ────────────────────────────────────────────────
-                  VerticalDivider(
-                    width: 1,
-                    thickness: 1,
-                    color: Colors.grey.shade200,
-                    indent: 8,
-                    endIndent: 8,
-                  ),
-                  // ── Right half: Notification bell ──────────────────────────
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: _showDcrRequestsSheet,
-                      behavior: HitTestBehavior.opaque,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          // Bell with red count badge on top-right
-                          Stack(
-                            clipBehavior: Clip.none,
-                            children: [
-                              Icon(
-                                Icons.notifications_outlined,
-                                color: primaryColor,
-                                size: 26,
-                              ),
-                              if (notifCount > 0)
-                                Positioned(
-                                  top: -6,
-                                  right: -8,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(3),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    constraints: const BoxConstraints(
-                                      minWidth: 16,
-                                      minHeight: 16,
-                                    ),
-                                    child: Text(
-                                      '$notifCount',
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Notifications',
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(
-                              fontSize: 11,
-                              color: Colors.grey,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          if (_isFetchingDcrSheet)
-                            SizedBox(
-                              width: 40,
-                              height: 2,
-                              child: LinearProgressIndicator(
-                                backgroundColor: primaryColor.withOpacity(0.2),
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  primaryColor,
-                                ),
-                              ),
-                            )
-                          else
-                            const SizedBox(height: 2),
-                        ],
-                      ),
+                  Text(
+                    'Visits',
+                    style: GoogleFonts.poppins(
+                      fontSize: 11,
+                      color: Colors.grey,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        // ── Online card ──────────────────────────────────────────────────────
-        _buildSummaryItem(
-          'Online',
-          _elapsedTime,
-          Icons.timer_outlined,
-          Colors.orange,
-        ),
-      ],
+          // Adjusted space between visits and notification as requested
+          const SizedBox(width: 14),
+          // ── Notification card (Height matched exactly with Visits card) ─
+          Expanded(
+            child: GestureDetector(
+              onTap: _showDcrRequestsSheet,
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.shade100,
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.notifications_outlined,
+                      color: primaryColor,
+                      size: 26,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '$notifCount',
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'Notifications',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 11,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // ── Online card (Commented as requested) ──────────────────────
+          // const SizedBox(width: 12),
+          // _buildSummaryItem(
+          //   'Online',
+          //   _elapsedTime,
+          //   Icons.timer_outlined,
+          //   Colors.orange,
+          // ),
+        ],
+      ),
     );
   }
 
@@ -1308,12 +1290,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
           //     ),
           //   ),
           // ),
-        _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
-          if (_isCheckedIn) {
-            _navigateTo(const DoctorListScreen());
-          } else {
-            _showSnack("Please Check In first!");
-          }
+        // Commented original Dr. Call with check-in validation as requested:
+        // _MenuAction(Icons.medical_services, "Dr. Call", Colors.purple, () {
+        //   if (_isCheckedIn) {
+        //     _navigateTo(const DoctorListScreen());
+        //   } else {
+        //     _showSnack("Please Check In first!");
+        //   }
+        // }),
+        _MenuAction(Icons.medical_services, "web DCR", Colors.purple, () {
+          // Check-in validation commented out: employee can directly do web DCR without check-in
+          // if (_isCheckedIn) {
+          //   _navigateTo(const DoctorListScreen());
+          // } else {
+          //   _showSnack("Please Check In first!");
+          // }
+          _navigateTo(const DoctorListScreen());
         }),
       _MenuAction(
         Icons.medical_services,
@@ -1352,32 +1344,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Colors.amber.shade700,
         () => _navigateTo(const TpDeviationHistoryScreen()),
       ),
+      // Moved from Manager Reporting to Field Operations as requested:
+      _MenuAction(
+        Icons.bar_chart,
+        "Reports",
+        Colors.green,
+        () => _navigateTo(const ReportsDashboardScreen()),
+      ),
     ];
     final aiIntel = [
-      _MenuAction(
-        Icons.auto_awesome,
-        "AI Insights Hub",
-        const Color(0xFF4A148C),
-        () => _navigateTo(const AiHubScreen()),
-      ),
-      _MenuAction(
-        Icons.support_agent,
-        "Sales Assistant",
-        const Color(0xFF1565C0),
-        () => _navigateTo(const AiSalesAssistantScreen()),
-      ),
-      _MenuAction(
-        Icons.trending_up,
-        "Product Perf.",
-        const Color(0xFF2E7D32),
-        () => _navigateTo(const AiProductPerformanceScreen()),
-      ),
-      _MenuAction(
-        Icons.person_search,
-        "Doctor Review",
-        const Color(0xFF6A1B9A),
-        () => _navigateTo(const AiDoctorReviewScreen()),
-      ),
+      // Commented all AI Intelligence menu options as requested:
+      // _MenuAction(
+      //   Icons.auto_awesome,
+      //   "AI Insights Hub",
+      //   const Color(0xFF4A148C),
+      //   () => _navigateTo(const AiHubScreen()),
+      // ),
+      // _MenuAction(
+      //   Icons.support_agent,
+      //   "Sales Assistant",
+      //   const Color(0xFF1565C0),
+      //   () => _navigateTo(const AiSalesAssistantScreen()),
+      // ),
+      // _MenuAction(
+      //   Icons.trending_up,
+      //   "Product Perf.",
+      //   const Color(0xFF2E7D32),
+      //   () => _navigateTo(const AiProductPerformanceScreen()),
+      // ),
+      // _MenuAction(
+      //   Icons.person_search,
+      //   "Doctor Review",
+      //   const Color(0xFF6A1B9A),
+      //   () => _navigateTo(const AiDoctorReviewScreen()),
+      // ),
     ];
     final managerOps = [
       _MenuAction(
@@ -1386,24 +1386,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Colors.blue,
         () => _navigateTo(const TeamTerritoryScreen()),
       ),
-      _MenuAction(
-        Icons.bar_chart,
-        "Reports",
-        Colors.green,
-        () => _navigateTo(const ReportsDashboardScreen()),
-      ),
+      // Moved to Field Operations (commented here):
+      // _MenuAction(
+      //   Icons.bar_chart,
+      //   "Reports",
+      //   Colors.green,
+      //   () => _navigateTo(const ReportsDashboardScreen()),
+      // ),
      // _MenuAction(
       //   Icons.approval,
       //   "DCR Approvals (web)",
       //   Colors.green,
       //   () => _navigateTo(const ManagerJointWorkScreen()),
       // ),
-      _MenuAction(
-        Icons.handshake_outlined,
-        "DCR Approvals",
-        Colors.blue,
-        _openTabJointWork,
-      ),
+      // Commented DCR Approvals as requested:
+      // _MenuAction(
+      //   Icons.handshake_outlined,
+      //   "DCR Approvals",
+      //   Colors.blue,
+      //   _openTabJointWork,
+      // ),
       _MenuAction(
         Icons.checklist,
         "Action Center",
@@ -1422,7 +1424,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Colors.deepOrange,
         () => _navigateTo(const AttendanceReportScreen()),
       ),
-      _MenuAction(Icons.link, "Other Links", Colors.indigo, _openWebLinks),
+      // Commented Other Links as requested:
+      // _MenuAction(Icons.link, "Other Links", Colors.indigo, _openWebLinks),
     ];
     final utilities = [
       _MenuAction(
@@ -1431,12 +1434,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Colors.deepPurple,
         () => _navigateTo(const NewDrMasterScreen()),
       ),
-      _MenuAction(
-        Icons.folder_shared,
-        "Dr. Master",
-        Colors.deepPurple,
-        () => _navigateTo(const DoctorMasterScreen()),
-      ),
+      // Commented Dr. Master as requested:
+      // _MenuAction(
+      //   Icons.folder_shared,
+      //   "Dr. Master",
+      //   Colors.deepPurple,
+      //   () => _navigateTo(const DoctorMasterScreen()),
+      // ),
       _MenuAction(
         Icons.medication_outlined,
         "Brand Pathfinder",
@@ -1485,7 +1489,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (col1Top != null) col1Top,
                 _buildMenuCategoryCard("Field Operations", fieldOps),
                 const SizedBox(height: 24),
-                _buildMenuCategoryCard("Manager Reporting", managerOps),
+                // Renamed Manager Reporting to Reporting as requested:
+                // _buildMenuCategoryCard("Manager Reporting", managerOps),
+                _buildMenuCategoryCard("Reporting", managerOps),
               ],
             ),
           ),
@@ -1495,8 +1501,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (col2Top != null) col2Top,
-                _buildMenuCategoryCard("AI Intelligence", aiIntel),
-                const SizedBox(height: 24),
+                // Commented AI Intelligence menu as requested:
+                // _buildMenuCategoryCard("AI Intelligence", aiIntel),
+                // const SizedBox(height: 24),
                 _buildMenuCategoryCard("Utilities", utilities),
               ],
             ),
@@ -1509,10 +1516,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         _buildMenuCategoryCard("Field Operations", fieldOps),
         const SizedBox(height: 16),
-        _buildMenuCategoryCard("Manager Reporting", managerOps),
+        // Renamed Manager Reporting to Reporting as requested:
+        // _buildMenuCategoryCard("Manager Reporting", managerOps),
+        _buildMenuCategoryCard("Reporting", managerOps),
         const SizedBox(height: 16),
-        _buildMenuCategoryCard("AI Intelligence", aiIntel),
-        const SizedBox(height: 16),
+        // Commented AI Intelligence menu as requested:
+        // _buildMenuCategoryCard("AI Intelligence", aiIntel),
+        // const SizedBox(height: 16),
         _buildMenuCategoryCard("Utilities", utilities),
         const SizedBox(height: 40),
       ],
