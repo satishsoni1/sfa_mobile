@@ -167,6 +167,7 @@ class ReportProvider with ChangeNotifier {
   Future<void> submitDayReports({
     DateTime? date,
     required int chemistCount,
+    String? chemistRemark,
   }) async {
     try {
       String? dateStr;
@@ -176,10 +177,10 @@ class ReportProvider with ChangeNotifier {
         dateStr = date.toIso8601String().split('T')[0];
       }
 
-      // Pass the date string to the API service
       await _apiService.submitDayFinal(
         date: dateStr,
         chemistCount: chemistCount,
+        chemistRemark: chemistRemark,
       );
 
       _isDaySubmitted = true;

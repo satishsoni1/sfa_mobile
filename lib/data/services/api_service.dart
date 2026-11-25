@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io' as io;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -247,8 +247,11 @@ class ApiService {
   //     throw Exception('Failed to submit day');
   //   }
   // }
-  // Updated to accept an optional date string (YYYY-MM-DD)
-  Future<void> submitDayFinal({String? date, required int chemistCount}) async {
+  Future<void> submitDayFinal({
+    String? date,
+    required int chemistCount,
+    String? chemistRemark,
+  }) async {
     // Use your existing baseUrl variable mechanism
     // Ensure the endpoint path matches your Laravel route (e.g., /visits/submit-day)
     final url = Uri.parse('$baseUrl/app/new/visits/submit-day');  // new endpoint
@@ -256,6 +259,9 @@ class ApiService {
     final Map<String, dynamic> requestData = {'chemist_count': chemistCount};
     if (date != null) {
       requestData['date'] = date;
+    }
+    if (chemistRemark != null && chemistRemark.trim().isNotEmpty) {
+      requestData['chemist_remark'] = chemistRemark.trim();
     }
     final body = json.encode(requestData);
     // If date is provided, send it. Otherwise, send empty JSON (backend usually assumes 'today')
@@ -872,11 +878,6 @@ class ApiService {
     if (decoded is Map<String, dynamic>) return decoded;
     throw Exception('Unexpected response from DCR status API');
   }
-
-  // --- DCR REQUESTS (manager inbox) ---
-  // Fetches DCR requests AND extracts the merged version + dcr_access data
-  // that the server now bundles into this single response.
-  // Returns the full decoded response body so callers can pull whatever they need.
   Future<Map<String, dynamic>> fetchDcrRequestsEnriched({required int employeeId}) async {
     final token = await getToken();
     final uri = Uri.parse('$baseUrl/dcr/requests?employee_id=$employeeId');
@@ -901,8 +902,7 @@ class ApiService {
   // Original list-only helper kept intact so nothing else breaks.
   Future<List<Map<String, dynamic>>> fetchDcrRequests({required int employeeId}) async {
     final token = await getToken();
-    final uri = Uri.parse(
-        '$baseUrl/dcr/requests?employee_id=$employeeId');
+    final uri = Uri.parse('$baseUrl/approvals/dcr-requests?employee_id=$employeeId');
     final response = await http.get(uri, headers: {
       'Authorization': 'Bearer $token',
       'Accept': 'application/json',
@@ -1246,7 +1246,7 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
     throw Exception('Failed to load doctor list');
   }
 
-  // ── Dr-Brand-Map API methods 
+  // ── Dr-Brand-Map API methods (Zorberry)
   Future<List<Map<String, dynamic>>> getDrBrandMapBrands({int? userId}) async {
     final token = await getToken();
     final url = userId != null
@@ -1395,6 +1395,183 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       ];
     } catch (_) {
       return [{'__error__': true, 'status': 0, 'message': 'Network error. Please try again.'}];
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── SOBIXO SPECIAL 3 CAMPAIGN API METHODS (Exact backend endpoints) ───────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// 2. GET /api/sobixo-brand-map/brands
+  Future<List<Map<String, dynamic>>> getSobixoBrands({int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/sobixo-brand-map/brands?user_id=$userId'
+        : '$baseUrl/sobixo-brand-map/brands';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    }
+    throw Exception('Failed to load Sobixo brand details');
+  }
+
+  /// 3. GET /api/sobixo-brand-map/doctors/my-list (Strictly Brand Pathfinder approved)
+  Future<List<Map<String, dynamic>>> getSobixoDoctorList() async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/doctors/my-list';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    }
+    return [
+      {
+        '__error__': true,
+        'status': response.statusCode,
+        'message': body['message']?.toString() ?? 'Failed to load Sobixo doctor list',
+      }
+    ];
+  }
+
+  /// 4. GET /api/sobixo-brand-map/brands/{brand_id}/doctors
+  Future<Map<String, dynamic>> getSobixoDoctors(int brandId) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$brandId/doctors';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body));
+    }
+    throw Exception('Failed to load selected doctors for Sobixo');
+  }
+
+  /// 5. POST /api/sobixo-brand-map/brands/{brand_id}/verify-doctors
+  Future<Map<String, dynamic>> verifyAndSubmitSobixoDoctors(
+    int brandId, {
+    required List<int> doctorIds,
+    required List<Map<String, dynamic>> verifiedDetails,
+    bool submitFinal = true,
+  }) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$brandId/verify-doctors';
+    final body = json.encode({
+      'brand_id': brandId,
+      'submit_final': submitFinal,
+      'doctor_ids': doctorIds,
+      'verified_details': verifiedDetails,
+    });
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: body,
+    );
+    final decoded = json.decode(response.body);
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return {'status': 200, 'message': 'Verified and submitted successfully'};
+    } else {
+      final msg = decoded is Map
+          ? (decoded['message'] ?? decoded['error'] ?? 'Verification failed')
+          : 'Verification failed';
+      throw Exception(msg.toString());
+    }
+  }
+
+  /// 6. DELETE /api/sobixo-brand-map/brands/{brand_id}/doctors/{doctor_id}
+  Future<String> removeSobixoDoctor(int brandId, int doctorId) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$brandId/doctors/$doctorId';
+    final response = await http.delete(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) {
+      return body['message']?.toString() ?? 'Doctor removed from SOBIXO successfully';
+    } else {
+      throw Exception(body['message'] ?? 'Failed to remove doctor from SOBIXO');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getSobixoDoctorSummary({int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/sobixo-brand-map/brands/doctor-summary?user_id=$userId'
+        : '$baseUrl/sobixo-brand-map/brands/doctor-summary';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) {
+      final raw = body['data'] ?? body;
+      if (raw is List) return List<Map<String, dynamic>>.from(raw);
+      return [];
+    }
+    return [
+      {
+        '__error__': true,
+        'status': response.statusCode,
+        'message': body['message']?.toString() ?? 'Failed to load Sobixo doctor summary',
+      }
+    ];
+  }
+
+  /// 8. POST /api/sobixo-brand-map/brands/{subordinate_user_id}/approve
+  Future<void> approveSobixoBrand(int subordinateUserId, int brandId) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$subordinateUserId/approve';
+    final body = json.encode({'brand_id': brandId});
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: body,
+    );
+    if (response.statusCode != 200) {
+      final decoded = json.decode(response.body);
+      throw Exception(decoded['message'] ?? 'Failed to approve Sobixo brand');
+    }
+  }
+
+  /// 9. POST /api/sobixo-brand-map/brands/{subordinate_user_id}/reject
+  Future<void> rejectSobixoBrand(int subordinateUserId, int brandId, String rejectReason) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$subordinateUserId/reject';
+    final body = json.encode({
+      'brand_id': brandId,
+      'reject_reason': rejectReason,
+    });
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: body,
+    );
+    if (response.statusCode != 200) {
+      final decoded = json.decode(response.body);
+      throw Exception(decoded['message'] ?? 'Failed to reject Sobixo brand');
     }
   }
 
@@ -3842,5 +4019,185 @@ Future<void> submitFullMonth(int month, int year) async {
       final err = jsonDecode(response.body);
       throw Exception(err['message'] ?? 'Failed to reject chemist list');
     }
+  }
+
+  // ─── DOCTOR BRAND PRIORITY APIs ──────────────────────────────────────────
+
+  /// 1. GET /api/app/doctor-brand-priority/brands
+  Future<Map<String, dynamic>> getDoctorBrandPriorityBrands({int? userId}) async {
+    final token = await getToken();
+    var uri = Uri.parse('$baseUrl/app/doctor-brand-priority/brands');
+    if (userId != null) {
+      uri = uri.replace(queryParameters: {'user_id': userId.toString()});
+    }
+    final response = await http.get(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  /// 2. GET /api/app/doctor-brand-priority/doctors
+  Future<Map<String, dynamic>> getDoctorBrandPriorityDoctors({
+    String? search,
+    String? speciality,
+    String? filter,
+    int? userId,
+  }) async {
+    final token = await getToken();
+    final queryParams = <String, String>{};
+    if (search != null && search.isNotEmpty) queryParams['search'] = search;
+    if (speciality != null && speciality.isNotEmpty) queryParams['speciality'] = speciality;
+    if (filter != null && filter.isNotEmpty) queryParams['filter'] = filter;
+    if (userId != null) queryParams['user_id'] = userId.toString();
+
+    var uri = Uri.parse('$baseUrl/app/doctor-brand-priority/doctors');
+    if (queryParams.isNotEmpty) {
+      uri = uri.replace(queryParameters: queryParams);
+    }
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  /// 3. GET /api/app/doctor-brand-priority/doctors/{doctorId}
+  Future<Map<String, dynamic>> getSingleDoctorBrandPriority(int doctorId) async {
+    final token = await getToken();
+    final response = await http.get(
+      Uri.parse('$baseUrl/app/doctor-brand-priority/doctors/$doctorId'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  /// 4. POST /api/app/doctor-brand-priority/doctors/{doctorId}
+  Future<Map<String, dynamic>> saveDoctorBrandPriority(
+    int doctorId,
+    List<Map<String, dynamic>> priorities,
+  ) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/doctor-brand-priority/doctors/$doctorId'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'priorities': priorities}),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  /// 5. POST /api/app/doctor-brand-priority/doctors/bulk-save
+  Future<Map<String, dynamic>> bulkSaveDoctorBrandPriority(
+    List<Map<String, dynamic>> items,
+  ) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/doctor-brand-priority/doctors/bulk-save'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({'items': items}),
+    );
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  /// 6. POST /api/app/doctor-brand-priority/submit
+  Future<Map<String, dynamic>> submitDoctorBrandPriority() async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/doctor-brand-priority/submit'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({}),
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  /// 7a. POST /api/app/doctor-brand-priority/{userId}/approve
+  Future<Map<String, dynamic>> approveDoctorBrandPriority(int userId) async {
+    final token = await getToken();
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/doctor-brand-priority/$userId/approve'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({}),
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
+  }
+
+  /// 7b. POST /api/app/doctor-brand-priority/{userId}/reject
+  Future<Map<String, dynamic>> rejectDoctorBrandPriority(
+    int userId, {
+    String? reason,
+  }) async {
+    final token = await getToken();
+    final bodyData = <String, dynamic>{};
+    if (reason != null && reason.trim().isNotEmpty) {
+      bodyData['reason'] = reason.trim();
+    }
+    final response = await http.post(
+      Uri.parse('$baseUrl/app/doctor-brand-priority/$userId/reject'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(bodyData),
+    );
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : Map<String, dynamic>.from(decoded);
+    }
+    throw Exception(_errorMessageFromBody(response.body));
   }
 }

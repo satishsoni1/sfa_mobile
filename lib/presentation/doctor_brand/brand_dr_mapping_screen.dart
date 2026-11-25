@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../data/services/api_service.dart';
 import 'brand_dr_mapping_doctor_screen.dart';
+import 'sobixo_verification_sheet.dart';
 
 
 class BrandDrMappingScreen extends StatefulWidget {
   final int? initialEmployeeId;
-  const BrandDrMappingScreen({super.key, this.initialEmployeeId});
+  final String? initialBrandFilter;
+  final String? customTitle;
+  const BrandDrMappingScreen({
+    super.key,
+    this.initialEmployeeId,
+    this.initialBrandFilter,
+    this.customTitle,
+  });
 
   @override
   State<BrandDrMappingScreen> createState() => _BrandDrMappingScreenState();
@@ -36,8 +44,20 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
   List<Map<String, dynamic>> get _filteredBrands {
     final q = _searchCtrl.text.toLowerCase();
-    if (q.isEmpty) return _brands;
-    return _brands.where((b) =>
+    List<Map<String, dynamic>> list = _brands;
+    if (widget.initialBrandFilter != null && widget.initialBrandFilter!.isNotEmpty) {
+      final f = widget.initialBrandFilter!.toUpperCase();
+      list = list.where((b) {
+        final bName = _brandDisplayName(b).toUpperCase();
+        final isSobixo = b['is_sobixo'] == true;
+        if (f == 'SOBIXO') {
+          return isSobixo || bName == 'SOBIXO';
+        }
+        return bName.contains(f);
+      }).toList();
+    }
+    if (q.isEmpty) return list;
+    return list.where((b) =>
         (_brandDisplayName(b)).toLowerCase().contains(q) ||
         (b['division'] ?? '').toString().toLowerCase().contains(q)).toList();
   }
@@ -61,6 +81,16 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
   int get _totalTagCount =>
       _brands.fold(0, (s, b) => s + (int.tryParse(b['doctor_count']?.toString() ?? '0') ?? 0));
+
+  bool get _isSobixoCampaign =>
+      widget.initialBrandFilter?.toUpperCase() == 'SOBIXO' ||
+      (widget.customTitle?.toUpperCase().contains('SOBIXO') ?? false);
+
+  bool _isSobixo(Map<String, dynamic> brand) {
+    if (_isSobixoCampaign) return true;
+    final name = _brandDisplayName(brand).toUpperCase();
+    return brand['is_sobixo'] == true || name == 'SOBIXO';
+  }
 
   /// Reads brand name from 'brand' field first (dr-brand-map response), falls
   /// back to 'name' so both API shapes are handled gracefully.
@@ -99,7 +129,9 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     setState(() => _isLoadingBrands = true);
     try {
       final user = await ApiService().getUser();
-      final brands = await ApiService().getDrBrandMapBrands(userId: user?.employeeId);
+      final brands = _isSobixoCampaign
+          ? await ApiService().getSobixoBrands(userId: user?.employeeId)
+          : await ApiService().getDrBrandMapBrands(userId: user?.employeeId);
       if (mounted) {
         setState(() {
           _brands = brands;
@@ -115,7 +147,9 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
       _summaryError = null;
     });
     try {
-      final data = await ApiService().getDrBrandMapSummary();
+      final data = _isSobixoCampaign
+          ? await ApiService().getSobixoDoctorSummary(userId: _selectedSubId)
+          : await ApiService().getDrBrandMapSummary();
       if (!mounted) return;
       // Check if the API returned an error sentinel
       if (data.length == 1 && data.first['__error__'] == true) {
@@ -161,7 +195,9 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
       _isLoadingTeamBrands = true;
     });
     try {
-      final brands = await ApiService().getDrBrandMapBrands(userId: userId);
+      final brands = _isSobixoCampaign
+          ? await ApiService().getSobixoBrands(userId: userId)
+          : await ApiService().getDrBrandMapBrands(userId: userId);
       if (mounted) {
         setState(() {
           _teamBrands = brands;
@@ -191,6 +227,52 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     final int brandId = int.tryParse(brand['id']?.toString() ?? '0') ?? 0;
     if (brandId <= 0) return;
     final brandName = _brandDisplayName(brand);
+    final isSobixo = _isSobixo(brand);
+
+    if (isSobixo) {
+      setState(() => _submittingBrandId = brandId);
+      List<Map<String, dynamic>> docs = [];
+      try {
+        final res = await ApiService().getSobixoDoctors(brandId);
+        docs = List<Map<String, dynamic>>.from(res['data'] ?? []);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to load doctors: $e'),
+            backgroundColor: Colors.red,
+          ));
+        }
+      } finally {
+        if (mounted) setState(() => _submittingBrandId = null);
+      }
+
+      if (docs.length != 3) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Exactly 3 doctors must be selected for SOBIXO. Currently selected: ${docs.length}.'),
+            backgroundColor: Colors.orange.shade800,
+          ));
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      final verified = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => SobixoVerificationSheet(
+          brandId: brandId,
+          brandName: brandName,
+          selectedDoctors: docs,
+        ),
+      );
+
+      if (verified == true && mounted) {
+        await _loadBrands();
+      }
+      return;
+    }
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -288,7 +370,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
     setState(() => _approvingBrandId = brandId);
     try {
-      await ApiService().approveDrBrandMap(userId, brandId);
+      if (_isSobixo(brand)) {
+        await ApiService().approveSobixoBrand(userId, brandId);
+      } else {
+        await ApiService().approveDrBrandMap(userId, brandId);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('$brandName approved!'),
@@ -364,7 +450,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
     setState(() => _rejectingBrandId = brandId);
     try {
-      await ApiService().rejectDrBrandMap(userId, brandId, reason);
+      if (_isSobixo(brand)) {
+        await ApiService().rejectSobixoBrand(userId, brandId, reason);
+      } else {
+        await ApiService().rejectDrBrandMap(userId, brandId, reason);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('$brandName rejected.'),
@@ -401,7 +491,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
             title: Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
-                'Zorberry Tab Daily Rxn List',
+                widget.customTitle ?? 'Zorberry Tab Daily Rxn List',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600,
                   fontSize: 17,
@@ -687,11 +777,16 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     final brandStatus = _getBrandStatus(brand);
     final isBrandLocked = readOnly || brandStatus == 'pending' || brandStatus == 'approved';
 
+    final Map<String, dynamic> brandPayload = Map<String, dynamic>.from(brand);
+    if (_isSobixo(brand)) {
+      brandPayload['is_sobixo'] = true;
+    }
+
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => BrandDrMappingDoctorScreen(
-          brand: brand,
+          brand: brandPayload,
           targetUserId: targetUserId,
           readOnly: readOnly,
           isDoctorListLocked: isBrandLocked,
@@ -811,6 +906,8 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     // ── User My List actions ──
     final isSubmitting = _submittingBrandId == brandId;
     final bool isExactQuota = quota > 0 && count == quota;
+    final bool isSobixo = _isSobixo(brand);
+    const Color actionColor = _purple;
 
     if (status == 'approved') {
       return _brandStatusBadge(
@@ -846,7 +943,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
               height: 36,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _purple,
+                  backgroundColor: actionColor,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   elevation: 1,
@@ -858,9 +955,13 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Icon(Icons.send_outlined, size: 15),
+                    : Icon(isSobixo ? Icons.verified_outlined : Icons.send_outlined, size: 15),
                 label: Text(
-                  isSubmitting ? 'Submitting...' : 'Re-submit for Approval',
+                  isSubmitting
+                      ? 'Submitting...'
+                      : isSobixo
+                          ? 'Verify & Re-submit (3 Doctors)'
+                          : 'Re-submit for Approval',
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
                 ),
               ),
@@ -878,7 +979,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
         height: 36,
         child: ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
-            backgroundColor: _purple,
+            backgroundColor: actionColor,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             elevation: 1,
@@ -890,9 +991,13 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
-              : const Icon(Icons.send_outlined, size: 15),
+              : Icon(isSobixo ? Icons.verified_outlined : Icons.send_outlined, size: 15),
           label: Text(
-            isSubmitting ? 'Submitting...' : 'Submit for Approval',
+            isSubmitting
+                ? 'Submitting...'
+                : isSobixo
+                    ? 'Verify & Submit (3 Doctors)'
+                    : 'Submit for Approval',
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ),

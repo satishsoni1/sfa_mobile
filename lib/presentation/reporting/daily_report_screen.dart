@@ -369,14 +369,17 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                 onPressed: (reports.isEmpty || reportProvider.isDaySubmitted)
                     ? null
                     : () async {
-                        // Show customized dialog returning an integer (null if cancelled, >=0 if confirmed)
-                        int? finalChemistCount = await showDialog<int>(
+                        Map<String, dynamic>? finalChemistResult =
+                            await showDialog<Map<String, dynamic>>(
                           context: context,
                           builder: (ctx) {
                             bool visitedChemist = false;
                             final TextEditingController chemistCountController =
                                 TextEditingController();
+                            final TextEditingController chemistRemarkController =
+                                TextEditingController();
                             String? errorText;
+                            String? remarkErrorText;
 
                             return StatefulBuilder(
                               builder: (context, setDialogState) {
@@ -441,13 +444,17 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                                                   chemistCountController
                                                       .clear();
                                                   errorText = null;
+                                                } else {
+                                                  chemistRemarkController
+                                                      .clear();
+                                                  remarkErrorText = null;
                                                 }
                                               });
                                             },
                                           ),
                                         ),
 
-                                        // Chemist Count Input (Shown conditionally)
+                                        // Chemist Count Input (Shown when visitedChemist is true)
                                         if (visitedChemist) ...[
                                           const SizedBox(height: 16),
                                           TextField(
@@ -489,6 +496,55 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                                               }
                                             },
                                           ),
+                                        ]
+                                        // Chemist Reason Input (Compulsory when visitedChemist is false)
+                                        else ...[
+                                          const SizedBox(height: 16),
+                                          TextField(
+                                            controller: chemistRemarkController,
+                                            maxLines: 2,
+                                            decoration: InputDecoration(
+                                              labelText:
+                                                  "Reason for not visiting chemist *",
+                                              labelStyle: GoogleFonts.poppins(
+                                                fontSize: 14,
+                                              ),
+                                              hintText:
+                                                  "Enter reason for no chemist visit...",
+                                              hintStyle: GoogleFonts.poppins(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade400,
+                                              ),
+                                              errorText: remarkErrorText,
+                                              border: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                                borderSide: const BorderSide(
+                                                  color: Color(0xFF4A148C),
+                                                  width: 2,
+                                                ),
+                                              ),
+                                              contentPadding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 16,
+                                                    vertical: 12,
+                                                  ),
+                                              prefixIcon: const Icon(
+                                                Icons.edit_note_outlined,
+                                              ),
+                                            ),
+                                            onChanged: (val) {
+                                              if (remarkErrorText != null) {
+                                                setDialogState(
+                                                  () => remarkErrorText = null,
+                                                );
+                                              }
+                                            },
+                                          ),
                                         ],
                                       ],
                                     ),
@@ -518,9 +574,8 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                                         ),
                                       ),
                                       onPressed: () {
-                                        int chemistCount = 0;
                                         if (visitedChemist) {
-                                          chemistCount =
+                                          final chemistCount =
                                               int.tryParse(
                                                 chemistCountController.text,
                                               ) ??
@@ -532,9 +587,26 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                                             });
                                             return;
                                           }
+                                          Navigator.pop(ctx, {
+                                            'chemist_count': chemistCount,
+                                            'chemist_remark': null,
+                                          });
+                                        } else {
+                                          final remark =
+                                              chemistRemarkController.text
+                                                  .trim();
+                                          if (remark.isEmpty) {
+                                            setDialogState(() {
+                                              remarkErrorText =
+                                                  "Please enter reason for not visiting chemists.";
+                                            });
+                                            return;
+                                          }
+                                          Navigator.pop(ctx, {
+                                            'chemist_count': 0,
+                                            'chemist_remark': remark,
+                                          });
                                         }
-                                        // Returns the chemist count (0 if checkbox wasn't checked)
-                                        Navigator.pop(ctx, chemistCount);
                                       },
                                       child: Text(
                                         "Confirm",
@@ -550,14 +622,18 @@ class _DailyReportScreenState extends State<DailyReportScreen> {
                           },
                         );
 
-                        // If the user confirmed the dialog (returned an int instead of null)
-                        if (finalChemistCount != null) {
+                        // If the user confirmed the dialog (returned a map instead of null)
+                        if (finalChemistResult != null) {
+                          final int chemistCount =
+                              finalChemistResult['chemist_count'] as int? ?? 0;
+                          final String? chemistRemark =
+                              finalChemistResult['chemist_remark'] as String?;
+
                           try {
                             await reportProvider.submitDayReports(
                               date: _selectedDate,
-                              chemistCount:
-                                  finalChemistCount ??
-                                  0, // Falls back to 0 if not entered
+                              chemistCount: chemistCount,
+                              chemistRemark: chemistRemark,
                             );
 
                             if (context.mounted) {

@@ -16,6 +16,7 @@ import 'package:zforce/presentation/expense/ExpenseSummaryScreen.dart';
 import 'package:zforce/presentation/expense/ExpenseManagerScreen.dart';
 import 'package:zforce/presentation/doctor_brand/doctor_brand_screen.dart';
 import 'package:zforce/presentation/doctor_brand/brand_dr_mapping_screen.dart';
+import 'package:zforce/presentation/doctor_brand/doctor_brand_priority_screen.dart';
 import 'package:zforce/presentation/leave/leave_list_screen.dart';
 import 'package:zforce/presentation/master/data_upload_screen.dart';
 import 'package:zforce/presentation/master/attendance_report_screen.dart';
@@ -90,6 +91,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // DCR Requests (notification inbox)
   List<Map<String, dynamic>> _dcrRequests = [];
   bool _isFetchingDcrSheet = false;
+  bool _toShowSobixo = false;
 
   Timer? _timer;
   String _elapsedTime = "00:00";
@@ -487,7 +489,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
 
-      setState(() => _dcrRequests = requests);
+      // 4. Extract to_show_sobixo campaign eligibility flag
+      final dynamic sobixoFlag = (data is Map ? data['to_show_sobixo'] : null) ??
+          enriched['to_show_sobixo'];
+      final bool toShowSobixo = _flagEnabled(sobixoFlag);
+
+      setState(() {
+        _dcrRequests = requests;
+        _toShowSobixo = toShowSobixo;
+      });
     } catch (_) {
     }
   }
@@ -1757,11 +1767,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             () => _navigateTo(const DoctorBrandScreen()),
           ),
           _MenuAction(
+            Icons.format_list_numbered_rounded,
+            "Dr Brand Prioritisation",
+            Colors.deepPurple,
+            () => _navigateTo(const DoctorBrandPriorityScreen()),
+          ),
+          _MenuAction(
             Icons.medical_information_outlined,
             "Zorberry Tab Daily Rxn List",
             Colors.deepOrange,
             () => _navigateTo(const BrandDrMappingScreen()),
           ),
+          if (_toShowSobixo)
+            _MenuAction(
+              Icons.stars_rounded,
+              "SOBIXO SPECIAL 3 CAMPAIGN",
+              Colors.teal,
+              () => _navigateTo(const BrandDrMappingScreen(
+                initialBrandFilter: 'SOBIXO',
+                customTitle: 'SOBIXO SPECIAL 3 CAMPAIGN',
+              )),
+            ),
           _MenuAction(
             Icons.medication_outlined,
             "Campaign Doctor Selection",
