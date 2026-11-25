@@ -1,5 +1,7 @@
 import 'dart:convert';
+import 'dart:io' as io;
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
@@ -1027,14 +1029,23 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
     
     request.fields.addAll(payload);
     
-    // CHANGED: Use fromBytes for Web compatibility
+    // CHANGED: Use fromBytes for Web compatibility with path fallback on mobile
     for (final file in attachments) {
-      if (file.bytes != null) {
+      List<int>? bytes = file.bytes;
+      if (bytes == null && !kIsWeb && file.path != null && file.path!.isNotEmpty) {
+        try {
+          final ioFile = io.File(file.path!);
+          if (ioFile.existsSync()) {
+            bytes = ioFile.readAsBytesSync();
+          }
+        } catch (_) {}
+      }
+      if (bytes != null) {
         request.files.add(
           http.MultipartFile.fromBytes(
             'attachments[]', 
-            file.bytes!, 
-            filename: file.name
+            bytes, 
+            filename: file.name,
           ),
         );
       }
@@ -1053,14 +1064,25 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       
       // Ensure the UI passes a PlatformFile here instead of dart:io File
       final bill = item['bill'] as PlatformFile?; 
-      if (bill != null && bill.bytes != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'other_bills[$i]', 
-            bill.bytes!, 
-            filename: bill.name
-          ),
-        );
+      if (bill != null) {
+        List<int>? billBytes = bill.bytes;
+        if (billBytes == null && !kIsWeb && bill.path != null && bill.path!.isNotEmpty) {
+          try {
+            final ioFile = io.File(bill.path!);
+            if (ioFile.existsSync()) {
+              billBytes = ioFile.readAsBytesSync();
+            }
+          } catch (_) {}
+        }
+        if (billBytes != null) {
+          request.files.add(
+            http.MultipartFile.fromBytes(
+              'other_bills[$i]', 
+              billBytes, 
+              filename: bill.name,
+            ),
+          );
+        }
       }
     }
     
@@ -2753,15 +2775,26 @@ Future<void> submitFullMonth(int month, int year) async {
       request.fields['amount'] = amount.toString();
     }
 
-    // CHANGED: Use fromBytes for Web compatibility
-    if (bill != null && bill.bytes != null) {
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'bill', 
-          bill.bytes!, 
-          filename: bill.name
-        )
-      );
+    // CHANGED: Use fromBytes for Web compatibility with path fallback on mobile
+    if (bill != null) {
+      List<int>? billBytes = bill.bytes;
+      if (billBytes == null && !kIsWeb && bill.path != null && bill.path!.isNotEmpty) {
+        try {
+          final ioFile = io.File(bill.path!);
+          if (ioFile.existsSync()) {
+            billBytes = ioFile.readAsBytesSync();
+          }
+        } catch (_) {}
+      }
+      if (billBytes != null) {
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'bill', 
+            billBytes, 
+            filename: bill.name,
+          ),
+        );
+      }
     }
 
     final streamed = await request.send();

@@ -1547,8 +1547,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
               style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
           const SizedBox(height: 6),
           _buildModeChips(),
-          const SizedBox(height: 12),
-          _buildOtherExpensesSection(),
+          // const SizedBox(height: 12),
+          // _buildOtherExpensesSection(),
           const SizedBox(height: 12),
           TextField(
             controller: _remarkController,
@@ -1721,8 +1721,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
             const SizedBox(height: 12),
           ],
 
-          _buildOtherExpensesSection(),
-          const SizedBox(height: 12),
+          // _buildOtherExpensesSection(),
+          // const SizedBox(height: 12),
           TextField(
             controller: _remarkController,
             maxLines: 2,
@@ -3581,8 +3581,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                   color: Colors.grey.shade700)),
-          const SizedBox(height: 14),
-          _buildOtherExpensesSection(),
+          // const SizedBox(height: 14),
+          // _buildOtherExpensesSection(),
           const SizedBox(height: 12),
           TextField(
             controller: _remarkController,
@@ -4008,6 +4008,8 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
   // ─── Other Expenses Section ───────────────────────────────────────────────────
 
   Widget _buildOtherExpensesSection() {
+    return const SizedBox.shrink();
+    /*
     final total = _totalOtherAmount;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -4078,6 +4080,7 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         ],
       ],
     );
+    */
   }
 
  Widget _buildOtherExpenseRow(int index, OtherExpenseItem item) {
@@ -4495,6 +4498,125 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
     return v;
   }
 
+  Future<bool> _confirmBillAttachments() async {
+    final int localCount = _attachments.length;
+    final int remoteCount = _remoteAttachments.length;
+    final int trainTicketCount = _trainTicketFile != null ? 1 : 0;
+    final int otherBillsCount = _otherExpenses
+        .where((e) =>
+            e.bill != null ||
+            (e.remoteBillPath != null && e.remoteBillPath!.isNotEmpty))
+        .length;
+    final int totalBills =
+        localCount + remoteCount + trainTicketCount + otherBillsCount;
+
+    if (totalBills == 0) {
+      final res = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.amber.shade800, size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'No Bills Attached',
+                  style: GoogleFonts.poppins(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'You have not attached any bills or receipts for this daily claim.\n\nAre you sure you want to proceed without an attachment?',
+            style: GoogleFonts.poppins(
+                fontSize: 13, height: 1.4, color: Colors.grey.shade800),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Attach Bills',
+                style: GoogleFonts.poppins(
+                    color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4A148C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                'Proceed',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+      return res == true;
+    } else {
+      final res = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.receipt_long_rounded,
+                  color: Color(0xFF4A148C), size: 24),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Bill Attachment Confirmation',
+                  style: GoogleFonts.poppins(
+                      fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Text(
+            'Proceeding with $totalBills attachment${totalBills > 1 ? 's' : ''}.\n\nPlease verify that your bills are properly attached before submitting.',
+            style: GoogleFonts.poppins(
+                fontSize: 13, height: 1.4, color: Colors.grey.shade800),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(
+                'Review Bills',
+                style: GoogleFonts.poppins(
+                    color: Colors.grey.shade600, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4A148C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(
+                'Confirm & Save',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+      return res == true;
+    }
+  }
+
   void _submit() async {
     // Ticket required only when user has overridden the slab train fare
     if (_serverTaMode == 'train' &&
@@ -4558,6 +4680,10 @@ class _ExpenseScreenState extends State<ExpenseScreen> {
         duration: Duration(seconds: 3),
       ));
     }
+    // Bill attachment confirmation check
+    final attachmentConfirmed = await _confirmBillAttachments();
+    if (!attachmentConfirmed) return;
+
     setState(() => _isSubmitting = true);
     try {
       final Map<String, String> payload;

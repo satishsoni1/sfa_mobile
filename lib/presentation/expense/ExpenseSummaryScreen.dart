@@ -303,7 +303,8 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
                 _statItem('Hotel', totalHotel, Icons.hotel_outlined),
               if (totalMeal > 0)
                 _statItem('Meal', totalMeal, Icons.restaurant_outlined),
-              _statItem('Other', totalOther, Icons.receipt_outlined),
+              if (totalOther > 0)
+                _statItem('Other', totalOther, Icons.receipt_outlined),
               _statItem('Claims', claimsTotal, Icons.add_card_outlined),
             ],
           ),
@@ -771,9 +772,13 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
               Expanded(
                   child: _quickAddButton(
                       'Mobile', Icons.phone_android, Colors.blue)),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                   child: _quickAddButton('Internet', Icons.wifi, Colors.teal)),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: _quickAddButton(
+                      'Car Hire', Icons.directions_car_filled_outlined, Colors.deepOrange)),
             ],
           ),
         ],
@@ -786,7 +791,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
       onTap: _isSubmitted ? null : () => _showAddClaimSheet(initialType: type),
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 6),
         decoration: BoxDecoration(
           color: _isSubmitted
               ? Colors.grey.shade100
@@ -801,16 +806,19 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon,
-                color: _isSubmitted ? Colors.grey.shade400 : color, size: 18),
-            const SizedBox(width: 6),
-            Text(type,
-                style: TextStyle(
-                    color: _isSubmitted ? Colors.grey.shade400 : color,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13)),
+                color: _isSubmitted ? Colors.grey.shade400 : color, size: 16),
             const SizedBox(width: 4),
+            Flexible(
+              child: Text(type,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      color: _isSubmitted ? Colors.grey.shade400 : color,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12)),
+            ),
+            const SizedBox(width: 3),
             Icon(Icons.add_circle_outline,
-                color: _isSubmitted ? Colors.grey.shade400 : color, size: 15),
+                color: _isSubmitted ? Colors.grey.shade400 : color, size: 14),
           ],
         ),
       ),
@@ -821,6 +829,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     final icons = {
       'Mobile'         : Icons.phone_android,
       'Internet'       : Icons.wifi,
+      'Car Hire'       : Icons.directions_car_filled_outlined,
       'Hotel'          : Icons.hotel_outlined,
       'Postage'        : Icons.local_post_office_outlined,
       'Toll'           : Icons.toll_outlined,
@@ -836,6 +845,7 @@ class _ExpenseSummaryScreenState extends State<ExpenseSummaryScreen>
     final claimColors = {
       'Mobile'         : Colors.blue,
       'Internet'       : Colors.teal,
+      'Car Hire'       : Colors.deepOrange,
       'Hotel'          : Colors.indigo,
       'Postage'        : Colors.brown,
       'Toll'           : Colors.deepOrange,
@@ -1979,13 +1989,14 @@ class _AddClaimSheetState extends State<_AddClaimSheet> {
   bool _isLoadingRate = false;
 
   static const _claimTypes = [
-    'Mobile', 'Internet', 'Hotel', 'Postage',
+    'Mobile', 'Internet', 'Car Hire', 'Hotel', 'Postage',
     'Toll', 'Courier', 'Parking', 'Food Bill', 'Stationary', 'Award', 'Petrol', 'Misc',
   ];
 
   final _claimIcons = {
     'Mobile': Icons.phone_android,
     'Internet': Icons.wifi,
+    'Car Hire': Icons.directions_car_filled_outlined,
     'Hotel': Icons.hotel_outlined,
     'Postage': Icons.local_post_office_outlined,
     'Toll': Icons.toll_outlined,

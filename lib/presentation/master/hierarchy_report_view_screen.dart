@@ -370,7 +370,7 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
     return 'Dr. $titleCased';
   }
   
-  // --- EXPORT TO CSV LOGIC (CROSS-PLATFORM) ---
+  // --- EXPORT TO CSV LOGIC (CROSS-PLATFORM - METHOD 1: DYNAMIC FLATTENED TABLE) ---
   Future<void> _exportToCsv() async {
     try {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -379,40 +379,125 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
 
       if (_reportData.isEmpty) return;
 
-      // 1. Get Headers from the first map item
-      List<String> headers = _reportData.first.keys.toList();
-      
-      // 2. Build CSV String
-      String csv = "${headers.join(',')}\n";
-      
-      for (var row in _reportData) {
-        List<String> rowValues = [];
-        for (var key in headers) {
-          if(key != 'details' && key != 'daily_details') {
-            String val = row[key]?.toString() ?? "";
-            val = val.replaceAll('"', '""'); // Escape quotes for CSV safety
-            rowValues.add('"$val"'); 
+     
+      final Set<String> allTopLevelKeys = <String>{};
+      final Set<String> detectedDetailListKeys = <String>{};
+      final Map<String, Set<String>> detailSubKeys = {};
+
+      for (final rawRow in _reportData) {
+        if (rawRow is! Map) continue;
+        final row = Map<String, dynamic>.from(rawRow);
+
+        for (final entry in row.entries) {
+          final key = entry.key;
+          final val = entry.value;
+
+          allTopLevelKeys.add(key);
+
+          if (val is List) {
+            bool hasMap = false;
+            for (final item in val) {
+              if (item is Map) {
+                hasMap = true;
+                detectedDetailListKeys.add(key);
+                detailSubKeys.putIfAbsent(key, () => <String>{});
+                for (final subKey in item.keys) {
+                  detailSubKeys[key]!.add(subKey.toString());
+                }
+              }
+            }
+            if (!hasMap && (key == 'details' || key == 'daily_details')) {
+              detectedDetailListKeys.add(key);
+              detailSubKeys.putIfAbsent(key, () => <String>{});
+            }
           }
         }
-        csv += "${rowValues.join(',')}\n";
       }
 
-      final String fileName = "${widget.reportTitle.replaceAll(' ', '_')}_Export.csv";
+      String? primaryDetailKey;
+      if (detectedDetailListKeys.isNotEmpty) {
+        primaryDetailKey = detectedDetailListKeys.firstWhere(
+          (k) => (detailSubKeys[k]?.isNotEmpty ?? false),
+          orElse: () => detectedDetailListKeys.first,
+        );
+      }
 
-      // 3. Platform-Specific Export Logic
+      final List<String> parentKeys = allTopLevelKeys
+          .where((k) => !detectedDetailListKeys.contains(k))
+          .toList();
+
+      final List<String> childKeys = (primaryDetailKey != null &&
+              detailSubKeys.containsKey(primaryDetailKey))
+          ? detailSubKeys[primaryDetailKey]!.toList()
+          : <String>[];
+
+      final List<String> childHeaders = childKeys.map((cKey) {
+        if (parentKeys.contains(cKey)) {
+          return 'detail_$cKey';
+        }
+        return cKey;
+      }).toList();
+
+      final List<String> allHeaders = [...parentKeys, ...childHeaders];
+
+      final StringBuffer csvBuffer = StringBuffer();
+      csvBuffer.write('\uFEFF');
+      csvBuffer.writeln(allHeaders.map(_escapeCsv).join(','));
+
+      for (final rawRow in _reportData) {
+        if (rawRow is! Map) continue;
+        final row = Map<String, dynamic>.from(rawRow);
+
+        final List<String> parentValues = parentKeys.map((k) {
+          final val = row[k];
+          if (val == null) return '';
+          if (val is List) return val.join('; ');
+          return val.toString();
+        }).toList();
+
+        final dynamic detailVal =
+            primaryDetailKey != null ? row[primaryDetailKey] : null;
+        final List<dynamic> detailsList = (detailVal is List) ? detailVal : [];
+
+        if (detailsList.isNotEmpty && childKeys.isNotEmpty) {
+          for (final childItem in detailsList) {
+            final Map<String, dynamic> childMap = (childItem is Map)
+                ? Map<String, dynamic>.from(childItem)
+                : <String, dynamic>{};
+
+            final List<String> childValues = childKeys.map((cKey) {
+              final val = childMap[cKey];
+              if (val == null) return '';
+              if (val is List) return val.join('; ');
+              return val.toString();
+            }).toList();
+
+            final List<String> fullRow = [...parentValues, ...childValues];
+            csvBuffer.writeln(fullRow.map(_escapeCsv).join(','));
+          }
+        } else {
+          final List<String> childValues = List.filled(childKeys.length, '');
+          final List<String> fullRow = [...parentValues, ...childValues];
+          csvBuffer.writeln(fullRow.map(_escapeCsv).join(','));
+        }
+      }
+
+      final String csv = csvBuffer.toString();
+      final String fileName =
+          "${widget.reportTitle.replaceAll(' ', '_')}_Export.csv";
+
+      // --- 3. PLATFORM-SPECIFIC EXPORT LOGIC ---
       if (kIsWeb) {
         // --- WEB: Trigger a direct browser file download ---
         final bytes = utf8.encode(csv);
         final blob = html.Blob([bytes]);
         final url = html.Url.createObjectUrlFromBlob(blob);
-        
-        // Create an invisible HTML anchor link and "click" it
-        final anchor = html.AnchorElement(href: url)
+
+        html.AnchorElement(href: url)
           ..setAttribute("download", fileName)
           ..click();
-          
+
         html.Url.revokeObjectUrl(url); // Cleanup memory
-        
       } else {
         // --- MOBILE: Write to temp directory and open native share sheet ---
         final directory = await getTemporaryDirectory();
@@ -420,15 +505,24 @@ class _HierarchyReportViewScreenState extends State<HierarchyReportViewScreen> {
         final File file = File(path);
         await file.writeAsString(csv);
 
-        await Share.shareXFiles([XFile(path)], text: 'Exported ${widget.reportTitle}');
+        await Share.shareXFiles([XFile(path)],
+            text: 'Exported ${widget.reportTitle}');
       }
-      
     } catch (e) {
       print("Export error: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Failed to export data.")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Failed to export data.")),
+        );
+      }
     }
+  }
+
+  String _escapeCsv(dynamic value) {
+    if (value == null) return '';
+    final String str = value.toString();
+    if (str.isEmpty) return '';
+    return '"${str.replaceAll('"', '""')}"';
   }
 
   // --- REPORT BODY ---
