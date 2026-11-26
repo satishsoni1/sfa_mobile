@@ -17,7 +17,8 @@ class DayPlanData {
   bool isSaved = false;
   bool isSaving = false;
   bool isDirty = false;
-
+  bool isHoliday = false;
+  String? holidayName;
 
   DayPlanData({required this.date});
 
@@ -134,45 +135,66 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
 
       if (apiPlans.containsKey(dKey)) {
         final p = apiPlans[dKey];
+
+        dayPlan.isHoliday = p != null &&
+            (p['is_holiday'] == true ||
+             p['is_holiday'] == 1 ||
+             p['is_holiday']?.toString().toLowerCase() == 'true');
+        dayPlan.holidayName = p != null ? p['holiday_name']?.toString() : null;
+
         dayPlan.isSaved = true;
         dayPlan.isDirty = false;
-        dayPlan.remarkController.text = p['remark'] ?? '';
 
-        if (p['areas'] != null) {
-          List<dynamic> areaValues = [];
-          if (p['areas'] is Map) {
-            areaValues = (p['areas'] as Map).values.toList();
-          } else if (p['areas'] is List) {
-            areaValues = p['areas'] as List;
+        if (dayPlan.isHoliday) {
+          final hName = dayPlan.holidayName?.trim();
+          final holidayRemark = (hName != null && hName.isNotEmpty)
+              ? hName
+              : (p != null && p['remark'] != null && p['remark'].toString().trim().isNotEmpty ? p['remark'].toString().trim() : '');
+          // Keep holiday_name in remark
+          dayPlan.remarkController.text = holidayRemark;
+          // Show HOLIDAY in work type
+          dayPlan.selectedWorkType = {
+            'id': p != null ? (p['work_type_id'] ?? 0) : 0,
+            'name': 'HOLIDAY',
+          };
+        } else if (p != null) {
+          dayPlan.remarkController.text = p['remark'] ?? '';
+          if (p['areas'] != null) {
+            List<dynamic> areaValues = [];
+            if (p['areas'] is Map) {
+              areaValues = (p['areas'] as Map).values.toList();
+            } else if (p['areas'] is List) {
+              areaValues = p['areas'] as List;
+            }
+            
+            dayPlan.selectedRoutes = areaValues.map((areaVal) {
+              return _allRoutes.firstWhere(
+                (r) => r['id']?.toString() == areaVal.toString() || r['name']?.toString() == areaVal.toString(),
+                orElse: () => {'id': areaVal, 'name': areaVal.toString()},
+              );
+            }).toList();
           }
-          
-          dayPlan.selectedRoutes = areaValues.map((areaVal) {
-            return _allRoutes.firstWhere(
-              (r) => r['id']?.toString() == areaVal.toString() || r['name']?.toString() == areaVal.toString(),
-              orElse: () => {'id': areaVal, 'name': areaVal.toString()},
-            );
-          }).toList();
-        }
 
-        if (p['joint_work'] is List) {
-          dayPlan.selectedJointWorks = (p['joint_work'] as List).map((jVal) {
-            return _allJointWorkMembers.firstWhere(
-              (s) => s['name']?.toString() == jVal.toString() || s['id']?.toString() == jVal.toString(),
-              orElse: () => {'id': 0, 'name': jVal.toString()},
-            );
-          }).toList();
-        }
+          if (p['joint_work'] is List) {
+            dayPlan.selectedJointWorks = (p['joint_work'] as List).map((jVal) {
+              return _allJointWorkMembers.firstWhere(
+                (s) => s['name']?.toString() == jVal.toString() || s['id']?.toString() == jVal.toString(),
+                orElse: () => {'id': 0, 'name': jVal.toString()},
+              );
+            }).toList();
+          }
 
-        if (p['work_type_id'] != null && p['work_type_id'] != 0) {
-          dayPlan.selectedWorkType = _allWorkTypes.firstWhere(
-            (w) => w['id']?.toString() == p['work_type_id'].toString(),
-            orElse: () => {'id': p['work_type_id'], 'name': p['activity_name'] ?? 'Unknown'},
-          );
-        } else if (p['activity_name'] != null) {
-          dayPlan.selectedWorkType = _allWorkTypes.firstWhere(
-            (w) => w['name']?.toString() == p['activity_name'].toString(),
-            orElse: () => {'id': 0, 'name': p['activity_name']},
-          );
+          if (p['work_type_id'] != null && p['work_type_id'] != 0) {
+            dayPlan.selectedWorkType = _allWorkTypes.firstWhere(
+              (w) => w['id']?.toString() == p['work_type_id'].toString(),
+              orElse: () => {'id': p['work_type_id'], 'name': p['activity_name'] ?? 'Unknown'},
+            );
+          } else if (p['activity_name'] != null) {
+            dayPlan.selectedWorkType = _allWorkTypes.firstWhere(
+              (w) => w['name']?.toString() == p['activity_name'].toString(),
+              orElse: () => {'id': 0, 'name': p['activity_name']},
+            );
+          }
         }
       }
 
@@ -183,6 +205,10 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
   // ── Save ──────────────────────────────────────────────────────────────────
 
   Future<void> _saveDay(DayPlanData dayPlan) async {
+    if (dayPlan.isHoliday) {
+      _showSnack('Cannot edit a holiday.', isError: true);
+      return;
+    }
     if (dayPlan.selectedRoutes.isEmpty && dayPlan.selectedWorkType == null) {
       _showSnack(
           'Please select at least a Route or Work Type before saving.',
@@ -519,6 +545,20 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
     );
   }
 
+  bool _canEditDay(int idx, bool isMonthLocked, bool isManagerView) {
+    if (isMonthLocked || isManagerView) return false;
+    final currentDay = _monthData[idx];
+    if (currentDay.isHoliday) return false;
+
+    for (int i = 0; i < idx; i++) {
+      final prev = _monthData[i];
+      if (!prev.isHoliday && !prev.isSaved) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   Widget _buildDayList(bool isMonthLocked, bool isManagerView) {
     return ListView.builder(
       padding:
@@ -526,10 +566,12 @@ class _RouteTourPlanScreenState extends State<RouteTourPlanScreen> {
       itemCount: _monthData.length,
       itemBuilder: (context, idx) {
         final dayPlan = _monthData[idx];
-        final isPreviousSaved =
-            idx == 0 || _monthData[idx - 1].isSaved;
-        final canEdit =
-            !isMonthLocked && !isManagerView && isPreviousSaved;
+        // Original sequential submission:
+        // final isPreviousSaved =
+        //     idx == 0 || _monthData[idx - 1].isSaved;
+        // final canEdit =
+        //     !isMonthLocked && !isManagerView && isPreviousSaved;
+        final canEdit = _canEditDay(idx, isMonthLocked, isManagerView);
         return _DayCard(
           dayPlan: dayPlan,
           canEdit: canEdit,
@@ -578,16 +620,20 @@ class _DayCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: dayPlan.isSaved
-            ? Colors.green.shade50
-            : Colors.white,
+        color: dayPlan.isHoliday
+            ? const Color(0xFFFFFBEB)
+            : dayPlan.isSaved
+                ? Colors.green.shade50
+                : Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: isToday
               ? primaryColor
-              : dayPlan.isSaved
-                  ? Colors.green.shade200
-                  : Colors.grey.shade200,
+              : dayPlan.isHoliday
+                  ? Colors.amber.shade300
+                  : dayPlan.isSaved
+                      ? Colors.green.shade200
+                      : Colors.grey.shade200,
           width: isToday ? 1.5 : 1,
         ),
         boxShadow: [
@@ -619,8 +665,10 @@ class _DayCard extends StatelessWidget {
                           Expanded(flex: 2, child: _workTypeSelector()),
                           const SizedBox(width: 8),
                           Expanded(flex: 2, child: _remarkField()),
-                          const SizedBox(width: 12),
-                          Expanded(flex: 1, child: _buildActionRow(context)),
+                          if (!dayPlan.isHoliday) ...[
+                            const SizedBox(width: 12),
+                            Expanded(flex: 1, child: _buildActionRow(context)),
+                          ],
                         ],
                       );
                     } else if (w > 480) {
@@ -644,8 +692,10 @@ class _DayCard extends StatelessWidget {
                               Expanded(child: _remarkField()),
                             ],
                           ),
-                          const SizedBox(height: 12),
-                          _buildActionRow(context),
+                          if (!dayPlan.isHoliday) ...[
+                            const SizedBox(height: 12),
+                            _buildActionRow(context),
+                          ],
                         ],
                       );
                     } else {
@@ -659,8 +709,10 @@ class _DayCard extends StatelessWidget {
                           _workTypeSelector(),
                           const SizedBox(height: 8),
                           _remarkField(),
-                          const SizedBox(height: 12),
-                          _buildActionRow(context),
+                          if (!dayPlan.isHoliday) ...[
+                            const SizedBox(height: 12),
+                            _buildActionRow(context),
+                          ],
                         ],
                       );
                     }
@@ -677,11 +729,13 @@ class _DayCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: dayPlan.isSaved
-            ? Colors.green.shade100
-            : isToday
-                ? primaryColor.withValues(alpha: 0.08)
-                : Colors.grey.shade50,
+        color: dayPlan.isHoliday
+            ? Colors.amber.shade100
+            : dayPlan.isSaved
+                ? Colors.green.shade100
+                : isToday
+                    ? primaryColor.withValues(alpha: 0.08)
+                    : Colors.grey.shade50,
         borderRadius:
             const BorderRadius.vertical(top: Radius.circular(12)),
       ),
@@ -726,7 +780,28 @@ class _DayCard extends StatelessWidget {
             ],
           ),
           const Spacer(),
-          if (dayPlan.isSaved)
+          if (dayPlan.isHoliday)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                  color: Colors.amber.shade700,
+                  borderRadius: BorderRadius.circular(20)),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.beach_access,
+                      color: Colors.white, size: 12),
+                  const SizedBox(width: 4),
+                  Text('Holiday',
+                      style: GoogleFonts.poppins(
+                          fontSize: 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600)),
+                ],
+              ),
+            )
+          else if (dayPlan.isSaved)
             Container(
               padding: const EdgeInsets.symmetric(
                   horizontal: 8, vertical: 3),
@@ -757,9 +832,12 @@ class _DayCard extends StatelessWidget {
 
   Widget _routeSelector(BuildContext context) {
     final count = dayPlan.selectedRoutes.length;
-    final label = count == 0
-        ? 'Select Routes'
-        : '$count Route${count > 1 ? 's' : ''} selected';
+
+    final label = dayPlan.isHoliday
+        ? 'N/A (Holiday)'
+        : count == 0
+            ? 'Select Routes'
+            : '$count Route${count > 1 ? 's' : ''} selected';
     final hasVal = count > 0;
 
     return _labelledField(
@@ -832,9 +910,11 @@ class _DayCard extends StatelessWidget {
 
   Widget _jointWorkSelector(BuildContext context) {
     final count = dayPlan.selectedJointWorks.length;
-    final label = count == 0
-        ? 'Select Joint Work'
-        : '$count Member${count > 1 ? 's' : ''} selected';
+    final label = dayPlan.isHoliday
+        ? 'N/A (Holiday)'
+        : count == 0
+            ? 'Select Joint Work'
+            : '$count Member${count > 1 ? 's' : ''} selected';
     final hasVal = count > 0;
 
     return _labelledField(
@@ -898,6 +978,65 @@ class _DayCard extends StatelessWidget {
   }
 
   Widget _workTypeSelector() {
+    if (dayPlan.isHoliday) {
+      return _labelledField(
+        label: 'Work Type',
+        icon: Icons.beach_access,
+        iconColor: Colors.amber.shade800,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: Colors.amber.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.amber.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.beach_access, size: 14, color: Colors.amber.shade800),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'HOLIDAY',
+                  style: GoogleFonts.poppins(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.amber.shade900,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(Icons.lock_outline, size: 14, color: Colors.grey),
+            ],
+          ),
+        ),
+      );
+    }
+
+    dynamic selectedWorkTypeItem;
+    if (dayPlan.selectedWorkType != null) {
+      final selectedId = dayPlan.selectedWorkType is Map ? dayPlan.selectedWorkType['id']?.toString() : null;
+      final selectedName = dayPlan.selectedWorkType is Map ? dayPlan.selectedWorkType['name']?.toString().toLowerCase() : dayPlan.selectedWorkType.toString().toLowerCase();
+
+      for (final wt in allWorkTypes) {
+        if (wt is Map) {
+          if (selectedId != null && wt['id']?.toString() == selectedId) {
+            selectedWorkTypeItem = wt;
+            break;
+          }
+          if (selectedName != null && wt['name']?.toString().toLowerCase() == selectedName) {
+            selectedWorkTypeItem = wt;
+            break;
+          }
+        }
+      }
+    }
+
+    final List<dynamic> dropdownItems = List<dynamic>.from(allWorkTypes);
+    if (dayPlan.selectedWorkType != null && selectedWorkTypeItem == null) {
+      dropdownItems.add(dayPlan.selectedWorkType);
+      selectedWorkTypeItem = dayPlan.selectedWorkType;
+    }
+
     return _labelledField(
       label: 'Work Type',
       icon: Icons.work_outline,
@@ -919,13 +1058,13 @@ class _DayCard extends StatelessWidget {
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<dynamic>(
-              value: dayPlan.selectedWorkType,
+              value: selectedWorkTypeItem,
               isExpanded: true,
               hint: Text('Select Work Type',
                   style: GoogleFonts.poppins(
                       fontSize: 12, color: Colors.grey.shade600)),
               icon: const Icon(Icons.keyboard_arrow_down, size: 16),
-              items: allWorkTypes
+              items: dropdownItems
                   .map((wt) => DropdownMenuItem<dynamic>(
                         value: wt,
                         child: Text(wt['name']?.toString() ?? '',
@@ -952,9 +1091,13 @@ class _DayCard extends StatelessWidget {
         controller: dayPlan.remarkController,
         enabled: canEdit,
         maxLines: 1,
-        style: GoogleFonts.poppins(fontSize: 12),
+        style: GoogleFonts.poppins(
+          fontSize: 12,
+          color: dayPlan.isHoliday ? Colors.black87 : null,
+          fontWeight: dayPlan.isHoliday ? FontWeight.w500 : FontWeight.normal,
+        ),
         decoration: InputDecoration(
-          hintText: 'Optional remark...',
+          hintText: dayPlan.isHoliday ? 'Holiday' : 'Optional remark...',
           hintStyle: GoogleFonts.poppins(
               fontSize: 12, color: Colors.grey.shade500),
           filled: true,
@@ -1013,6 +1156,10 @@ class _DayCard extends StatelessWidget {
                   height: 22,
                   child: CircularProgressIndicator(
                       strokeWidth: 2.5, color: AppColors.primary))));
+    }
+
+    if (dayPlan.isHoliday) {
+      return const SizedBox.shrink();
     }
 
     // Locked view (not editable)

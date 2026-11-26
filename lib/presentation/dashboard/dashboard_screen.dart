@@ -72,7 +72,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.71";
+  static const String CURRENT_APP_VERSION = "1.0.73";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -905,7 +905,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final int totalVisited = summary['total_visited'] ?? 0;
     final double productivity = (summary['productivity'] ?? 0).toDouble();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
@@ -939,7 +939,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onTap: _selectExecutionDate,
                 child: Row(
                   children: [
-                    Icon(Icons.calendar_today, color: primaryColor, size: 15),
+                    Icon(Icons.calendar_today, color: primaryColor, size: 16),
                     const SizedBox(width: 6),
                     Text(
                       _executionDateRange.start.day ==
@@ -956,7 +956,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           : "${DateFormat('dd MMM').format(_executionDateRange.start)}-${DateFormat('dd MMM').format(_executionDateRange.end)}"
                                 .toUpperCase(),
                       style: GoogleFonts.poppins(
-                        fontSize: 12,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: primaryColor,
                       ),
@@ -966,11 +966,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 22),
           if (_isFetchingExecution)
             const Center(
               child: Padding(
-                padding: EdgeInsets.all(20.0),
+                padding: EdgeInsets.all(40.0),
                 child: CircularProgressIndicator(),
               ),
             )
@@ -980,11 +980,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    // PIE CHART - Increased height as requested
+                    // PIE CHART - Increased height to match visits/notification + field reporting
                     Expanded(
                       flex: 5,
                       child: SizedBox(
-                        height: 175,
+                        height: 235,
                         child: Center(
                           child: AspectRatio(
                             aspectRatio: 1.0,
@@ -1013,7 +1013,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 20),
+                    const SizedBox(width: 24),
                     // LEGEND & BADGES (Right side - Managed Planned and Unplanned)
                     Expanded(
                       flex: 5,
@@ -1026,21 +1026,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           // _buildExecBadge("FRD Met", frdMet, Colors.indigo),
                           // const SizedBox(height: 8),
                           _buildExecBadge("Planned", plannedVisited, Colors.teal),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 24),
                           _buildExecBadge("Unplanned", unplannedVisited, Colors.orange),
                         ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 Divider(height: 1, color: Colors.grey.shade200),
-                const SizedBox(height: 16),
+                const SizedBox(height: 22),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildStatCircle(productivity, "Productivity", Colors.green),
-                    Container(height: 52, width: 1, color: Colors.grey.shade200),
+                    Container(height: 56, width: 1, color: Colors.grey.shade200),
                     _buildSimpleStat(
                       "$totalVisited / $planned",
                       "Executed / Planned",
@@ -1060,7 +1060,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: color.withOpacity(0.1),
             shape: BoxShape.circle,
@@ -1068,17 +1068,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Text(
             count.toString(),
             style: GoogleFonts.poppins(
-              fontSize: 16,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
               color: color,
             ),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           title,
           style: GoogleFonts.poppins(
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w500,
             color: Colors.grey.shade800,
           ),
@@ -1313,13 +1313,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Colors.purple,
         () => _navigateTo(ExpenseSummaryScreen()),
       ),
-      _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
-        if (_isCheckedIn) {
-          _navigateTo(const ChemistListScreen());
-        } else {
-          _showSnack("Please Check In first!");
-        }
-      }),
+      // Commented Daily POBS campaign as requested:
+      // _MenuAction(Icons.storefront, "Daily POBS campaign", Colors.green, () {
+      //   if (_isCheckedIn) {
+      //     _navigateTo(const ChemistListScreen());
+      //   } else {
+      //     _showSnack("Please Check In first!");
+      //   }
+      // }),
         _MenuAction(
           Icons.assignment_turned_in,
           "Daily Report",

@@ -270,8 +270,18 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
         routeName = (plan['route_name'] ?? plan['route'] ?? '').toString();
       }
     }
-    String activityName = plan != null ? (plan['activity_name'] ?? '').toString() : '';
-    String remark = plan != null ? (plan['remark'] ?? '').toString() : '';
+    final bool isHoliday = plan != null &&
+        (plan['is_holiday'] == true ||
+         plan['is_holiday'] == 1 ||
+         plan['is_holiday']?.toString().toLowerCase() == 'true');
+    final String holidayName = plan != null ? (plan['holiday_name']?.toString() ?? '') : '';
+
+    String activityName = isHoliday
+        ? 'HOLIDAY'
+        : (plan != null ? (plan['activity_name'] ?? '').toString() : '');
+    String remark = isHoliday
+        ? (holidayName.isNotEmpty ? holidayName : (plan != null && plan['remark'] != null && plan['remark'].toString().trim().isNotEmpty ? plan['remark'].toString().trim() : ''))
+        : (plan != null ? (plan['remark'] ?? '').toString() : '');
     
     List<dynamic> jointWorkList = plan != null && plan['joint_work'] != null && plan['joint_work'] is List ? plan['joint_work'] : [];
     String jointWorkStr = jointWorkList.join('\n');
@@ -279,10 +289,18 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: plan != null ? Colors.green.shade50 : Colors.white,
+  
+        color: isHoliday
+            ? const Color(0xFFFFFBEB)
+            : (plan != null ? Colors.green.shade50 : Colors.white),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isToday ? const Color(0xFF2E3192) : (plan != null ? Colors.green.shade200 : Colors.grey.shade200),
+        
+          color: isToday
+              ? const Color(0xFF2E3192)
+              : (isHoliday
+                  ? Colors.amber.shade300
+                  : (plan != null ? Colors.green.shade200 : Colors.grey.shade200)),
           width: isToday ? 1.5 : 1,
         ),
       ),
@@ -324,7 +342,22 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
                   ],
                 ),
                 const Spacer(),
-                if (plan != null)
+                if (isHoliday)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      children: [
+                        Icon(Icons.beach_access, size: 12, color: Colors.amber.shade800),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Holiday",
+                          style: GoogleFonts.poppins(fontSize: 10, color: Colors.amber.shade900, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (plan != null)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(12)),
