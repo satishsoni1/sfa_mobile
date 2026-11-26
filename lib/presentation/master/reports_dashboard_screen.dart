@@ -222,7 +222,7 @@ class ReportsDashboardScreen extends StatelessWidget {
 
     // These report links are opened directly with the logged-in user's employee code.
     final url =
-        'https://vodoclm-pro.globalspace.in/$path?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://auropharma.globalspace.in/$path?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     Navigator.pushNamed(
       context,

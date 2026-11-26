@@ -72,7 +72,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.74";
+  static const String CURRENT_APP_VERSION = "1.0.75";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -468,7 +468,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    final url = 'https://vodoclm-pro.globalspace.in/dcrapproval/$employeeCode';
+    final url = 'https://auropharma.globalspace.in/dcrapproval/$employeeCode';
 
     await Navigator.pushNamed(
       context,
@@ -491,7 +491,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     final url =
-        'https://vodoclm-pro.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
+        'https://auropharma.globalspace.in/api/approval-links?employee_code=${Uri.encodeComponent(employeeCode)}';
 
     await Navigator.pushNamed(
       context,
