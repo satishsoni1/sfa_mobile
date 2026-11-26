@@ -32,7 +32,6 @@ class _DoctorVerificationEntry {
   late final TextEditingController nameCtrl;
   late final TextEditingController mobileCtrl;
   late final TextEditingController emailCtrl;
-  bool isConfirmed = false;
 
   _DoctorVerificationEntry({
     required this.doctorId,
@@ -83,7 +82,7 @@ class _DoctorVerificationEntry {
     return null;
   }
 
-  bool get isValid => nameError == null && mobileError == null && emailError == null && isConfirmed;
+  bool get isValid => nameError == null && mobileError == null && emailError == null;
 }
 
 class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
@@ -521,61 +520,6 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
               keyboardType: TextInputType.emailAddress,
               hintText: "doctor@example.com",
             ),
-
-            const SizedBox(height: 14),
-
-            // 4. Confirmation Checkbox
-            InkWell(
-              onTap: () {
-                setState(() => entry.isConfirmed = !entry.isConfirmed);
-              },
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: entry.isConfirmed
-                      ? const Color(0xFFF0FDF4)
-                      : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: entry.isConfirmed
-                        ? const Color(0xFF86EFAC)
-                        : const Color(0xFFE2E8F0),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: Checkbox(
-                        value: entry.isConfirmed,
-                        activeColor: const Color(0xFF16A34A),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        onChanged: (val) {
-                          setState(() => entry.isConfirmed = val ?? false);
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        "I confirm that Dr. ${entry.nameCtrl.text.trim().isEmpty ? 'this doctor' : entry.nameCtrl.text.trim()}'s details are verified & accurate.",
-                        style: GoogleFonts.poppins(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w500,
-                          color: entry.isConfirmed
-                              ? const Color(0xFF14532D)
-                              : _slateDark,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -710,7 +654,7 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
                   ? "Submitting..."
                   : ready
                       ? "Submit 3 Doctors for Approval"
-                      : "Confirm All 3 Doctors to Submit ($confirmedCount/3)",
+                      : "Please correct invalid fields ($confirmedCount/3 Valid)",
               style: GoogleFonts.poppins(
                 fontWeight: FontWeight.w600,
                 fontSize: 13.5,

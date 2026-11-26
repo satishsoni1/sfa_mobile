@@ -427,14 +427,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
           ? null
           : _isSobixo
               ? (_doctors.length >= 3
-                  ? FloatingActionButton.extended(
-                      onPressed: _openSobixoVerificationSheet,
-                      backgroundColor: _purple,
-                      icon: const Icon(Icons.verified_outlined, color: Colors.white),
-                      label: Text('Verify & Submit',
-                          style: GoogleFonts.poppins(
-                              color: Colors.white, fontWeight: FontWeight.w600)),
-                    )
+                  ? null
                   : FloatingActionButton.extended(
                       onPressed: _openAddSheet,
                       backgroundColor: _purple,
