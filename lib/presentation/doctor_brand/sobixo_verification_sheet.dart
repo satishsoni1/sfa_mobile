@@ -8,12 +8,16 @@ class SobixoVerificationSheet extends StatefulWidget {
   final int brandId;
   final String brandName;
   final List<Map<String, dynamic>> selectedDoctors;
+  final int? initialDoctorId;
+  final int initialDoctorIndex;
 
   const SobixoVerificationSheet({
     super.key,
     required this.brandId,
     required this.brandName,
     required this.selectedDoctors,
+    this.initialDoctorId,
+    this.initialDoctorIndex = 0,
   });
 
   @override
@@ -22,42 +26,69 @@ class SobixoVerificationSheet extends StatefulWidget {
 
 class _DoctorVerificationEntry {
   final int doctorId;
-  final String originalName;
+  final String originalFirstName;
+  final String originalSurname;
   final String originalMobile;
   final String originalEmail;
   final String specialty;
   final String area;
   final bool isPathfinder;
 
-  late final TextEditingController nameCtrl;
+  late final TextEditingController firstNameCtrl;
+  late final TextEditingController surnameCtrl;
   late final TextEditingController mobileCtrl;
   late final TextEditingController emailCtrl;
 
   _DoctorVerificationEntry({
     required this.doctorId,
-    required this.originalName,
+    required this.originalFirstName,
+    required this.originalSurname,
     required this.originalMobile,
     required this.originalEmail,
     required this.specialty,
     required this.area,
     required this.isPathfinder,
   }) {
-    nameCtrl = TextEditingController(text: originalName);
+    firstNameCtrl = TextEditingController(text: originalFirstName);
+    surnameCtrl = TextEditingController(text: originalSurname);
     mobileCtrl = TextEditingController(text: originalMobile);
     emailCtrl = TextEditingController(text: originalEmail);
   }
 
   void dispose() {
-    nameCtrl.dispose();
+    firstNameCtrl.dispose();
+    surnameCtrl.dispose();
     mobileCtrl.dispose();
     emailCtrl.dispose();
   }
 
-  String? get nameError {
-    final t = nameCtrl.text.trim();
-    if (t.isEmpty) return "Doctor's Name is mandatory.";
-    if (t.length < 2) return "Name must be at least 2 characters.";
-    if (t.length > 200) return "Name cannot exceed 200 characters.";
+  String get fullName {
+    final fn = firstNameCtrl.text.trim();
+    final sn = surnameCtrl.text.trim();
+    if (fn.isNotEmpty || sn.isNotEmpty) {
+      return '$fn $sn'.trim();
+    }
+    final ofn = originalFirstName.trim();
+    final osn = originalSurname.trim();
+    if (ofn.isNotEmpty || osn.isNotEmpty) {
+      return '$ofn $osn'.trim();
+    }
+    return '';
+  }
+
+  String? get firstNameError {
+    final t = firstNameCtrl.text.trim();
+    if (t.isEmpty) return "First Name is mandatory.";
+    if (t.length < 2) return "First Name must be at least 2 characters.";
+    if (t.length > 100) return "First Name cannot exceed 100 characters.";
+    return null;
+  }
+
+  String? get surnameError {
+    final t = surnameCtrl.text.trim();
+    if (t.isEmpty) return "Surname is mandatory.";
+    if (t.length < 2) return "Surname must be at least 2 characters.";
+    if (t.length > 100) return "Surname cannot exceed 100 characters.";
     return null;
   }
 
@@ -82,7 +113,11 @@ class _DoctorVerificationEntry {
     return null;
   }
 
-  bool get isValid => nameError == null && mobileError == null && emailError == null;
+  bool get isValid =>
+      firstNameError == null &&
+      surnameError == null &&
+      mobileError == null &&
+      emailError == null;
 }
 
 class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
@@ -93,13 +128,47 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
 
   late final List<_DoctorVerificationEntry> _entries;
   bool _isSubmitting = false;
+  bool _isSavingDraft = false;
+  bool _hasScrolledToTarget = false;
+
+  int get _targetIndex {
+    if (widget.initialDoctorId != null) {
+      final idx =
+          _entries.indexWhere((e) => e.doctorId == widget.initialDoctorId);
+      if (idx != -1) return idx;
+    }
+    if (widget.initialDoctorIndex >= 0 &&
+        widget.initialDoctorIndex < _entries.length) {
+      return widget.initialDoctorIndex;
+    }
+    return 0;
+  }
 
   @override
   void initState() {
     super.initState();
     _entries = widget.selectedDoctors.map((doc) {
       final int id = int.tryParse(doc['id']?.toString() ?? '0') ?? 0;
-      final name = doc['doctor_name']?.toString() ?? '';
+      final String rawFn = (doc['first_name'] ?? '').toString().trim();
+      final String rawSn = (doc['surname'] ?? '').toString().trim();
+      final String rawDocName = (doc['doctor_name'] ?? '').toString().trim();
+
+      String fn = rawFn;
+      String sn = rawSn;
+      if (fn.isEmpty && sn.isEmpty && rawDocName.isNotEmpty) {
+        final clean = rawDocName
+            .replaceFirst(RegExp(r'^Dr\.?\s*', caseSensitive: false), '')
+            .trim();
+        final parts = clean.split(RegExp(r'\s+'));
+        if (parts.length > 1) {
+          fn = parts.sublist(0, parts.length - 1).join(' ');
+          sn = parts.last;
+        } else {
+          fn = clean;
+          sn = '';
+        }
+      }
+
       final mobile = doc['mobile']?.toString() ?? doc['phone']?.toString() ?? '';
       final email = doc['email']?.toString() ?? '';
       final specialty = doc['specialty_practice_type']?.toString() ?? doc['specialty']?.toString() ?? '';
@@ -108,7 +177,8 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
 
       return _DoctorVerificationEntry(
         doctorId: id,
-        originalName: name,
+        originalFirstName: fn,
+        originalSurname: sn,
         originalMobile: mobile,
         originalEmail: email,
         specialty: specialty,
@@ -118,7 +188,8 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
     }).toList();
 
     for (final e in _entries) {
-      e.nameCtrl.addListener(() => setState(() {}));
+      e.firstNameCtrl.addListener(() => setState(() {}));
+      e.surnameCtrl.addListener(() => setState(() {}));
       e.mobileCtrl.addListener(() => setState(() {}));
       e.emailCtrl.addListener(() => setState(() {}));
     }
@@ -139,6 +210,71 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
     return _entries.every((e) => e.isValid);
   }
 
+  Future<void> _saveDraft() async {
+    final hasInvalid = _entries.any((e) => !e.isValid);
+    if (hasInvalid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please correct invalid fields before saving."),
+          backgroundColor: Color(0xFFDC2626),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSavingDraft = true);
+
+    try {
+      final List<int> doctorIds = _entries.map((e) => e.doctorId).toList();
+      final List<Map<String, dynamic>> verifiedDetails = _entries.map((e) {
+        final fn = e.firstNameCtrl.text.trim();
+        final sn = e.surnameCtrl.text.trim();
+        final compositeName = '$fn $sn'.trim();
+        return {
+          'doctor_id': e.doctorId,
+          'first_name': fn,
+          'surname': sn,
+          'doctor_name': compositeName,
+          'mobile': e.mobileCtrl.text.trim(),
+          'email': e.emailCtrl.text.trim(),
+        };
+      }).toList();
+
+      final res = await ApiService().verifyAndSubmitSobixoDoctors(
+        widget.brandId,
+        doctorIds: doctorIds,
+        verifiedDetails: verifiedDetails,
+        submitFinal: false,
+      );
+
+      if (!mounted) return;
+
+      final message = res['message']?.toString() ?? "Doctor details saved successfully.";
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.green.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      Navigator.pop(context, false);
+    } catch (e) {
+      if (!mounted) return;
+      final err = e.toString().replaceFirst('Exception: ', '').trim();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Save failed: $err'),
+          backgroundColor: Colors.red.shade700,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSavingDraft = false);
+    }
+  }
+
   Future<void> _submitVerification() async {
     if (!_isAllValid) return;
 
@@ -147,9 +283,14 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
     try {
       final List<int> doctorIds = _entries.map((e) => e.doctorId).toList();
       final List<Map<String, dynamic>> verifiedDetails = _entries.map((e) {
+        final fn = e.firstNameCtrl.text.trim();
+        final sn = e.surnameCtrl.text.trim();
+        final compositeName = '$fn $sn'.trim();
         return {
           'doctor_id': e.doctorId,
-          'doctor_name': e.nameCtrl.text.trim(),
+          'first_name': fn,
+          'surname': sn,
+          'doctor_name': compositeName,
           'mobile': e.mobileCtrl.text.trim(),
           'email': e.emailCtrl.text.trim(),
         };
@@ -198,6 +339,20 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
       minChildSize: 0.6,
       maxChildSize: 0.96,
       builder: (_, scrollCtrl) {
+        if (!_hasScrolledToTarget && _targetIndex > 0) {
+          _hasScrolledToTarget = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (scrollCtrl.hasClients) {
+              final double offset = (_targetIndex * 260.0)
+                  .clamp(0.0, scrollCtrl.position.maxScrollExtent);
+              scrollCtrl.animateTo(
+                offset,
+                duration: const Duration(milliseconds: 350),
+                curve: Curves.easeInOut,
+              );
+            }
+          });
+        }
         return Container(
           decoration: const BoxDecoration(
             color: Color(0xFFF4F6F9),
@@ -223,7 +378,7 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
                   children: [
                     Container(
                       padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: _primaryLight,
                         shape: BoxShape.circle,
                       ),
@@ -339,7 +494,8 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
                   padding: const EdgeInsets.fromLTRB(16, 6, 16, 24),
                   itemCount: _entries.length,
                   itemBuilder: (ctx, i) {
-                    return _buildDoctorCard(_entries[i], i + 1);
+                    final bool isTarget = (i == _targetIndex);
+                    return _buildDoctorCard(_entries[i], i + 1, isTarget: isTarget);
                   },
                 ),
               ),
@@ -353,8 +509,9 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
     );
   }
 
-  Widget _buildDoctorCard(_DoctorVerificationEntry entry, int index) {
-    final nameErr = entry.nameError;
+  Widget _buildDoctorCard(_DoctorVerificationEntry entry, int index, {bool isTarget = false}) {
+    final firstNameErr = entry.firstNameError;
+    final surnameErr = entry.surnameError;
     final mobileErr = entry.mobileError;
     final emailErr = entry.emailError;
 
@@ -366,8 +523,10 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
         border: Border.all(
           color: entry.isValid
               ? const Color(0xFF86EFAC)
-              : const Color(0xFFE2E8F0),
-          width: entry.isValid ? 1.5 : 1,
+              : isTarget
+                  ? _primary
+                  : const Color(0xFFE2E8F0),
+          width: (entry.isValid || isTarget) ? 1.5 : 1,
         ),
         boxShadow: [
           BoxShadow(
@@ -402,13 +561,42 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        entry.originalName,
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                          color: _slateDark,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              entry.fullName,
+                              style: GoogleFonts.poppins(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                                color: _slateDark,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isTarget) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: _primaryLight,
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                    color: _primary.withValues(alpha: 0.3)),
+                              ),
+                              child: Text(
+                                "Editing",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: _primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       if (entry.specialty.isNotEmpty || entry.area.isNotEmpty)
                         Text(
@@ -482,19 +670,31 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
 
             const SizedBox(height: 14),
 
-            // 1. Doctor's Name Input (Mandatory)
+            // 1. First Name Input (Mandatory with asterisk *)
             _buildTextField(
-              label: "Doctor's Name / Spelling *",
-              controller: entry.nameCtrl,
+              label: "First Name *",
+              controller: entry.firstNameCtrl,
               icon: Icons.person_outline,
-              errorText: nameErr,
-              maxLength: 200,
-              hintText: "Enter full name (e.g. Dr. Rajesh Sharma)",
+              errorText: firstNameErr,
+              maxLength: 100,
+              hintText: "Enter first name (e.g. Aniket)",
             ),
 
             const SizedBox(height: 12),
 
-            // 2. Mobile Number Input (Mandatory: 10 digits starting 6-9)
+            // 2. Surname Input (Mandatory with asterisk *)
+            _buildTextField(
+              label: "Surname *",
+              controller: entry.surnameCtrl,
+              icon: Icons.badge_outlined,
+              errorText: surnameErr,
+              maxLength: 100,
+              hintText: "Enter surname (e.g. Mandrekar)",
+            ),
+
+            const SizedBox(height: 12),
+
+            // 3. Mobile Number Input (Mandatory: 10 digits starting 6-9)
             _buildTextField(
               label: "Mobile Number *",
               controller: entry.mobileCtrl,
@@ -511,7 +711,7 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
 
             const SizedBox(height: 12),
 
-            // 3. Email ID Input (Optional)
+            // 4. Email ID Input (Optional)
             _buildTextField(
               label: "Email ID (Optional)",
               controller: entry.emailCtrl,
@@ -602,6 +802,8 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
   Widget _buildBottomActionBar() {
     final int confirmedCount = _confirmedCount;
     final bool ready = _isAllValid;
+    final bool isBusy = _isSubmitting || _isSavingDraft;
+    final bool canSave = !isBusy && _entries.every((e) => e.isValid);
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -624,43 +826,89 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
         ],
       ),
       child: SafeArea(
-        child: SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton.icon(
-            onPressed: ready && !_isSubmitting ? _submitVerification : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _primary,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade300,
-              disabledForegroundColor: Colors.grey.shade500,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: ready ? 2 : 0,
-            ),
-            icon: _isSubmitting
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
+        child: Row(
+          children: [
+            // Save Changes button
+            Expanded(
+              flex: 2,
+              child: SizedBox(
+                height: 48,
+                child: OutlinedButton(
+                  onPressed: canSave ? _saveDraft : null,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _primary,
+                    disabledForegroundColor: Colors.grey.shade400,
+                    side: BorderSide(
+                      color: canSave ? _primary : Colors.grey.shade300,
                     ),
-                  )
-                : const Icon(Icons.send_rounded, size: 18),
-            label: Text(
-              _isSubmitting
-                  ? "Submitting..."
-                  : ready
-                      ? "Submit 3 Doctors for Approval"
-                      : "Please correct invalid fields ($confirmedCount/3 Valid)",
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 13.5,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isSavingDraft
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: _primary,
+                          ),
+                        )
+                      : Text(
+                          "Save Changes",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                        ),
+                ),
               ),
             ),
-          ),
+            const SizedBox(width: 10),
+            // Primary Submit button
+            Expanded(
+              flex: 3,
+              child: SizedBox(
+                height: 48,
+                child: ElevatedButton.icon(
+                  onPressed: ready && !isBusy ? _submitVerification : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primary,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey.shade300,
+                    disabledForegroundColor: Colors.grey.shade500,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: ready ? 2 : 0,
+                  ),
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.send_rounded, size: 18),
+                  label: Text(
+                    _isSubmitting
+                        ? "Submitting..."
+                        : ready
+                            ? "Submit 3 Doctors"
+                            : _entries.length < 3
+                                ? "Need 3 Doctors (${_entries.length}/3)"
+                                : "Invalid Fields ($confirmedCount/3)",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

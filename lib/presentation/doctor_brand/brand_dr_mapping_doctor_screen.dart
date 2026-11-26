@@ -131,6 +131,40 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
     return raw?.toString().toLowerCase().trim();
   }
 
+  bool get _isSobixoSubmittedOrLocked {
+    if (!_isSobixo) return false;
+    if (widget.readOnly || widget.isDoctorListLocked) return true;
+
+    final status = _brandStatus;
+    if (status != null &&
+        (status == 'pending' ||
+            status == 'submitted' ||
+            status == 'approved' ||
+            status.contains('pending') ||
+            status.contains('review') ||
+            status.contains('submit'))) {
+      return true;
+    }
+
+    for (final doc in _doctors) {
+      final docStatus = (doc['approval_status'] ?? doc['status'])
+          ?.toString()
+          .toLowerCase()
+          .trim();
+      if (docStatus != null &&
+          (docStatus == 'pending' ||
+              docStatus == 'submitted' ||
+              docStatus == 'approved' ||
+              docStatus.contains('pending') ||
+              docStatus.contains('review') ||
+              docStatus.contains('submit'))) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   String? get _rejectionReason {
     return (widget.brand['rejection_reason'] ?? widget.brand['reject_reason'])
         ?.toString();
@@ -269,6 +303,21 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
       if (mounted) {
         setState(() {
           _doctors = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          if (_isSobixo) {
+            final respStatus =
+                (data['approval_status'] ?? data['status'])?.toString().trim();
+            if (respStatus != null && respStatus.isNotEmpty) {
+              widget.brand['approval_status'] = respStatus;
+            } else if (_doctors.isNotEmpty) {
+              final docStatus = (_doctors.first['approval_status'] ??
+                      _doctors.first['status'])
+                  ?.toString()
+                  .trim();
+              if (docStatus != null && docStatus.isNotEmpty) {
+                widget.brand['approval_status'] = docStatus;
+              }
+            }
+          }
         });
       }
 
@@ -308,7 +357,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
   }
 
   Future<void> _removeDoctor(int doctorId) async {
-    if (widget.readOnly) return;
+    if (widget.readOnly || _isSobixoSubmittedOrLocked) return;
     try {
       final String msg;
       if (_isSobixo) {
@@ -335,6 +384,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
   }
 
   Future<void> _openAddSheet() async {
+    if (_isSobixoSubmittedOrLocked) return;
     final added = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -350,19 +400,24 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
     );
     if (added == true) {
       await _load();
-      if (_isSobixo && _doctors.length == 3 && !widget.readOnly && !widget.isDoctorListLocked) {
+      if (_isSobixo && _doctors.length == 3 && !_isSobixoSubmittedOrLocked) {
         _openSobixoVerificationSheet();
       }
     }
   }
 
-  Future<void> _openSobixoVerificationSheet() async {
-    if (_doctors.length != 3) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(
-            'Exactly 3 doctors must be selected for SOBIXO. Currently: ${_doctors.length}.'),
-        backgroundColor: Colors.orange.shade800,
-      ));
+  Future<void> _openSobixoVerificationSheet({
+    int? initialDoctorId,
+    int initialIndex = 0,
+  }) async {
+    if (_isSobixoSubmittedOrLocked) return;
+    if (_doctors.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least one doctor first.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
 
@@ -374,15 +429,18 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
         brandId: _brandId,
         brandName: _brandName,
         selectedDoctors: _doctors,
+        initialDoctorId: initialDoctorId,
+        initialDoctorIndex: initialIndex,
       ),
     );
+
+    await _load();
 
     if (verified == true) {
       setState(() {
         widget.brand['approval_status'] = 'pending';
         widget.brand['status'] = 'pending';
       });
-      await _load();
     }
   }
 
@@ -423,7 +481,9 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
           ),
         ],
       ),
-      floatingActionButton: (widget.readOnly || widget.isDoctorListLocked)
+      floatingActionButton: (widget.readOnly ||
+              widget.isDoctorListLocked ||
+              _isSobixoSubmittedOrLocked)
           ? null
           : _isSobixo
               ? (_doctors.length >= 3
@@ -582,7 +642,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
                             separatorBuilder: (context, index) => const SizedBox(height: 8),
                             itemBuilder: (_, i) {
                               if (i == _filtered.length) return _buildSummaryCard();
-                              return _buildDoctorCard(_filtered[i]);
+                              return _buildDoctorCard(_filtered[i], index: i);
                             },
                           ),
                         ),
@@ -1222,30 +1282,9 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
 
   Widget _buildSobixoBottomBar() {
     final status = _brandStatus;
-    final bool isLocked = widget.readOnly ||
-        widget.isDoctorListLocked ||
-        status == 'pending' ||
-        status == 'approved';
+    final bool isLocked = _isSobixoSubmittedOrLocked;
 
     if (isLocked) {
-      if (status == 'pending') {
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          color: Colors.white,
-          child: SafeArea(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.hourglass_top_rounded, color: Color(0xFF2563EB), size: 16),
-                const SizedBox(width: 8),
-                Text('Pending Manager Approval',
-                    style: GoogleFonts.poppins(
-                        fontWeight: FontWeight.w600, fontSize: 13, color: const Color(0xFF1D4ED8))),
-              ],
-            ),
-          ),
-        );
-      }
       if (status == 'approved') {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1259,6 +1298,42 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
                 Text('Doctor List Approved',
                     style: GoogleFonts.poppins(
                         fontWeight: FontWeight.w600, fontSize: 13, color: const Color(0xFF15803D))),
+              ],
+            ),
+          ),
+        );
+      }
+      final bool isPendingOrUnderReview = (status != null &&
+              (status == 'pending' ||
+                  status == 'submitted' ||
+                  status.contains('pending') ||
+                  status.contains('review') ||
+                  status.contains('submit'))) ||
+          _doctors.any((doc) {
+            final ds = (doc['approval_status'] ?? doc['status'])
+                ?.toString()
+                .toLowerCase()
+                .trim();
+            return ds != null &&
+                (ds == 'pending' ||
+                    ds == 'submitted' ||
+                    ds.contains('pending') ||
+                    ds.contains('review') ||
+                    ds.contains('submit'));
+          });
+      if (isPendingOrUnderReview) {
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          color: Colors.white,
+          child: SafeArea(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.hourglass_top_rounded, color: Color(0xFF2563EB), size: 16),
+                const SizedBox(width: 8),
+                Text('Pending Manager Approval',
+                    style: GoogleFonts.poppins(
+                        fontWeight: FontWeight.w600, fontSize: 13, color: const Color(0xFF1D4ED8))),
               ],
             ),
           ),
@@ -1292,7 +1367,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
                     borderRadius: BorderRadius.circular(12)),
                 elevation: 2,
               ),
-              onPressed: _openSobixoVerificationSheet,
+              onPressed: () => _openSobixoVerificationSheet(),
               icon: const Icon(Icons.verified_outlined, size: 18),
               label: Text(
                 'Verify & Submit (3 Doctors)',
@@ -1304,18 +1379,60 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
       );
     }
 
+    if (_doctors.isNotEmpty && _doctors.length < 3) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              offset: const Offset(0, -2),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.info_outline, size: 16, color: _purple),
+              const SizedBox(width: 8),
+              Text(
+                '${_doctors.length}/3 Doctors selected • Tap doctor to edit details',
+                style: GoogleFonts.poppins(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: _purple,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return const SizedBox.shrink();
   }
 
-  Widget _buildDoctorCard(Map<String, dynamic> doctor) {
-    final name = doctor['doctor_name']?.toString() ?? '';
+  Widget _buildDoctorCard(Map<String, dynamic> doctor, {int index = 0}) {
+    final fn = (doctor['first_name'] ?? '').toString().trim();
+    final sn = (doctor['surname'] ?? '').toString().trim();
+    final name = (fn.isNotEmpty || sn.isNotEmpty)
+        ? '$fn $sn'.trim()
+        : (doctor['doctor_name']?.toString() ?? '');
     final sp = doctor['specialty_practice_type']?.toString() ?? '';
     final area = doctor['area']?.toString() ?? '';
     final id = int.tryParse(doctor['id']?.toString() ?? '0') ?? 0;
     final isPathfinder = doctor['is_pathfinder'] == true;
+    final bool canEditSobixo = _isSobixo && !_isSobixoSubmittedOrLocked;
+    final bool canRemove = !widget.readOnly &&
+        !widget.isDoctorListLocked &&
+        !(_isSobixo && _isSobixoSubmittedOrLocked);
+    final mobileStr = (doctor['mobile'] ?? doctor['phone'] ?? '').toString().trim();
+    final emailStr = (doctor['email'] ?? '').toString().trim();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1323,184 +1440,225 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
           color: isPathfinder ? Colors.orange.shade200 : Colors.grey.shade200,
         ),
       ),
-      child: Row(
-        children: [
-          // Left side: Doctor avatar
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: isPathfinder
-                  ? Colors.orange.shade50
-                  : const Color(0xFFEDE7F6),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.person,
-                color: isPathfinder ? Colors.orange.shade700 : _purple,
-                size: 20),
-          ),
-          const SizedBox(width: 8),
-          // Center: Doctor information
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: canEditSobixo
+              ? () => _openSobixoVerificationSheet(
+                    initialDoctorId: id,
+                    initialIndex: index,
+                  )
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (_isSobixo) ...[
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: isPathfinder
-                              ? Colors.orange.shade50
-                              : Colors.blue.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: isPathfinder
-                                ? Colors.orange.shade300
-                                : Colors.blue.shade200,
-                          ),
-                        ),
-                        child: Text(
-                          isPathfinder ? 'Target Doctor' : 'MCL Doctor',
-                          style: TextStyle(
-                            fontSize: 8.5,
-                            color: isPathfinder
-                                ? Colors.deepOrange
-                                : Colors.blueAccent,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ] else if (isPathfinder) ...[
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.shade50,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.orange.shade300),
-                        ),
-                        child: const Text(
-                          'Pathfinder',
-                          style: TextStyle(
-                            fontSize: 8.5,
-                            color: Colors.deepOrange,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                // Left side: Doctor avatar
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: isPathfinder
+                        ? Colors.orange.shade50
+                        : const Color(0xFFEDE7F6),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.person,
+                      color: isPathfinder ? Colors.orange.shade700 : _purple,
+                      size: 20),
                 ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    if (sp.isNotEmpty) ...[
-                      Flexible(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEDE7F6),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            sp,
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              color: _purple,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                    ],
-                    if (area.isNotEmpty)
-                      Expanded(
-                        child: Text(
-                          area,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: Colors.grey.shade500,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          // Right side: QTY Stepper for Zorberry, Contact info for Sobixo
-          if (!_isSobixo) ...[
-            _buildQtyStepper(id),
-          ] else ...[
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if ((doctor['mobile'] ?? doctor['phone'] ?? '')
-                    .toString()
-                    .isNotEmpty)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                const SizedBox(width: 10),
+                // Center: Doctor information
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.phone_android,
-                          size: 11, color: Colors.grey),
-                      const SizedBox(width: 2),
-                      Text(
-                        (doctor['mobile'] ?? doctor['phone']).toString(),
-                        style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.black87,
-                            fontWeight: FontWeight.w600),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13.5,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_isSobixo) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isPathfinder
+                                    ? Colors.orange.shade50
+                                    : Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: isPathfinder
+                                      ? Colors.orange.shade300
+                                      : Colors.blue.shade200,
+                                ),
+                              ),
+                              child: Text(
+                                isPathfinder ? 'Target Doctor' : 'MCL Doctor',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  color: isPathfinder
+                                      ? Colors.deepOrange
+                                      : Colors.blueAccent,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ] else if (isPathfinder) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.shade50,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: Colors.orange.shade300),
+                              ),
+                              child: const Text(
+                                'Pathfinder',
+                                style: TextStyle(
+                                  fontSize: 8.5,
+                                  color: Colors.deepOrange,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          if (sp.isNotEmpty) ...[
+                            Flexible(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFEDE7F6),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  sp,
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    color: _purple,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          if (area.isNotEmpty)
+                            Expanded(
+                              child: Text(
+                                area,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey.shade600,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (_isSobixo && (mobileStr.isNotEmpty || emailStr.isNotEmpty)) ...[
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            if (mobileStr.isNotEmpty)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.phone_android,
+                                      size: 14, color: _purple.withValues(alpha: 0.8)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    mobileStr,
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.black87,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            if (emailStr.isNotEmpty)
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.email_outlined,
+                                      size: 14, color: Colors.grey.shade600),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    emailStr,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: Colors.grey.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
-                if ((doctor['email'] ?? '').toString().isNotEmpty)
-                  Text(
-                    doctor['email'].toString(),
-                    style:
-                        TextStyle(fontSize: 9, color: Colors.grey.shade600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(width: 6),
+                // Right side: QTY Stepper for Zorberry, Edit/Remove icons for Sobixo
+                if (!_isSobixo) ...[
+                  _buildQtyStepper(id),
+                ] else if (canEditSobixo) ...[
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEDE7F6),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.edit_outlined,
+                      size: 16,
+                      color: _purple,
+                    ),
                   ),
+                ],
+                if (canRemove) ...[
+                  const SizedBox(width: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () => _confirmRemove(id, name),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.remove_circle_outline,
+                          color: Colors.red, size: 20),
+                    ),
+                  ),
+                ],
               ],
             ),
-          ],
-          if (!widget.readOnly && !widget.isDoctorListLocked) ...[
-            const SizedBox(width: 4),
-            InkWell(
-              borderRadius: BorderRadius.circular(12),
-              onTap: () => _confirmRemove(id, name),
-              child: const Padding(
-                padding: EdgeInsets.all(3),
-                child: Icon(Icons.remove_circle_outline,
-                    color: Colors.red, size: 18),
-              ),
-            ),
-          ],
-        ],
+          ),
+        ),
       ),
     );
   }
@@ -1688,10 +1846,19 @@ class _DrBrandMapAddDoctorSheetState extends State<_DrBrandMapAddDoctorSheet> {
       final base = q.isEmpty
           ? _allDoctors
           : _allDoctors
-              .where((d) =>
-                  (d['doctor_name'] ?? '').toString().toLowerCase().contains(q) ||
-                  (d['specialty_practice_type'] ?? '').toString().toLowerCase().contains(q) ||
-                  (d['area'] ?? '').toString().toLowerCase().contains(q))
+              .where((d) {
+                final fn = (d['first_name'] ?? '').toString().toLowerCase();
+                final sn = (d['surname'] ?? '').toString().toLowerCase();
+                final dn = (d['doctor_name'] ?? '').toString().toLowerCase();
+                final sp = (d['specialty_practice_type'] ?? '').toString().toLowerCase();
+                final area = (d['area'] ?? '').toString().toLowerCase();
+                return fn.contains(q) ||
+                    sn.contains(q) ||
+                    '$fn $sn'.contains(q) ||
+                    dn.contains(q) ||
+                    sp.contains(q) ||
+                    area.contains(q);
+              })
               .toList();
       // Keep pathfinder doctors at the top even after filtering
       _filtered = [
@@ -1721,9 +1888,16 @@ class _DrBrandMapAddDoctorSheetState extends State<_DrBrandMapAddDoctorSheet> {
         final allSelectedIds = [...widget.alreadyAdded, ..._selected];
         final verifiedDetails = newlySelectedDocs.map((d) {
           final id = int.tryParse(d['id']?.toString() ?? '0') ?? 0;
+          final fn = (d['first_name'] ?? '').toString().trim();
+          final sn = (d['surname'] ?? '').toString().trim();
+          final fullName = (fn.isNotEmpty || sn.isNotEmpty)
+              ? '$fn $sn'.trim()
+              : (d['doctor_name'] ?? '').toString().trim();
           return {
             'doctor_id': id,
-            'doctor_name': (d['doctor_name'] ?? '').toString(),
+            'first_name': fn,
+            'surname': sn,
+            'doctor_name': fullName,
             'mobile': (d['mobile'] ?? d['phone'] ?? '').toString(),
             'email': (d['email'] ?? '').toString(),
           };
@@ -1919,7 +2093,11 @@ class _DrBrandMapAddDoctorSheetState extends State<_DrBrandMapAddDoctorSheet> {
                               itemBuilder: (_, i) {
                                 final doc = _filtered[i];
                                 final id = int.tryParse(doc['id']?.toString() ?? '0') ?? 0;
-                                final name = doc['doctor_name']?.toString() ?? '';
+                                final fn = (doc['first_name'] ?? '').toString().trim();
+                                final sn = (doc['surname'] ?? '').toString().trim();
+                                final name = (fn.isNotEmpty || sn.isNotEmpty)
+                                    ? '$fn $sn'.trim()
+                                    : (doc['doctor_name']?.toString() ?? '');
                                 final sp = doc['specialty_practice_type']?.toString() ?? '';
                                 final area = doc['area']?.toString() ?? '';
                                 final sel = _selected.contains(id);

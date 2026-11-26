@@ -1,30 +1,101 @@
+/// Strips leading prefixes like `dr.`, `DR`, `doctor`, `Dr`, `DOCTOR` from a doctor name.
+String stripDoctorPrefix(String raw) {
+  return raw
+      .trim()
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .replaceFirst(
+        RegExp(r'^(?:(?:doctor|dr)(?:\.\s*|\s+|$))+', caseSensitive: false),
+        '',
+      )
+      .trim();
+}
+
+/// Formats a doctor name with a consistent single `"Dr. "` prefix.
+String formatCleanDoctorName(String raw) {
+  final clean = stripDoctorPrefix(raw);
+  if (clean.isEmpty) return '';
+  return 'Dr. $clean';
+}
+
+List<String> _parseStringList(dynamic raw) {
+  if (raw == null) return [];
+  if (raw is List) {
+    return raw
+        .map((e) {
+          // pathfinder_brands may be a list of objects: {"brand_cluster": "X", ...}
+          if (e is Map) {
+            return (e['brand_cluster'] ?? e['brand_name'] ?? '').toString().trim();
+          }
+          return e.toString().trim();
+        })
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+  if (raw is String) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return [];
+    if (trimmed.contains(',')) {
+      return trimmed
+          .split(',')
+          .map((e) => e.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    return [trimmed];
+  }
+  return [raw.toString().trim()];
+}
+
+int? _parseInt(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is int) return raw;
+  if (raw is num) return raw.toInt();
+  return int.tryParse(raw.toString().trim());
+}
+
+List<int> _parseIntList(dynamic raw) {
+  if (raw == null) return [];
+  if (raw is List) {
+    return raw
+        .map((e) => _parseInt(e))
+        .whereType<int>()
+        .toList();
+  }
+  final parsed = _parseInt(raw);
+  return parsed != null ? [parsed] : [];
+}
+
 class BrandPriorityBrand {
   final String brandCluster;
   final String brandName;
   final int? gstBrandProductId;
+  final int? brandPathfinderId;
   final List<String> preferredSpecialities;
   final String? composition;
   final List<String> skus;
+  final List<int> gstBrandProductIds;
 
   BrandPriorityBrand({
     required this.brandCluster,
     required this.brandName,
     this.gstBrandProductId,
+    this.brandPathfinderId,
     this.preferredSpecialities = const [],
     this.composition,
     this.skus = const [],
+    this.gstBrandProductIds = const [],
   });
 
   factory BrandPriorityBrand.fromJson(Map<String, dynamic> json) {
     return BrandPriorityBrand(
       brandCluster: (json['brand_cluster'] ?? json['brand_name'] ?? '').toString(),
       brandName: (json['brand_name'] ?? json['brand_cluster'] ?? '').toString(),
-      gstBrandProductId: json['gst_brand_product_id'] as int?,
-      preferredSpecialities: (json['preferred_specialities'] as List? ?? [])
-          .map((e) => e.toString())
-          .toList(),
+      gstBrandProductId: _parseInt(json['gst_brand_product_id']),
+      brandPathfinderId: _parseInt(json['brand_pathfinder_id']),
+      preferredSpecialities: _parseStringList(json['preferred_specialities']),
       composition: json['composition']?.toString(),
-      skus: (json['skus'] as List? ?? []).map((e) => e.toString()).toList(),
+      skus: _parseStringList(json['skus']),
+      gstBrandProductIds: _parseIntList(json['gst_brand_product_ids']),
     );
   }
 }
@@ -42,8 +113,8 @@ class DoctorPriorityItem {
 
   factory DoctorPriorityItem.fromJson(Map<String, dynamic> json) {
     return DoctorPriorityItem(
-      priorityRank: json['priority_rank'] as int? ?? 1,
-      brandCluster: (json['brand_cluster'] ?? '').toString(),
+      priorityRank: _parseInt(json['priority_rank']) ?? 1,
+      brandCluster: (json['brand_cluster'] ?? json['brand_name'] ?? '').toString(),
       brandName: json['brand_name']?.toString(),
     );
   }
@@ -87,40 +158,43 @@ class MclDoctorPriority {
     this.rejectionReason,
   });
 
+  String get cleanNameWithoutPrefix => stripDoctorPrefix(doctorName);
+  String get formattedDoctorName => formatCleanDoctorName(doctorName);
+
   bool get isPrioritized => priorities.isNotEmpty;
   bool get isApproved => approvalStatus?.toLowerCase() == 'approved';
   bool get isPending => approvalStatus?.toLowerCase() == 'pending';
   bool get isRejected => approvalStatus?.toLowerCase() == 'rejected';
 
   factory MclDoctorPriority.fromJson(Map<String, dynamic> json) {
-    final rawPriorities = (json['priorities'] as List? ?? []);
+    final rawPriorities = json['priorities'];
     final parsedPriorities = <DoctorPriorityItem>[];
-    for (int i = 0; i < rawPriorities.length; i++) {
-      final p = rawPriorities[i];
-      if (p is Map<String, dynamic>) {
-        parsedPriorities.add(DoctorPriorityItem.fromJson(p));
-      } else if (p is String) {
-        parsedPriorities.add(DoctorPriorityItem(
-          priorityRank: i + 1,
-          brandCluster: p,
-        ));
+    if (rawPriorities is List) {
+      for (int i = 0; i < rawPriorities.length; i++) {
+        final p = rawPriorities[i];
+        if (p is Map) {
+          parsedPriorities.add(DoctorPriorityItem.fromJson(Map<String, dynamic>.from(p)));
+        } else if (p is String && p.trim().isNotEmpty) {
+          parsedPriorities.add(DoctorPriorityItem(
+            priorityRank: i + 1,
+            brandCluster: p.trim(),
+          ));
+        }
       }
     }
 
     return MclDoctorPriority(
-      doctorId: json['doctor_id'] as int? ?? 0,
+      doctorId: _parseInt(json['doctor_id']) ?? 0,
       doctorName: (json['doctor_name'] ?? '').toString(),
       speciality: (json['speciality'] ?? '').toString(),
       qualification: json['qualification']?.toString(),
       visitCategory: json['visit_category']?.toString(),
       routeName: json['route_name']?.toString(),
       mobile: json['mobile']?.toString(),
-      pathfinderBrandCount: json['pathfinder_brand_count'] as int? ?? 0,
-      pathfinderBrands: (json['pathfinder_brands'] as List? ?? [])
-          .map((e) => e.toString())
-          .toList(),
+      pathfinderBrandCount: _parseInt(json['pathfinder_brand_count']) ?? 0,
+      pathfinderBrands: _parseStringList(json['pathfinder_brands']),
       priorities: parsedPriorities,
-      priorityCount: json['priority_count'] as int? ?? parsedPriorities.length,
+      priorityCount: _parseInt(json['priority_count']) ?? parsedPriorities.length,
       approvalStatus: json['approval_status']?.toString(),
       rejectionReason: json['rejection_reason']?.toString(),
     );
@@ -150,14 +224,14 @@ class PrioritySummary {
 
   factory PrioritySummary.fromJson(Map<String, dynamic> json) {
     return PrioritySummary(
-      totalMclDoctors: json['total_mcl_doctors'] as int? ?? 0,
-      prioritizedDoctors: json['prioritized_doctors'] as int? ?? 0,
-      pendingDoctors: json['pending_doctors'] as int? ?? 0,
-      approvedDoctors: json['approved_doctors'] as int? ?? 0,
-      rejectedDoctors: json['rejected_doctors'] as int? ?? 0,
-      draftDoctors: json['draft_doctors'] as int? ?? 0,
-      unmappedDoctors: json['unmapped_doctors'] as int? ?? 0,
-      minRequiredBrands: json['min_required_brands'] as int? ?? 8,
+      totalMclDoctors: _parseInt(json['total_mcl_doctors']) ?? 0,
+      prioritizedDoctors: _parseInt(json['prioritized_doctors']) ?? 0,
+      pendingDoctors: _parseInt(json['pending_doctors']) ?? 0,
+      approvedDoctors: _parseInt(json['approved_doctors']) ?? 0,
+      rejectedDoctors: _parseInt(json['rejected_doctors']) ?? 0,
+      draftDoctors: _parseInt(json['draft_doctors']) ?? 0,
+      unmappedDoctors: _parseInt(json['unmapped_doctors']) ?? 0,
+      minRequiredBrands: _parseInt(json['min_required_brands']) ?? 8,
     );
   }
 }
@@ -179,7 +253,7 @@ class PriorityEmployeeInfo {
 
   factory PriorityEmployeeInfo.fromJson(Map<String, dynamic> json) {
     return PriorityEmployeeInfo(
-      employeeId: json['employee_id'] as int? ?? 0,
+      employeeId: _parseInt(json['employee_id']) ?? 0,
       employeeName: (json['employee_name'] ?? '').toString(),
       positionCode: (json['position_code'] ?? '').toString(),
       headQtr: (json['head_qtr'] ?? '').toString(),

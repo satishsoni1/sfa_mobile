@@ -230,6 +230,20 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     final isSobixo = _isSobixo(brand);
 
     if (isSobixo) {
+      final rawStatus = (brand['approval_status'] ?? brand['status'])
+          ?.toString()
+          .toLowerCase()
+          .trim();
+      if (rawStatus != null &&
+          (rawStatus == 'pending' ||
+              rawStatus == 'submitted' ||
+              rawStatus == 'approved' ||
+              rawStatus.contains('pending') ||
+              rawStatus.contains('review') ||
+              rawStatus.contains('submit'))) {
+        return;
+      }
+
       setState(() => _submittingBrandId = brandId);
       List<Map<String, dynamic>> docs = [];
       try {
@@ -481,7 +495,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
       body: NestedScrollView(
-        headerSliverBuilder: (_, __) => [
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverAppBar(
             expandedHeight: 160,
             pinned: true,
@@ -602,7 +616,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
                         itemCount: _filteredBrands.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (context, index) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _buildBrandCard(_filteredBrands[i]),
                       ),
                     ),
@@ -1222,7 +1236,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
                           itemCount: _filteredSummary.length + 1,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (context, index) => const SizedBox(height: 8),
                           itemBuilder: (_, i) {
                             if (i == 0) return _buildSummaryHeader();
                             return _buildDoctorSummaryCard(_filteredSummary[i - 1]);
@@ -1264,7 +1278,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
   }
 
   Widget _buildDoctorSummaryCard(Map<String, dynamic> doctor) {
-    final name = doctor['doctor_name']?.toString() ?? '';
+    final fn = (doctor['first_name'] ?? '').toString().trim();
+    final sn = (doctor['surname'] ?? '').toString().trim();
+    final name = (fn.isNotEmpty || sn.isNotEmpty)
+        ? '$fn $sn'.trim()
+        : (doctor['doctor_name']?.toString() ?? '');
     // Handle both 'specialty_practice_type' and 'speciality' field names
     final speciality = (doctor['specialty_practice_type'] ?? doctor['speciality'])?.toString() ?? '';
     final brandCount = int.tryParse(doctor['brand_count']?.toString() ?? '0') ?? 0;
@@ -1301,7 +1319,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Dr. $name',
+                Text(name.toLowerCase().startsWith('dr') ? name : 'Dr. $name',
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
                 if (speciality.isNotEmpty) ...[
