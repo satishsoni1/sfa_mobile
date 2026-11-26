@@ -118,6 +118,8 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
     }
   }
 
+  // Original single-selection route picker
+  /*
   void _showSingleSelectSheet() {
     dynamic tempSelected = _selectedNewRoutes.isNotEmpty ? _selectedNewRoutes.first : null;
     String searchQuery = '';
@@ -234,14 +236,174 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
       },
     );
   }
+  */
+
+  // Multi-route selection sheet for requested new routes
+  void _showMultiSelectRouteSheet() {
+    List<dynamic> tempSelected = List.from(_selectedNewRoutes);
+    String searchQuery = '';
+    
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) {
+        return StatefulBuilder(builder: (context, setSheet) {
+          final filteredItems = _allRoutes.where((item) {
+            final name = item['name']?.toString() ?? 'Unknown';
+            final val = item['dr_count'] != null
+                ? '$name (Tagged doctor\'s: ${item['dr_count']})'
+                : name;
+            return val.toLowerCase().contains(searchQuery.toLowerCase());
+          }).toList();
+
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.4,
+            maxChildSize: 0.9,
+            expand: false,
+            builder: (_, scrollController) {
+              return Column(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Select Requested Routes', style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.bold)),
+                        IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search route...',
+                        prefixIcon: const Icon(Icons.search),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(30)),
+                      ),
+                      onChanged: (val) => setSheet(() => searchQuery = val),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${tempSelected.length} route${tempSelected.length == 1 ? '' : 's'} selected',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (tempSelected.isNotEmpty)
+                          TextButton(
+                            onPressed: () => setSheet(() => tempSelected.clear()),
+                            child: Text(
+                              'Clear all',
+                              style: GoogleFonts.poppins(fontSize: 12, color: Colors.red),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1),
+                  Expanded(
+                    child: filteredItems.isEmpty
+                        ? Center(child: Text('No routes found', style: GoogleFonts.poppins(color: Colors.grey.shade500)))
+                        : ListView.builder(
+                            controller: scrollController,
+                            itemCount: filteredItems.length,
+                            itemBuilder: (_, index) {
+                              final item = filteredItems[index];
+                              final rawName = item['name']?.toString() ?? 'Unknown';
+                              final drCount = item['dr_count'];
+                              final displayName = drCount != null
+                                  ? '$rawName (Tagged doctor\'s: $drCount)'
+                                  : rawName;
+                                  
+                              final isSelected = tempSelected.any((s) => s['id']?.toString() == item['id']?.toString());
+
+                              return CheckboxListTile(
+                                value: isSelected,
+                                activeColor: AppColors.primary,
+                                controlAffinity: ListTileControlAffinity.leading,
+                                dense: true,
+                                title: Text(
+                                  displayName, 
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 13,
+                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                  ),
+                                ),
+                                onChanged: (bool? val) {
+                                  setSheet(() {
+                                    if (val == true) {
+                                      tempSelected.add(item);
+                                    } else {
+                                      tempSelected.removeWhere((s) => s['id']?.toString() == item['id']?.toString());
+                                    }
+                                  });
+                                },
+                              );
+                            },
+                          ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          padding: const EdgeInsets.symmetric(vertical: 13),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: tempSelected.isEmpty
+                            ? null
+                            : () {
+                                setState(() {
+                                  _selectedNewRoutes = List.from(tempSelected);
+                                });
+                                Navigator.pop(ctx);
+                              },
+                        child: Text(
+                          tempSelected.isEmpty ? 'Confirm' : 'Confirm (${tempSelected.length})',
+                          style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+        });
+      },
+    );
+  }
 
   Future<void> _submitRequest() async {
     if (_selectedDate == null) {
       _showSnack('Please select a date first.');
       return;
     }
+  
     if (_selectedNewRoutes.isEmpty) {
-      _showSnack('Please select a new route.');
+      _showSnack('Please select at least one requested route.');
       return;
     }
     if (_remarkController.text.trim().isEmpty) {
@@ -344,6 +506,8 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
 
                   // 3. New Route Selection
                   _buildSectionTitle('Requested New Route'),
+                  // Original single-selection InkWell:
+                  /*
                   InkWell(
                     onTap: _showSingleSelectSheet,
                     child: Container(
@@ -383,10 +547,105 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
                       ),
                     ),
                   ),
+                  */
+                  InkWell(
+                    onTap: _showMultiSelectRouteSheet,
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2),
+                            child: Icon(Icons.alt_route, color: AppColors.primary, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Builder(
+                              builder: (_) {
+                                if (_selectedNewRoutes.isEmpty) {
+                                  return Text(
+                                    'Tap to select requested routes',
+                                    style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+                                  );
+                                }
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${_selectedNewRoutes.length} Route${_selectedNewRoutes.length > 1 ? 's' : ''} Selected',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ..._selectedNewRoutes.asMap().entries.map((entry) {
+                                      final idx = entry.key + 1;
+                                      final r = entry.value;
+                                      final name = r['name']?.toString() ?? '';
+                                      final drCount = r['dr_count'];
+                                      final display = drCount != null ? '$name (Tagged doctor\'s: $drCount)' : name;
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 4),
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '$idx. ',
+                                              style: GoogleFonts.poppins(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.primary,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              child: Text(
+                                                display,
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 13,
+                                                  color: Colors.black87,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }),
+                                  ],
+                                );
+                              },
+                            ),
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.only(top: 2),
+                            child: Icon(Icons.arrow_drop_down, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 24),
 
-                  // 4. Remark
-                  _buildSectionTitle('Reason for Deviation'),
+                  // 4. Remark (Compulsory - marked with red asterisk)
+                  // Original: _buildSectionTitle('Reason for Deviation'),
+                  _buildSectionTitle('Reason for Deviation', isRequired: true),
                   TextField(
                     controller: _remarkController,
                     maxLines: 3,
@@ -424,12 +683,33 @@ class _TpDeviationFormScreenState extends State<TpDeviationFormScreen> {
     );
   }
 
+  // Original _buildSectionTitle:
+  /*
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         title,
         style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+      ),
+    );
+  }
+  */
+  Widget _buildSectionTitle(String title, {bool isRequired = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: RichText(
+        text: TextSpan(
+          text: title,
+          style: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black87),
+          children: [
+            if (isRequired)
+              const TextSpan(
+                text: ' *',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+          ],
+        ),
       ),
     );
   }
