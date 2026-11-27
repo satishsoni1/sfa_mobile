@@ -2,11 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../data/services/api_service.dart';
 import 'brand_dr_mapping_doctor_screen.dart';
+import 'sobixo_verification_sheet.dart';
 
 
 class BrandDrMappingScreen extends StatefulWidget {
   final int? initialEmployeeId;
-  const BrandDrMappingScreen({super.key, this.initialEmployeeId});
+  final String? initialBrandFilter;
+  final String? customTitle;
+  const BrandDrMappingScreen({
+    super.key,
+    this.initialEmployeeId,
+    this.initialBrandFilter,
+    this.customTitle,
+  });
 
   @override
   State<BrandDrMappingScreen> createState() => _BrandDrMappingScreenState();
@@ -36,8 +44,20 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
   List<Map<String, dynamic>> get _filteredBrands {
     final q = _searchCtrl.text.toLowerCase();
-    if (q.isEmpty) return _brands;
-    return _brands.where((b) =>
+    List<Map<String, dynamic>> list = _brands;
+    if (widget.initialBrandFilter != null && widget.initialBrandFilter!.isNotEmpty) {
+      final f = widget.initialBrandFilter!.toUpperCase();
+      list = list.where((b) {
+        final bName = _brandDisplayName(b).toUpperCase();
+        final isSobixo = b['is_sobixo'] == true;
+        if (f == 'SOBIXO') {
+          return isSobixo || bName == 'SOBIXO';
+        }
+        return bName.contains(f);
+      }).toList();
+    }
+    if (q.isEmpty) return list;
+    return list.where((b) =>
         (_brandDisplayName(b)).toLowerCase().contains(q) ||
         (b['division'] ?? '').toString().toLowerCase().contains(q)).toList();
   }
@@ -61,6 +81,16 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
   int get _totalTagCount =>
       _brands.fold(0, (s, b) => s + (int.tryParse(b['doctor_count']?.toString() ?? '0') ?? 0));
+
+  bool get _isSobixoCampaign =>
+      widget.initialBrandFilter?.toUpperCase() == 'SOBIXO' ||
+      (widget.customTitle?.toUpperCase().contains('SOBIXO') ?? false);
+
+  bool _isSobixo(Map<String, dynamic> brand) {
+    if (_isSobixoCampaign) return true;
+    final name = _brandDisplayName(brand).toUpperCase();
+    return brand['is_sobixo'] == true || name == 'SOBIXO';
+  }
 
   /// Reads brand name from 'brand' field first (dr-brand-map response), falls
   /// back to 'name' so both API shapes are handled gracefully.
@@ -99,7 +129,9 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     setState(() => _isLoadingBrands = true);
     try {
       final user = await ApiService().getUser();
-      final brands = await ApiService().getDrBrandMapBrands(userId: user?.employeeId);
+      final brands = _isSobixoCampaign
+          ? await ApiService().getSobixoBrands(userId: user?.employeeId)
+          : await ApiService().getDrBrandMapBrands(userId: user?.employeeId);
       if (mounted) {
         setState(() {
           _brands = brands;
@@ -115,7 +147,9 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
       _summaryError = null;
     });
     try {
-      final data = await ApiService().getDrBrandMapSummary();
+      final data = _isSobixoCampaign
+          ? await ApiService().getSobixoDoctorSummary(userId: _selectedSubId)
+          : await ApiService().getDrBrandMapSummary();
       if (!mounted) return;
       // Check if the API returned an error sentinel
       if (data.length == 1 && data.first['__error__'] == true) {
@@ -137,7 +171,8 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
   Future<void> _loadSubordinates() async {
     try {
-      final list = await ApiService().getSubordinates();
+      final now = DateTime.now();
+      final list = await ApiService().getSubordinates(month: now.month, year: now.year);
 
       if (widget.initialEmployeeId != null) {
         try {
@@ -160,7 +195,9 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
       _isLoadingTeamBrands = true;
     });
     try {
-      final brands = await ApiService().getDrBrandMapBrands(userId: userId);
+      final brands = _isSobixoCampaign
+          ? await ApiService().getSobixoBrands(userId: userId)
+          : await ApiService().getDrBrandMapBrands(userId: userId);
       if (mounted) {
         setState(() {
           _teamBrands = brands;
@@ -190,6 +227,66 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     final int brandId = int.tryParse(brand['id']?.toString() ?? '0') ?? 0;
     if (brandId <= 0) return;
     final brandName = _brandDisplayName(brand);
+    final isSobixo = _isSobixo(brand);
+
+    if (isSobixo) {
+      final rawStatus = (brand['approval_status'] ?? brand['status'])
+          ?.toString()
+          .toLowerCase()
+          .trim();
+      if (rawStatus != null &&
+          (rawStatus == 'pending' ||
+              rawStatus == 'submitted' ||
+              rawStatus == 'approved' ||
+              rawStatus.contains('pending') ||
+              rawStatus.contains('review') ||
+              rawStatus.contains('submit'))) {
+        return;
+      }
+
+      setState(() => _submittingBrandId = brandId);
+      List<Map<String, dynamic>> docs = [];
+      try {
+        final res = await ApiService().getSobixoDoctors(brandId);
+        docs = List<Map<String, dynamic>>.from(res['data'] ?? []);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Failed to load doctors: $e'),
+            backgroundColor: Colors.red,
+          ));
+        }
+      } finally {
+        if (mounted) setState(() => _submittingBrandId = null);
+      }
+
+      if (docs.length != 3) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Exactly 3 doctors must be selected for SOBIXO. Currently selected: ${docs.length}.'),
+            backgroundColor: Colors.orange.shade800,
+          ));
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      final verified = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => SobixoVerificationSheet(
+          brandId: brandId,
+          brandName: brandName,
+          selectedDoctors: docs,
+        ),
+      );
+
+      if (verified == true && mounted) {
+        await _loadBrands();
+      }
+      return;
+    }
 
     final confirm = await showDialog<bool>(
       context: context,
@@ -287,7 +384,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
     setState(() => _approvingBrandId = brandId);
     try {
-      await ApiService().approveDrBrandMap(userId, brandId);
+      if (_isSobixo(brand)) {
+        await ApiService().approveSobixoBrand(userId, brandId);
+      } else {
+        await ApiService().approveDrBrandMap(userId, brandId);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('$brandName approved!'),
@@ -363,7 +464,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
 
     setState(() => _rejectingBrandId = brandId);
     try {
-      await ApiService().rejectDrBrandMap(userId, brandId, reason);
+      if (_isSobixo(brand)) {
+        await ApiService().rejectSobixoBrand(userId, brandId, reason);
+      } else {
+        await ApiService().rejectDrBrandMap(userId, brandId, reason);
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('$brandName rejected.'),
@@ -390,7 +495,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     return Scaffold(
       backgroundColor: const Color(0xFFF0F2F5),
       body: NestedScrollView(
-        headerSliverBuilder: (_, __) => [
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
           SliverAppBar(
             expandedHeight: 160,
             pinned: true,
@@ -400,7 +505,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
             title: Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
-                'Zorberry Tab Daily Rxn List',
+                widget.customTitle ?? 'Zorberry Tab Daily Rxn List',
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.w600,
                   fontSize: 17,
@@ -511,7 +616,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                       child: ListView.separated(
                         padding: const EdgeInsets.fromLTRB(14, 8, 14, 24),
                         itemCount: _filteredBrands.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
+                        separatorBuilder: (context, index) => const SizedBox(height: 10),
                         itemBuilder: (_, i) => _buildBrandCard(_filteredBrands[i]),
                       ),
                     ),
@@ -686,11 +791,16 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     final brandStatus = _getBrandStatus(brand);
     final isBrandLocked = readOnly || brandStatus == 'pending' || brandStatus == 'approved';
 
+    final Map<String, dynamic> brandPayload = Map<String, dynamic>.from(brand);
+    if (_isSobixo(brand)) {
+      brandPayload['is_sobixo'] = true;
+    }
+
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => BrandDrMappingDoctorScreen(
-          brand: brand,
+          brand: brandPayload,
           targetUserId: targetUserId,
           readOnly: readOnly,
           isDoctorListLocked: isBrandLocked,
@@ -810,6 +920,8 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     // ── User My List actions ──
     final isSubmitting = _submittingBrandId == brandId;
     final bool isExactQuota = quota > 0 && count == quota;
+    final bool isSobixo = _isSobixo(brand);
+    const Color actionColor = _purple;
 
     if (status == 'approved') {
       return _brandStatusBadge(
@@ -845,7 +957,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
               height: 36,
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _purple,
+                  backgroundColor: actionColor,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   elevation: 1,
@@ -857,9 +969,13 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                         height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                       )
-                    : const Icon(Icons.send_outlined, size: 15),
+                    : Icon(isSobixo ? Icons.verified_outlined : Icons.send_outlined, size: 15),
                 label: Text(
-                  isSubmitting ? 'Submitting...' : 'Re-submit for Approval',
+                  isSubmitting
+                      ? 'Submitting...'
+                      : isSobixo
+                          ? 'Verify & Re-submit (3 Doctors)'
+                          : 'Re-submit for Approval',
                   style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
                 ),
               ),
@@ -877,7 +993,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
         height: 36,
         child: ElevatedButton.icon(
           style: ElevatedButton.styleFrom(
-            backgroundColor: _purple,
+            backgroundColor: actionColor,
             foregroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             elevation: 1,
@@ -889,9 +1005,13 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
-              : const Icon(Icons.send_outlined, size: 15),
+              : Icon(isSobixo ? Icons.verified_outlined : Icons.send_outlined, size: 15),
           label: Text(
-            isSubmitting ? 'Submitting...' : 'Submit for Approval',
+            isSubmitting
+                ? 'Submitting...'
+                : isSobixo
+                    ? 'Verify & Submit (3 Doctors)'
+                    : 'Submit for Approval',
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600, fontSize: 12),
           ),
         ),
@@ -1116,7 +1236,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
                         child: ListView.separated(
                           padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
                           itemCount: _filteredSummary.length + 1,
-                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          separatorBuilder: (context, index) => const SizedBox(height: 8),
                           itemBuilder: (_, i) {
                             if (i == 0) return _buildSummaryHeader();
                             return _buildDoctorSummaryCard(_filteredSummary[i - 1]);
@@ -1158,7 +1278,11 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
   }
 
   Widget _buildDoctorSummaryCard(Map<String, dynamic> doctor) {
-    final name = doctor['doctor_name']?.toString() ?? '';
+    final fn = (doctor['first_name'] ?? '').toString().trim();
+    final sn = (doctor['surname'] ?? '').toString().trim();
+    final name = (fn.isNotEmpty || sn.isNotEmpty)
+        ? '$fn $sn'.trim()
+        : (doctor['doctor_name']?.toString() ?? '');
     // Handle both 'specialty_practice_type' and 'speciality' field names
     final speciality = (doctor['specialty_practice_type'] ?? doctor['speciality'])?.toString() ?? '';
     final brandCount = int.tryParse(doctor['brand_count']?.toString() ?? '0') ?? 0;
@@ -1195,7 +1319,7 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Dr. $name',
+                Text(name.toLowerCase().startsWith('dr') ? name : 'Dr. $name',
                     style: const TextStyle(
                         fontWeight: FontWeight.w600, fontSize: 13)),
                 if (speciality.isNotEmpty) ...[
@@ -1261,31 +1385,66 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
     );
   }
 
-  // â”€â”€ Submit Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+  void _showSubordinatePicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _SubordinateSearchSheet(
+        subordinates: _subordinates,
+        selectedSubId: _selectedSubId,
+        primaryColor: _purple,
+        onSelect: (id) {
+          setState(() => _selectedSubId = id);
+          _loadTeamBrands(id);
+        },
+      ),
+    );
+  }
 
   Widget _buildSubordinatePicker() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<int>(
-          value: _selectedSubId,
-          hint: const Text('Select team member'),
-          isExpanded: true,
-          items: _subordinates.map((s) {
-            final id = int.tryParse(s['id']?.toString() ?? '0') ?? 0;
-            final name = s['name']?.toString() ?? 'Unknown';
-            return DropdownMenuItem(value: id, child: Text(name));
-          }).toList(),
-          onChanged: (id) {
-            if (id == null) return;
-            setState(() => _selectedSubId = id);
-            _loadTeamBrands(id);
-          },
+    final selectedSub = _subordinates.firstWhere(
+      (s) => (int.tryParse(s['id']?.toString() ?? '0') ?? 0) == _selectedSubId,
+      orElse: () => null,
+    );
+    final selectedName = selectedSub != null
+        ? selectedSub['name']?.toString() ?? 'Unknown'
+        : 'Select team member';
+
+    return InkWell(
+      onTap: _showSubordinatePicker,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.03),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.person_search, color: _purple, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                selectedName,
+                style: GoogleFonts.poppins(
+                  fontSize: 14,
+                  fontWeight: selectedSub != null ? FontWeight.w600 : FontWeight.normal,
+                  color: selectedSub != null ? Colors.black87 : Colors.grey.shade500,
+                ),
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600),
+          ],
         ),
       ),
     );
@@ -1336,4 +1495,180 @@ class _BrandDrMappingScreenState extends State<BrandDrMappingScreen>
       ],
     ),
   );
+}
+
+class _SubordinateSearchSheet extends StatefulWidget {
+  final List<dynamic> subordinates;
+  final int? selectedSubId;
+  final Function(int) onSelect;
+  final Color primaryColor;
+
+  const _SubordinateSearchSheet({
+    required this.subordinates,
+    this.selectedSubId,
+    required this.onSelect,
+    required this.primaryColor,
+  });
+
+  @override
+  State<_SubordinateSearchSheet> createState() => _SubordinateSearchSheetState();
+}
+
+class _SubordinateSearchSheetState extends State<_SubordinateSearchSheet> {
+  late List<dynamic> _filteredList;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.subordinates;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _filteredList = widget.subordinates.where((sub) {
+        final name = sub['name']?.toString().toLowerCase() ?? '';
+        return name.contains(query.toLowerCase());
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  height: 4,
+                  width: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Select Team Member",
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  onChanged: _filter,
+                  decoration: InputDecoration(
+                    hintText: "Search name...",
+                    prefixIcon: Icon(Icons.search, color: widget.primaryColor),
+                    filled: true,
+                    fillColor: Colors.grey.shade100,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _filteredList.isEmpty
+                ? Center(
+                    child: Text(
+                      "No team members found",
+                      style: GoogleFonts.poppins(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: _filteredList.length,
+                    itemBuilder: (context, index) {
+                      var sub = _filteredList[index];
+                      final id = int.tryParse(sub['id']?.toString() ?? '0') ?? 0;
+                      bool isSelected = widget.selectedSubId == id;
+
+                      return _buildSubordinateTile(
+                        name: sub['name']?.toString() ?? 'Unknown',
+                        subtitle: sub['designation']?.toString() ?? 'Team Member',
+                        imageUrl: sub['photo']?.toString(),
+                        isSelected: isSelected,
+                        onTap: () {
+                          Navigator.pop(context);
+                          widget.onSelect(id);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubordinateTile({
+    required String name,
+    required String subtitle,
+    String? imageUrl,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: isSelected ? widget.primaryColor.withValues(alpha: 0.05) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isSelected ? widget.primaryColor : Colors.grey.shade200,
+        ),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        leading: CircleAvatar(
+          radius: 20,
+          backgroundColor: Colors.grey.shade100,
+          backgroundImage: imageUrl != null ? NetworkImage(imageUrl) : null,
+          child: imageUrl == null
+              ? Icon(Icons.person, color: Colors.grey.shade400)
+              : null,
+        ),
+        title: Text(
+          name,
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+            color: isSelected ? widget.primaryColor : Colors.black87,
+          ),
+        ),
+        subtitle: Text(
+          subtitle,
+          style: GoogleFonts.poppins(fontSize: 12, color: Colors.grey.shade600),
+        ),
+        trailing: isSelected
+            ? Icon(Icons.check_circle, color: widget.primaryColor)
+            : null,
+      ),
+    );
+  }
 }

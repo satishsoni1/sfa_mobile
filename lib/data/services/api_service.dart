@@ -626,13 +626,59 @@ class ApiService {
     }
   }
 
-  Future<List<dynamic>> getSubordinates() async {
+  Future<List<dynamic>> getSubordinates({
+    dynamic month,
+    dynamic year,
+    DateTime? date,
+  }) async {
     final token = await getToken();
+
+    String? monthStr;
+    String? yearStr;
+
+    if (date != null) {
+      monthStr = date.month.toString();
+      yearStr = date.year.toString();
+    } else if (month is DateTime) {
+      monthStr = month.month.toString();
+      yearStr = (year != null) ? year.toString() : month.year.toString();
+    } else {
+      if (month != null) {
+        monthStr = month.toString();
+      }
+      if (year != null) {
+        yearStr = year.toString();
+      }
+    }
+
+    String url = '$baseUrl/app/manager/subordinates';
+    final queryParams = <String, String>{};
+    if (monthStr != null && monthStr.isNotEmpty) {
+      queryParams['month'] = monthStr;
+    }
+    if (yearStr != null && yearStr.isNotEmpty) {
+      queryParams['year'] = yearStr;
+    }
+
+    if (queryParams.isNotEmpty) {
+      final uri = Uri.parse(url).replace(queryParameters: queryParams);
+      url = uri.toString();
+    }
+
     final response = await http.get(
-      Uri.parse('$baseUrl/app/manager/subordinates'),
-      headers: {'Authorization': 'Bearer $token'},
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Accept': 'application/json',
+      },
     );
-    return jsonDecode(response.body)['data'];
+    if (response.statusCode == 200) {
+      final decoded = jsonDecode(response.body);
+      final rawData = decoded is Map ? decoded['data'] : decoded;
+      if (rawData is List) return rawData;
+      return [];
+    }
+    return [];
   }
 
   Uri getMclDoctorCsvExportUri(String employeeCode) {
@@ -1280,6 +1326,185 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
       ];
     } catch (_) {
       return [{'__error__': true, 'status': 0, 'message': 'Network error. Please try again.'}];
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ── SOBIXO SPECIAL 3 CAMPAIGN API METHODS (Exact backend endpoints) ───────
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /// 2. GET /api/sobixo-brand-map/brands
+  Future<List<Map<String, dynamic>>> getSobixoBrands({int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/sobixo-brand-map/brands?user_id=$userId'
+        : '$baseUrl/sobixo-brand-map/brands';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      final body = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    }
+    throw Exception('Failed to load Sobixo brand details');
+  }
+
+  /// 3. GET /api/sobixo-brand-map/doctors/my-list (Strictly Brand Pathfinder approved)
+  Future<List<Map<String, dynamic>>> getSobixoDoctorList() async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/doctors/my-list';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) {
+      return List<Map<String, dynamic>>.from(body['data'] ?? []);
+    }
+    return [
+      {
+        '__error__': true,
+        'status': response.statusCode,
+        'message': body['message']?.toString() ?? 'Failed to load Sobixo doctor list',
+      }
+    ];
+  }
+
+  /// 4. GET /api/sobixo-brand-map/brands/{brand_id}/doctors
+  Future<Map<String, dynamic>> getSobixoDoctors(int brandId, {int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/sobixo-brand-map/brands/$brandId/doctors?user_id=$userId'
+        : '$baseUrl/sobixo-brand-map/brands/$brandId/doctors';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (response.statusCode == 200) {
+      return Map<String, dynamic>.from(json.decode(response.body));
+    }
+    throw Exception('Failed to load selected doctors for Sobixo');
+  }
+
+  /// 5. POST /api/sobixo-brand-map/brands/{brand_id}/verify-doctors
+  Future<Map<String, dynamic>> verifyAndSubmitSobixoDoctors(
+    int brandId, {
+    required List<int> doctorIds,
+    required List<Map<String, dynamic>> verifiedDetails,
+    bool submitFinal = true,
+  }) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$brandId/verify-doctors';
+    final body = json.encode({
+      'brand_id': brandId,
+      'submit_final': submitFinal,
+      'doctor_ids': doctorIds,
+      'verified_details': verifiedDetails,
+    });
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: body,
+    );
+    final decoded = json.decode(response.body);
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return {'status': 200, 'message': 'Verified and submitted successfully'};
+    } else {
+      final msg = decoded is Map
+          ? (decoded['message'] ?? decoded['error'] ?? 'Verification failed')
+          : 'Verification failed';
+      throw Exception(msg.toString());
+    }
+  }
+
+  /// 6. DELETE /api/sobixo-brand-map/brands/{brand_id}/doctors/{doctor_id}
+  Future<String> removeSobixoDoctor(int brandId, int doctorId) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$brandId/doctors/$doctorId';
+    final response = await http.delete(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) {
+      return body['message']?.toString() ?? 'Doctor removed from SOBIXO successfully';
+    } else {
+      throw Exception(body['message'] ?? 'Failed to remove doctor from SOBIXO');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getSobixoDoctorSummary({int? userId}) async {
+    final token = await getToken();
+    final url = userId != null
+        ? '$baseUrl/sobixo-brand-map/brands/doctor-summary?user_id=$userId'
+        : '$baseUrl/sobixo-brand-map/brands/doctor-summary';
+    final response = await http.get(
+      Uri.parse(url),
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    final body = json.decode(response.body);
+    if (response.statusCode == 200) {
+      final raw = body['data'] ?? body;
+      if (raw is List) return List<Map<String, dynamic>>.from(raw);
+      return [];
+    }
+    return [
+      {
+        '__error__': true,
+        'status': response.statusCode,
+        'message': body['message']?.toString() ?? 'Failed to load Sobixo doctor summary',
+      }
+    ];
+  }
+
+  /// 8. POST /api/sobixo-brand-map/brands/{subordinate_user_id}/approve
+  Future<void> approveSobixoBrand(int subordinateUserId, int brandId) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$subordinateUserId/approve';
+    final body = json.encode({'brand_id': brandId});
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: body,
+    );
+    if (response.statusCode != 200) {
+      final decoded = json.decode(response.body);
+      throw Exception(decoded['message'] ?? 'Failed to approve Sobixo brand');
+    }
+  }
+
+  /// 9. POST /api/sobixo-brand-map/brands/{subordinate_user_id}/reject
+  Future<void> rejectSobixoBrand(int subordinateUserId, int brandId, String rejectReason) async {
+    final token = await getToken();
+    final url = '$baseUrl/sobixo-brand-map/brands/$subordinateUserId/reject';
+    final body = json.encode({
+      'brand_id': brandId,
+      'reject_reason': rejectReason,
+    });
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: body,
+    );
+    if (response.statusCode != 200) {
+      final decoded = json.decode(response.body);
+      throw Exception(decoded['message'] ?? 'Failed to reject Sobixo brand');
     }
   }
 

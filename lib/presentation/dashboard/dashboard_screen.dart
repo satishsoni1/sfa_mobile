@@ -72,7 +72,7 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   // --- APP VERSION (Update this manually before every new build) ---
-  static const String CURRENT_APP_VERSION = "1.0.73";
+  static const String CURRENT_APP_VERSION = "1.0.75";
 
   // --- STATE ---
   bool _isCheckedIn = false;
@@ -89,6 +89,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // DCR Requests (notification inbox)
   List<Map<String, dynamic>> _dcrRequests = [];
   bool _isFetchingDcrSheet = false;
+  bool _toShowSobixo = false;
 
   Timer? _timer;
   String _elapsedTime = "00:00";
@@ -488,7 +489,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
 
-      setState(() => _dcrRequests = requests);
+      // 4. Extract to_show_sobixo campaign eligibility flag
+      final dynamic sobixoFlag = (data is Map ? data['to_show_sobixo'] : null) ??
+          enriched['to_show_sobixo'];
+      final bool toShowSobixo = _flagEnabled(sobixoFlag);
+
+      setState(() {
+        _dcrRequests = requests;
+        _toShowSobixo = toShowSobixo;
+      });
     } catch (_) {
       // Silently ignore — notification badge simply stays at 0
     }
@@ -1154,6 +1163,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _navigateTo(ChemistMainScreen(initialEmployeeId: parsedEmpId));
     } else if (reqType == 'BRAND_DR') {
       _navigateTo(BrandDrMappingScreen(initialEmployeeId: parsedEmpId));
+    } else if (reqType == 'SOBIXO_DR') {
+      _navigateTo(BrandDrMappingScreen(
+        initialEmployeeId: parsedEmpId,
+        initialBrandFilter: 'SOBIXO',
+        customTitle: 'SOBIXO SPECIAL 3 CAMPAIGN',
+      ));
     } else if (reqType == 'ACTION' || reqType == 'WEB' || reqType == 'TAB') {
       _openActionCenter();
     } else {
@@ -1378,6 +1393,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Colors.deepOrange,
             () => _navigateTo(const BrandDrMappingScreen()),
           ),
+          if (_toShowSobixo)
+            _MenuAction(
+              Icons.stars_rounded,
+              "SOBIXO SPECIAL 3 CAMPAIGN",
+              Colors.teal,
+              () => _navigateTo(const BrandDrMappingScreen(
+                initialBrandFilter: 'SOBIXO',
+                customTitle: 'SOBIXO SPECIAL 3 CAMPAIGN',
+              )),
+            ),
           _MenuAction(
             Icons.medication_outlined,
             "Campaign Doctor Selection",
@@ -1733,7 +1758,8 @@ class _DcrRequestsSheet extends StatelessWidget {
         mclReqs.add(req);
       } else if (cat == 'BRAND' ||
           cat == 'BRAND_PATHFINDER' ||
-          ['BRAND', 'BRAND_PATHFINDER', 'BRAND_DR', 'DOC_SEL'].contains(reqType)) {
+          ['BRAND', 'BRAND_PATHFINDER', 'BRAND_DR', 'SOBIXO_DR', 'DOC_SEL']
+              .contains(reqType)) {
         brandReqs.add(req);
       } else {
         generalReqs.add(req);
@@ -1972,12 +1998,15 @@ class _DcrRequestCard extends StatelessWidget {
       typeIcon = Icons.medical_services_outlined;
     } else if (cat == 'BRAND' ||
         cat == 'BRAND_PATHFINDER' ||
-        ['BRAND', 'BRAND_PATHFINDER', 'BRAND_DR', 'DOC_SEL'].contains(requestType)) {
+        ['BRAND', 'BRAND_PATHFINDER', 'BRAND_DR', 'SOBIXO_DR', 'DOC_SEL']
+            .contains(requestType)) {
       typeLabel = requestType == 'DOC_SEL'
           ? 'Campaign Selection'
           : requestType == 'BRAND_DR'
               ? 'Zorberry Rxn List'
-              : 'Brand Pathfinder';
+              : requestType == 'SOBIXO_DR'
+                  ? 'SOBIXO Special 3'
+                  : 'Brand Pathfinder';
       typeColor = Colors.red.shade700;
       typeBg = Colors.red.shade50;
       typeIcon = Icons.campaign_outlined;
