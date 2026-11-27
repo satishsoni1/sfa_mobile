@@ -128,36 +128,61 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
     final raw = widget.brand['approval_status'] ??
         widget.brand['brand_approval_status'] ??
         widget.brand['status'];
-    return raw?.toString().toLowerCase().trim();
+    final s = raw?.toString().toLowerCase().trim();
+    if (s == null || s.isEmpty || s == 'null' || int.tryParse(s) != null) {
+      return null;
+    }
+    return s;
+  }
+
+  bool _isStatusApproved(String? s) => s == 'approved';
+
+  bool _isStatusPendingOrSubmitted(String? s) {
+    if (s == null) return false;
+    return s == 'pending' ||
+        s == 'submitted' ||
+        s.contains('pending') ||
+        s.contains('review') ||
+        s.contains('submit');
+  }
+
+  bool _isStatusRejected(String? s) => s == 'rejected';
+
+  String? get _sobixoEffectiveStatus {
+    final status = _brandStatus;
+    if (status != null) return status;
+
+    for (final doc in _doctors) {
+      final docStatus = (doc['approval_status'] ?? doc['brand_approval_status'])
+          ?.toString()
+          .toLowerCase()
+          .trim();
+      if (docStatus != null &&
+          docStatus.isNotEmpty &&
+          docStatus != 'null' &&
+          int.tryParse(docStatus) == null) {
+        return docStatus;
+      }
+    }
+    return null;
   }
 
   bool get _isSobixoSubmittedOrLocked {
     if (!_isSobixo) return false;
     if (widget.readOnly || widget.isDoctorListLocked) return true;
 
-    final status = _brandStatus;
-    if (status != null &&
-        (status == 'pending' ||
-            status == 'submitted' ||
-            status == 'approved' ||
-            status.contains('pending') ||
-            status.contains('review') ||
-            status.contains('submit'))) {
+    final status = _sobixoEffectiveStatus;
+    if (_isStatusApproved(status) || _isStatusPendingOrSubmitted(status)) {
       return true;
     }
 
     for (final doc in _doctors) {
-      final docStatus = (doc['approval_status'] ?? doc['status'])
+      final docStatus = (doc['approval_status'] ?? doc['brand_approval_status'])
           ?.toString()
           .toLowerCase()
           .trim();
-      if (docStatus != null &&
-          (docStatus == 'pending' ||
-              docStatus == 'submitted' ||
-              docStatus == 'approved' ||
-              docStatus.contains('pending') ||
-              docStatus.contains('review') ||
-              docStatus.contains('submit'))) {
+      if (_isStatusApproved(docStatus) ||
+          _isStatusPendingOrSubmitted(docStatus)) {
         return true;
       }
     }
@@ -291,33 +316,65 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
     }
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool clearLocalSobixo = false}) async {
     setState(() => _isLoading = true);
+    final List<Map<String, dynamic>> localDrafts = clearLocalSobixo
+        ? <Map<String, dynamic>>[]
+        : _doctors.where((d) => d['__local_only'] == true).toList();
     try {
       final Map<String, dynamic> data;
       if (_isSobixo) {
-        data = await ApiService().getSobixoDoctors(_brandId);
+        data = await ApiService().getSobixoDoctors(_brandId, userId: widget.targetUserId);
       } else {
         data = await ApiService().getDrBrandMapDoctors(_brandId, userId: widget.targetUserId);
       }
       if (mounted) {
         setState(() {
-          _doctors = List<Map<String, dynamic>>.from(data['data'] ?? []);
+          final backendDocs = List<Map<String, dynamic>>.from(data['data'] ?? []);
           if (_isSobixo) {
-            final respStatus =
-                (data['approval_status'] ?? data['status'])?.toString().trim();
-            if (respStatus != null && respStatus.isNotEmpty) {
+            final respStatus = (data['approval_status'] ??
+                    data['brand_approval_status'])
+                ?.toString()
+                .trim();
+            if (respStatus != null &&
+                respStatus.isNotEmpty &&
+                respStatus.toLowerCase() != 'null' &&
+                int.tryParse(respStatus) == null) {
               widget.brand['approval_status'] = respStatus;
-            } else if (_doctors.isNotEmpty) {
-              final docStatus = (_doctors.first['approval_status'] ??
-                      _doctors.first['status'])
-                  ?.toString()
-                  .trim();
-              if (docStatus != null && docStatus.isNotEmpty) {
-                widget.brand['approval_status'] = docStatus;
+            } else if (backendDocs.isNotEmpty) {
+              for (final doc in backendDocs) {
+                final docStatus = (doc['approval_status'] ??
+                        doc['brand_approval_status'])
+                    ?.toString()
+                    .trim();
+                if (docStatus != null &&
+                    docStatus.isNotEmpty &&
+                    docStatus.toLowerCase() != 'null' &&
+                    int.tryParse(docStatus) == null) {
+                  widget.brand['approval_status'] = docStatus;
+                  break;
+                }
+              }
+            }
+
+            final backendIds = backendDocs
+                .map((d) => int.tryParse(d['id']?.toString() ?? '0') ?? 0)
+                .toSet();
+            final effectiveStatus = _sobixoEffectiveStatus;
+            final bool alreadySubmitted = _isStatusApproved(effectiveStatus) ||
+                _isStatusPendingOrSubmitted(effectiveStatus);
+
+            if (!clearLocalSobixo && !alreadySubmitted && localDrafts.isNotEmpty) {
+              for (final ld in localDrafts) {
+                final lid = int.tryParse(ld['id']?.toString() ?? '0') ?? 0;
+                if (lid > 0 && !backendIds.contains(lid) && backendDocs.length < 3) {
+                  backendDocs.add(ld);
+                  backendIds.add(lid);
+                }
               }
             }
           }
+          _doctors = backendDocs;
         });
       }
 
@@ -358,6 +415,20 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
 
   Future<void> _removeDoctor(int doctorId) async {
     if (widget.readOnly || _isSobixoSubmittedOrLocked) return;
+    if (_isSobixo) {
+      final localIdx = _doctors.indexWhere(
+          (d) => int.tryParse(d['id']?.toString() ?? '0') == doctorId);
+      if (localIdx != -1 && _doctors[localIdx]['__local_only'] == true) {
+        setState(() => _doctors.removeAt(localIdx));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Doctor removed from selection'),
+            backgroundColor: Colors.green,
+          ));
+        }
+        return;
+      }
+    }
     try {
       final String msg;
       if (_isSobixo) {
@@ -385,7 +456,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
 
   Future<void> _openAddSheet() async {
     if (_isSobixoSubmittedOrLocked) return;
-    final added = await showModalBottomSheet<bool>(
+    final result = await showModalBottomSheet<dynamic>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -398,11 +469,30 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
             .toSet(),
       ),
     );
-    if (added == true) {
-      await _load();
-      if (_isSobixo && _doctors.length == 3 && !_isSobixoSubmittedOrLocked) {
-        _openSobixoVerificationSheet();
+    if (_isSobixo && result is List) {
+      final newDocs = result
+          .whereType<Map>()
+          .map((d) => Map<String, dynamic>.from(d))
+          .toList();
+      if (newDocs.isNotEmpty) {
+        setState(() {
+          final existingIds = _doctors
+              .map((d) => int.tryParse(d['id']?.toString() ?? '0') ?? 0)
+              .toSet();
+          for (final d in newDocs) {
+            final id = int.tryParse(d['id']?.toString() ?? '0') ?? 0;
+            if (id > 0 && !existingIds.contains(id) && _doctors.length < 3) {
+              _doctors.add(d);
+              existingIds.add(id);
+            }
+          }
+        });
+        if (_doctors.length == 3 && !_isSobixoSubmittedOrLocked) {
+          _openSobixoVerificationSheet();
+        }
       }
+    } else if (result == true) {
+      await _load();
     }
   }
 
@@ -431,16 +521,33 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
         selectedDoctors: _doctors,
         initialDoctorId: initialDoctorId,
         initialDoctorIndex: initialIndex,
+        onLocalUpdate: (updatedList) {
+          if (!mounted) return;
+          setState(() {
+            for (final upd in updatedList) {
+              final uid = upd['doctor_id'];
+              final idx = _doctors.indexWhere(
+                  (d) => (int.tryParse(d['id']?.toString() ?? '0') ?? 0) == uid);
+              if (idx != -1) {
+                _doctors[idx]['first_name'] = upd['first_name'];
+                _doctors[idx]['surname'] = upd['surname'];
+                _doctors[idx]['doctor_name'] = upd['doctor_name'];
+                _doctors[idx]['mobile'] = upd['mobile'];
+                _doctors[idx]['phone'] = upd['mobile'];
+                _doctors[idx]['email'] = upd['email'];
+              }
+            }
+          });
+        },
       ),
     );
-
-    await _load();
 
     if (verified == true) {
       setState(() {
         widget.brand['approval_status'] = 'pending';
         widget.brand['status'] = 'pending';
       });
+      await _load(clearLocalSobixo: true);
     }
   }
 
@@ -635,7 +742,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
                           ),
                         )
                       : RefreshIndicator(
-                          onRefresh: _load,
+                          onRefresh: () => _load(),
                           child: ListView.separated(
                             padding: const EdgeInsets.fromLTRB(14, 12, 14, 100),
                             itemCount: _filtered.length + 1,
@@ -1122,8 +1229,14 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
   }
 
   Widget _buildSobixoStatusBar() {
-    final status = _brandStatus;
-    if (status == 'approved') {
+    final status = _sobixoEffectiveStatus;
+    final bool isApproved = _isStatusApproved(status) ||
+        _doctors.any((d) => _isStatusApproved(
+            (d['approval_status'] ?? d['brand_approval_status'])
+                ?.toString()
+                .toLowerCase()
+                .trim()));
+    if (isApproved) {
       return Container(
         width: double.infinity,
         margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
@@ -1151,7 +1264,14 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
         ]),
       );
     }
-    if (status == 'pending') {
+
+    final bool isPending = _isStatusPendingOrSubmitted(status) ||
+        _doctors.any((d) => _isStatusPendingOrSubmitted(
+            (d['approval_status'] ?? d['brand_approval_status'])
+                ?.toString()
+                .toLowerCase()
+                .trim()));
+    if (isPending) {
       return Container(
         width: double.infinity,
         margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
@@ -1179,7 +1299,14 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
         ]),
       );
     }
-    if (status == 'rejected') {
+
+    final bool isRejected = _isStatusRejected(status) ||
+        _doctors.any((d) => _isStatusRejected(
+            (d['approval_status'] ?? d['brand_approval_status'])
+                ?.toString()
+                .toLowerCase()
+                .trim()));
+    if (isRejected) {
       final reason = _rejectionReason;
       return Container(
         width: double.infinity,
@@ -1218,6 +1345,7 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
 
     // Draft / in progress state
     final bool exactThree = _doctors.length == 3;
+    final bool isViewOnly = widget.readOnly || widget.isDoctorListLocked;
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
@@ -1265,9 +1393,13 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
                 ),
               ),
               Text(
-                exactThree
-                    ? 'Tap "Verify & Submit" below to verify and finalize.'
-                    : 'Select ${3 - _doctors.length} more doctor${3 - _doctors.length == 1 ? '' : 's'} from Target Doctors or MCL.',
+                isViewOnly
+                    ? (exactThree
+                        ? 'Doctor list is not submitted for approval yet.'
+                        : '${_doctors.length} of 3 doctors added so far.')
+                    : exactThree
+                        ? 'Tap "Verify & Submit" below to verify and finalize.'
+                        : 'Select ${3 - _doctors.length} more doctor${3 - _doctors.length == 1 ? '' : 's'} from Target Doctors or MCL.',
                 style: GoogleFonts.poppins(
                   fontSize: 11,
                   color: exactThree ? _purple.withValues(alpha: 0.8) : Colors.grey.shade600,
@@ -1281,11 +1413,17 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
   }
 
   Widget _buildSobixoBottomBar() {
-    final status = _brandStatus;
+    final status = _sobixoEffectiveStatus;
     final bool isLocked = _isSobixoSubmittedOrLocked;
 
     if (isLocked) {
-      if (status == 'approved') {
+      final bool isApproved = _isStatusApproved(status) ||
+          _doctors.any((d) => _isStatusApproved(
+              (d['approval_status'] ?? d['brand_approval_status'])
+                  ?.toString()
+                  .toLowerCase()
+                  .trim()));
+      if (isApproved) {
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           color: Colors.white,
@@ -1303,23 +1441,13 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
           ),
         );
       }
-      final bool isPendingOrUnderReview = (status != null &&
-              (status == 'pending' ||
-                  status == 'submitted' ||
-                  status.contains('pending') ||
-                  status.contains('review') ||
-                  status.contains('submit'))) ||
+      final bool isPendingOrUnderReview = _isStatusPendingOrSubmitted(status) ||
           _doctors.any((doc) {
-            final ds = (doc['approval_status'] ?? doc['status'])
+            final ds = (doc['approval_status'] ?? doc['brand_approval_status'])
                 ?.toString()
                 .toLowerCase()
                 .trim();
-            return ds != null &&
-                (ds == 'pending' ||
-                    ds == 'submitted' ||
-                    ds.contains('pending') ||
-                    ds.contains('review') ||
-                    ds.contains('submit'));
+            return _isStatusPendingOrSubmitted(ds);
           });
       if (isPendingOrUnderReview) {
         return Container(
@@ -1880,35 +2008,18 @@ class _DrBrandMapAddDoctorSheetState extends State<_DrBrandMapAddDoctorSheet> {
     setState(() => _isSaving = true);
     try {
       if (widget.isSobixo) {
-        final newlySelectedDocs = _allDoctors.where((d) {
-          final id = int.tryParse(d['id']?.toString() ?? '0') ?? 0;
-          return _selected.contains(id);
-        }).toList();
-
-        final allSelectedIds = [...widget.alreadyAdded, ..._selected];
-        final verifiedDetails = newlySelectedDocs.map((d) {
-          final id = int.tryParse(d['id']?.toString() ?? '0') ?? 0;
-          final fn = (d['first_name'] ?? '').toString().trim();
-          final sn = (d['surname'] ?? '').toString().trim();
-          final fullName = (fn.isNotEmpty || sn.isNotEmpty)
-              ? '$fn $sn'.trim()
-              : (d['doctor_name'] ?? '').toString().trim();
-          return {
-            'doctor_id': id,
-            'first_name': fn,
-            'surname': sn,
-            'doctor_name': fullName,
-            'mobile': (d['mobile'] ?? d['phone'] ?? '').toString(),
-            'email': (d['email'] ?? '').toString(),
-          };
-        }).toList();
-
-        await ApiService().verifyAndSubmitSobixoDoctors(
-          widget.brandId,
-          doctorIds: allSelectedIds,
-          verifiedDetails: verifiedDetails,
-          submitFinal: false,
-        );
+        final newlySelectedDocs = _allDoctors
+            .where((d) {
+              final id = int.tryParse(d['id']?.toString() ?? '0') ?? 0;
+              return _selected.contains(id);
+            })
+            .map((d) => {
+                  ...Map<String, dynamic>.from(d),
+                  '__local_only': true,
+                })
+            .toList();
+        if (mounted) Navigator.pop(context, newlySelectedDocs);
+        return;
       } else {
         await ApiService().addDrBrandMapDoctors(widget.brandId, _selected.toList());
       }

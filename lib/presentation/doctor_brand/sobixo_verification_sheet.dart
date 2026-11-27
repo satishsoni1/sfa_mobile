@@ -10,6 +10,7 @@ class SobixoVerificationSheet extends StatefulWidget {
   final List<Map<String, dynamic>> selectedDoctors;
   final int? initialDoctorId;
   final int initialDoctorIndex;
+  final void Function(List<Map<String, dynamic>> updatedDetails)? onLocalUpdate;
 
   const SobixoVerificationSheet({
     super.key,
@@ -18,6 +19,7 @@ class SobixoVerificationSheet extends StatefulWidget {
     required this.selectedDoctors,
     this.initialDoctorId,
     this.initialDoctorIndex = 0,
+    this.onLocalUpdate,
   });
 
   @override
@@ -128,7 +130,6 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
 
   late final List<_DoctorVerificationEntry> _entries;
   bool _isSubmitting = false;
-  bool _isSavingDraft = false;
   bool _hasScrolledToTarget = false;
 
   int get _targetIndex {
@@ -188,10 +189,29 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
     }).toList();
 
     for (final e in _entries) {
-      e.firstNameCtrl.addListener(() => setState(() {}));
-      e.surnameCtrl.addListener(() => setState(() {}));
-      e.mobileCtrl.addListener(() => setState(() {}));
-      e.emailCtrl.addListener(() => setState(() {}));
+      e.firstNameCtrl.addListener(_onFieldChanged);
+      e.surnameCtrl.addListener(_onFieldChanged);
+      e.mobileCtrl.addListener(_onFieldChanged);
+      e.emailCtrl.addListener(_onFieldChanged);
+    }
+  }
+
+  void _onFieldChanged() {
+    setState(() {});
+    if (widget.onLocalUpdate != null) {
+      final updated = _entries.map((e) {
+        final fn = e.firstNameCtrl.text.trim();
+        final sn = e.surnameCtrl.text.trim();
+        return {
+          'doctor_id': e.doctorId,
+          'first_name': fn,
+          'surname': sn,
+          'doctor_name': '$fn $sn'.trim(),
+          'mobile': e.mobileCtrl.text.trim(),
+          'email': e.emailCtrl.text.trim(),
+        };
+      }).toList();
+      widget.onLocalUpdate!(updated);
     }
   }
 
@@ -208,71 +228,6 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
   bool get _isAllValid {
     if (_entries.length != 3) return false;
     return _entries.every((e) => e.isValid);
-  }
-
-  Future<void> _saveDraft() async {
-    final hasInvalid = _entries.any((e) => !e.isValid);
-    if (hasInvalid) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please correct invalid fields before saving."),
-          backgroundColor: Color(0xFFDC2626),
-        ),
-      );
-      return;
-    }
-
-    setState(() => _isSavingDraft = true);
-
-    try {
-      final List<int> doctorIds = _entries.map((e) => e.doctorId).toList();
-      final List<Map<String, dynamic>> verifiedDetails = _entries.map((e) {
-        final fn = e.firstNameCtrl.text.trim();
-        final sn = e.surnameCtrl.text.trim();
-        final compositeName = '$fn $sn'.trim();
-        return {
-          'doctor_id': e.doctorId,
-          'first_name': fn,
-          'surname': sn,
-          'doctor_name': compositeName,
-          'mobile': e.mobileCtrl.text.trim(),
-          'email': e.emailCtrl.text.trim(),
-        };
-      }).toList();
-
-      final res = await ApiService().verifyAndSubmitSobixoDoctors(
-        widget.brandId,
-        doctorIds: doctorIds,
-        verifiedDetails: verifiedDetails,
-        submitFinal: false,
-      );
-
-      if (!mounted) return;
-
-      final message = res['message']?.toString() ?? "Doctor details saved successfully.";
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          backgroundColor: Colors.green.shade700,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-
-      Navigator.pop(context, false);
-    } catch (e) {
-      if (!mounted) return;
-      final err = e.toString().replaceFirst('Exception: ', '').trim();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Save failed: $err'),
-          backgroundColor: Colors.red.shade700,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isSavingDraft = false);
-    }
   }
 
   Future<void> _submitVerification() async {
@@ -802,8 +757,6 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
   Widget _buildBottomActionBar() {
     final int confirmedCount = _confirmedCount;
     final bool ready = _isAllValid;
-    final bool isBusy = _isSubmitting || _isSavingDraft;
-    final bool canSave = !isBusy && _entries.every((e) => e.isValid);
 
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -826,89 +779,45 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
         ],
       ),
       child: SafeArea(
-        child: Row(
-          children: [
-            // Save Changes button
-            Expanded(
-              flex: 2,
-              child: SizedBox(
-                height: 48,
-                child: OutlinedButton(
-                  onPressed: canSave ? _saveDraft : null,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _primary,
-                    disabledForegroundColor: Colors.grey.shade400,
-                    side: BorderSide(
-                      color: canSave ? _primary : Colors.grey.shade300,
+        child: SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            onPressed: ready && !_isSubmitting ? _submitVerification : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.grey.shade300,
+              disabledForegroundColor: Colors.grey.shade500,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: ready ? 2 : 0,
+            ),
+            icon: _isSubmitting
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isSavingDraft
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: _primary,
-                          ),
-                        )
-                      : Text(
-                          "Save Changes",
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12.5,
-                          ),
-                        ),
-                ),
+                  )
+                : const Icon(Icons.send_rounded, size: 18),
+            label: Text(
+              _isSubmitting
+                  ? "Submitting..."
+                  : ready
+                      ? "Submit 3 Doctors for Approval"
+                      : _entries.length < 3
+                          ? "Select 3 Doctors to Submit (${_entries.length}/3)"
+                          : "Please correct invalid fields ($confirmedCount/3 Valid)",
+              style: GoogleFonts.poppins(
+                fontWeight: FontWeight.w600,
+                fontSize: 13.5,
               ),
             ),
-            const SizedBox(width: 10),
-            // Primary Submit button
-            Expanded(
-              flex: 3,
-              child: SizedBox(
-                height: 48,
-                child: ElevatedButton.icon(
-                  onPressed: ready && !isBusy ? _submitVerification : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey.shade300,
-                    disabledForegroundColor: Colors.grey.shade500,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    elevation: ready ? 2 : 0,
-                  ),
-                  icon: _isSubmitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.send_rounded, size: 18),
-                  label: Text(
-                    _isSubmitting
-                        ? "Submitting..."
-                        : ready
-                            ? "Submit 3 Doctors"
-                            : _entries.length < 3
-                                ? "Need 3 Doctors (${_entries.length}/3)"
-                                : "Invalid Fields ($confirmedCount/3)",
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

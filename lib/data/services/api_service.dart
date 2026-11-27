@@ -1441,9 +1441,11 @@ Future<Map<String, dynamic>> calculateExpense(String dateStr) async {
   }
 
   /// 4. GET /api/sobixo-brand-map/brands/{brand_id}/doctors
-  Future<Map<String, dynamic>> getSobixoDoctors(int brandId) async {
+  Future<Map<String, dynamic>> getSobixoDoctors(int brandId, {int? userId}) async {
     final token = await getToken();
-    final url = '$baseUrl/sobixo-brand-map/brands/$brandId/doctors';
+    final url = userId != null
+        ? '$baseUrl/sobixo-brand-map/brands/$brandId/doctors?user_id=$userId'
+        : '$baseUrl/sobixo-brand-map/brands/$brandId/doctors';
     final response = await http.get(
       Uri.parse(url),
       headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
@@ -3453,13 +3455,24 @@ Future<void> submitFullMonth(int month, int year) async {
   }
 
   // 2. USER SUBMITS ENTIRE MONTH
-  Future<Map<String, dynamic>> submitMonthPlan(DateTime month) async {
+  Future<Map<String, dynamic>> submitMonthPlan(
+    DateTime month, {
+    String? reason,
+  }) async {
     try {
       String monthStr = DateFormat('yyyy-MM').format(month);
+      final Map<String, dynamic> payload = {
+        'month': monthStr,
+      };
+      if (reason != null && reason.trim().isNotEmpty) {
+        payload['reason'] = reason.trim();
+        payload['force_submit'] = true;
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl/tour-plan/submit-month'),
         headers: await _getHeaders(),
-        body: json.encode({'month': monthStr}),
+        body: json.encode(payload),
       );
 
       final decoded = json.decode(response.body);

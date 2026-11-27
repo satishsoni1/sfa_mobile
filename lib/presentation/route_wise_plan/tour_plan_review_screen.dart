@@ -28,10 +28,13 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
   final ApiService _api = ApiService();
 
   // --- 1. User Action: Submit Entire Month ---
-  Future<void> _submitPlan() async {
+  Future<void> _submitPlan({String? reason}) async {
     setState(() => _isSubmitting = true);
     try {
-      final res = await _api.submitMonthPlan(widget.currentMonth);
+      final res = await _api.submitMonthPlan(
+        widget.currentMonth,
+        reason: reason,
+      );
       if (res['success'] == true) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -47,6 +50,7 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
           _showValidationErrorsDialog(
             message: res['message']?.toString(),
             errors: res['errors'],
+            wasOverrideAttempt: reason != null && reason.trim().isNotEmpty,
           );
         }
       }
@@ -54,6 +58,7 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
       if (mounted) {
         _showValidationErrorsDialog(
           message: e.toString().replaceAll('Exception: ', ''),
+          wasOverrideAttempt: reason != null && reason.trim().isNotEmpty,
         );
       }
     } finally {
@@ -63,7 +68,11 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
     }
   }
 
-  void _showValidationErrorsDialog({String? message, dynamic errors}) {
+  Future<void> _showValidationErrorsDialog({
+    String? message,
+    dynamic errors,
+    bool wasOverrideAttempt = false,
+  }) async {
     final List<String> errorList = [];
 
     if (errors != null) {
@@ -106,200 +115,381 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
       }
     }
 
-    showDialog(
+    final TextEditingController reasonCtrl = TextEditingController();
+    bool showReasonInput = wasOverrideAttempt;
+    String? reasonError;
+
+    final String? overrideReason = await showDialog<String>(
       context: context,
       barrierDismissible: true,
       builder: (ctx) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(ctx).size.height * 0.75,
-              maxWidth: 480,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // ── Dialog Header ──────────────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    border: Border(bottom: BorderSide(color: Colors.red.shade100)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade100,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(Icons.error_outline, color: Colors.red.shade700, size: 22),
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(ctx).size.height * 0.85,
+                  maxWidth: 480,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ── Dialog Header ──────────────────────────────────────────
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 12, 12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                        border: Border(bottom: BorderSide(color: Colors.red.shade100)),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Validation Failed",
-                              style: GoogleFonts.poppins(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade900,
-                              ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade100,
+                              shape: BoxShape.circle,
                             ),
-                            Text(
-                              errorList.length > 1
-                                  ? (widget.isCampaignTpEligible
-                                      ? "${errorList.length} issues found in campaign plan"
-                                      : "${errorList.length} issues found in tour plan")
-                                  : "Action required before submission",
+                            child: Icon(Icons.error_outline, color: Colors.red.shade700, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Validation Failed",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade900,
+                                  ),
+                                ),
+                                Text(
+                                  errorList.length > 1
+                                      ? (widget.isCampaignTpEligible
+                                          ? "${errorList.length} issues found in campaign plan"
+                                          : "${errorList.length} issues found in tour plan")
+                                      : "Action required before submission",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 12,
+                                    color: Colors.red.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                            onPressed: () => Navigator.pop(ctx),
+                            tooltip: "Close",
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ── Instruction Banner ─────────────────────────────────────
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      color: const Color(0xFFFFFBEB),
+                      child: Row(
+                        children: [
+                          Icon(Icons.info_outline, size: 16, color: Colors.amber.shade900),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "Please correct these errors in your tour dates, or proceed by providing a valid reason:",
                               style: GoogleFonts.poppins(
                                 fontSize: 12,
-                                color: Colors.red.shade700,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.amber.shade900,
                               ),
                             ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ── Scrollable List of Errors & Reason Input ──────────────
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (errorList.isEmpty)
+                              Text(
+                                message ?? "An unexpected validation error occurred.",
+                                style: GoogleFonts.poppins(fontSize: 13, color: Colors.black87),
+                              )
+                            else
+                              ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: errorList.length,
+                                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final err = errorList[index];
+                                  return Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFAF5FC),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.purple.shade100),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          width: 22,
+                                          height: 22,
+                                          margin: const EdgeInsets.only(top: 2),
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF4A148C),
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: Center(
+                                            child: Text(
+                                              "${index + 1}",
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Text(
+                                            err,
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 12.5,
+                                              height: 1.4,
+                                              color: Colors.grey.shade900,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                            if (showReasonInput) ...[
+                              const SizedBox(height: 14),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.shade50.withValues(alpha: 0.6),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.orange.shade200),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      "Reason to Proceed *",
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: const Color(0xFF1E293B),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    TextField(
+                                      controller: reasonCtrl,
+                                      maxLines: 3,
+                                      minLines: 2,
+                                      autofocus: true,
+                                      onChanged: (_) {
+                                        if (reasonError != null) {
+                                          setDialogState(() => reasonError = null);
+                                        }
+                                      },
+                                      style: GoogleFonts.poppins(fontSize: 13),
+                                      decoration: InputDecoration(
+                                        hintText: "Enter a valid reason (min. 5 characters)...",
+                                        hintStyle: GoogleFonts.poppins(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                        errorText: reasonError,
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        contentPadding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 10,
+                                        ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: BorderSide(color: Colors.grey.shade300),
+                                        ),
+                                        focusedBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: const BorderSide(
+                                            color: Color(0xFF4A148C),
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.grey, size: 20),
-                        onPressed: () => Navigator.pop(ctx),
-                        tooltip: "Close",
-                      ),
-                    ],
-                  ),
-                ),
+                    ),
 
-                // ── Instruction Banner ─────────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  color: const Color(0xFFFFFBEB),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, size: 16, color: Colors.amber.shade900),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          "Please correct these errors in your tour dates and resubmit:",
-                          style: GoogleFonts.poppins(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.amber.shade900,
-                          ),
-                        ),
+                    // ── Bottom Action Buttons ──────────────────────────────────
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                        border: Border(top: BorderSide(color: Colors.grey.shade200)),
                       ),
-                    ],
-                  ),
-                ),
-
-                // ── Scrollable List of Errors ──────────────────────────────
-                Flexible(
-                  child: errorList.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text(
-                            message ?? "An unexpected validation error occurred.",
-                            style: GoogleFonts.poppins(fontSize: 13, color: Colors.black87),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.all(16),
-                          shrinkWrap: true,
-                          itemCount: errorList.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final err = errorList[index];
-                            return Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFAF5FC),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.purple.shade100),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    width: 22,
-                                    height: 22,
-                                    margin: const EdgeInsets.only(top: 2),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF4A148C),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
+                      child: showReasonInput
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: SizedBox(
+                                    height: 44,
+                                    child: OutlinedButton(
+                                      onPressed: () {
+                                        setDialogState(() {
+                                          showReasonInput = false;
+                                          reasonError = null;
+                                        });
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.grey.shade700,
+                                        side: BorderSide(color: Colors.grey.shade300),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
                                       child: Text(
-                                        "${index + 1}",
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
+                                        "Back",
+                                        style: GoogleFonts.poppins(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12.5,
                                         ),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      err,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12.5,
-                                        height: 1.4,
-                                        color: Colors.grey.shade900,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  flex: 3,
+                                  child: SizedBox(
+                                    height: 44,
+                                    child: ElevatedButton(
+                                      onPressed: () {
+                                        final r = reasonCtrl.text.trim();
+                                        if (r.isEmpty) {
+                                          setDialogState(() => reasonError = "Reason is required.");
+                                          return;
+                                        }
+                                        if (r.length < 5) {
+                                          setDialogState(() => reasonError = "Please enter a valid reason (at least 5 characters).");
+                                          return;
+                                        }
+                                        Navigator.pop(ctx, r);
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF4A148C),
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        "SUBMIT WITH REASON",
+                                        style: GoogleFonts.poppins(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 12.5,
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                ),
-
-                // ── Bottom Action Button ───────────────────────────────────
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
-                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                  ),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4A148C),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                      child: Text(
-                        "I UNDERSTAND, LET ME UPDATE",
-                        style: GoogleFonts.poppins(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 44,
+                                  child: ElevatedButton(
+                                    onPressed: () => Navigator.pop(ctx),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF4A148C),
+                                      elevation: 0,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      "I UNDERSTAND, LET ME UPDATE",
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 42,
+                                  child: OutlinedButton(
+                                    onPressed: () {
+                                      setDialogState(() => showReasonInput = true);
+                                    },
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFF4A148C),
+                                      side: const BorderSide(color: Color(0xFF4A148C)),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      "PROCEED WITH REASON",
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12.5,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );
+
+    reasonCtrl.dispose();
+
+    if (overrideReason != null && overrideReason.trim().isNotEmpty && mounted) {
+      await _submitPlan(reason: overrideReason.trim());
+    }
   }
 
   // --- 2. Manager Action: Approve / Reject Entire Month ---
@@ -823,7 +1013,7 @@ class _TourPlanReviewScreenState extends State<TourPlanReviewScreen> {
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: _isSubmitting ? null : _submitPlan,
+        onPressed: _isSubmitting ? null : () => _submitPlan(),
         icon: _isSubmitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.send, color: Colors.white),
         label: Text("SUBMIT MONTH FOR APPROVAL", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
         style: ElevatedButton.styleFrom(backgroundColor: Colors.green.shade600, padding: const EdgeInsets.symmetric(vertical: 16)),

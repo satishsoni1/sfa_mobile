@@ -1117,6 +1117,11 @@ class _DoctorBrandPriorityScreenState extends State<DoctorBrandPriorityScreen>
     final initial =
         cleanCoreName.isNotEmpty ? cleanCoreName[0].toUpperCase() : 'D';
 
+    final bool isDraft = !doctor.isApproved &&
+        !doctor.isPending &&
+        !doctor.isRejected &&
+        doctor.isPrioritized;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1124,10 +1129,10 @@ class _DoctorBrandPriorityScreenState extends State<DoctorBrandPriorityScreen>
         border: Border.all(
           color: doctor.isRejected
               ? Colors.red.shade200
-              : doctor.isApproved
-                  ? Colors.green.shade200
+              : (doctor.isApproved || isDraft)
+                  ? Colors.green.shade400
                   : Colors.grey.shade200,
-          width: 1.1,
+          width: isDraft ? 1.5 : 1.1,
         ),
         boxShadow: [
           BoxShadow(
