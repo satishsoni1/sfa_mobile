@@ -529,12 +529,23 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
               final idx = _doctors.indexWhere(
                   (d) => (int.tryParse(d['id']?.toString() ?? '0') ?? 0) == uid);
               if (idx != -1) {
-                _doctors[idx]['first_name'] = upd['first_name'];
-                _doctors[idx]['surname'] = upd['surname'];
-                _doctors[idx]['doctor_name'] = upd['doctor_name'];
-                _doctors[idx]['mobile'] = upd['mobile'];
-                _doctors[idx]['phone'] = upd['mobile'];
-                _doctors[idx]['email'] = upd['email'];
+                final docMap = _doctors[idx];
+                docMap['first_name'] = upd['first_name'];
+                docMap['surname'] = upd['surname'];
+                docMap['doctor_name'] = upd['doctor_name'];
+                docMap['mobile'] = upd['mobile'];
+                docMap['phone'] = upd['mobile'];
+                docMap['email'] = upd['email'];
+                if (docMap['has_changes'] == true && docMap['changes'] is List) {
+                  for (final ch in (docMap['changes'] as List)) {
+                    if (ch is Map) {
+                      final f = ch['field']?.toString().trim() ?? '';
+                      if (upd.containsKey(f)) {
+                        ch['new_value'] = upd[f]?.toString() ?? '';
+                      }
+                    }
+                  }
+                }
               }
             }
           });
@@ -1543,12 +1554,159 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
     return const SizedBox.shrink();
   }
 
+  Map<String, Map<String, String>> _extractDoctorChanges(
+    Map<String, dynamic> doctor,
+  ) {
+    final Map<String, Map<String, String>> result = {};
+    if (doctor['has_changes'] != true) return result;
+    final rawChanges = doctor['changes'];
+    if (rawChanges is! List) return result;
+
+    for (final item in rawChanges) {
+      if (item is! Map) continue;
+      final field = item['field']?.toString().trim() ?? '';
+      if (field.isEmpty) continue;
+      final oldVal = item['old_value']?.toString().trim() ?? '';
+      final newVal = item['new_value']?.toString().trim() ?? '';
+      final createdAt = item['created_at']?.toString().trim() ?? '';
+
+      if (!result.containsKey(field)) {
+        result[field] = {
+          'old_value': oldVal,
+          'new_value': newVal,
+          'created_at': createdAt,
+        };
+      } else {
+        result[field]!['new_value'] = newVal;
+        result[field]!['created_at'] = createdAt;
+      }
+    }
+
+    result.removeWhere((_, v) => v['old_value'] == v['new_value']);
+    return result;
+  }
+
+  Widget _buildSobixoContactDiff({
+    required IconData icon,
+    required String currentValue,
+    required Map<String, String>? change,
+    required double fontSize,
+  }) {
+    final bool hasChange = change != null &&
+        change['old_value'] != change['new_value'];
+    final String oldVal = change?['old_value'] ?? '';
+    final String displayNew = hasChange
+        ? (change['new_value'] ?? '')
+        : currentValue;
+
+    if (!hasChange) {
+      if (displayNew.isEmpty) return const SizedBox.shrink();
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: _purple.withValues(alpha: 0.8)),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              displayNew,
+              style: TextStyle(
+                fontSize: fontSize,
+                color: Colors.black87,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 6,
+        runSpacing: 2,
+        children: [
+          Icon(icon, size: 14, color: const Color(0xFF15803D)),
+          if (oldVal.isNotEmpty) ...[
+            Text(
+              oldVal,
+              style: TextStyle(
+                fontSize: fontSize - 0.5,
+                color: Colors.grey.shade600,
+                decoration: TextDecoration.lineThrough,
+                decorationColor: const Color(0xFFDC2626),
+                decorationThickness: 2.2,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_rounded,
+              size: 13,
+              color: Color(0xFF64748B),
+            ),
+          ],
+          Text(
+            displayNew.isNotEmpty ? displayNew : 'Removed',
+            style: TextStyle(
+              fontSize: fontSize,
+              color: displayNew.isNotEmpty
+                  ? const Color(0xFF15803D)
+                  : const Color(0xFFDC2626),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDoctorCard(Map<String, dynamic> doctor, {int index = 0}) {
     final fn = (doctor['first_name'] ?? '').toString().trim();
     final sn = (doctor['surname'] ?? '').toString().trim();
-    final name = (fn.isNotEmpty || sn.isNotEmpty)
-        ? '$fn $sn'.trim()
-        : (doctor['doctor_name']?.toString() ?? '');
+    final changesMap = _isSobixo
+        ? _extractDoctorChanges(doctor)
+        : const <String, Map<String, String>>{};
+    final bool hasChanges =
+        _isSobixo && doctor['has_changes'] == true && changesMap.isNotEmpty;
+
+    final firstNameChange = changesMap['first_name'];
+    final surnameChange = changesMap['surname'];
+    final doctorNameChange = changesMap['doctor_name'];
+    final mobileChange = changesMap['mobile'];
+    final emailChange = changesMap['email'];
+
+    final String effectiveFn = firstNameChange != null
+        ? (firstNameChange['new_value'] ?? fn)
+        : fn;
+    final String effectiveSn = surnameChange != null
+        ? (surnameChange['new_value'] ?? sn)
+        : sn;
+
+    final String name = doctorNameChange != null &&
+            (doctorNameChange['new_value'] ?? '').isNotEmpty
+        ? doctorNameChange['new_value']!
+        : (effectiveFn.isNotEmpty || effectiveSn.isNotEmpty)
+            ? '$effectiveFn $effectiveSn'.trim()
+            : (doctor['doctor_name']?.toString() ?? '');
+
+    String oldFullName = '';
+    if (doctorNameChange != null &&
+        (doctorNameChange['old_value'] ?? '').isNotEmpty) {
+      oldFullName = doctorNameChange['old_value']!;
+    } else if (firstNameChange != null || surnameChange != null) {
+      final oldFn = firstNameChange?['old_value'] ?? fn;
+      final oldSn = surnameChange?['old_value'] ?? sn;
+      oldFullName = '$oldFn $oldSn'.trim();
+    }
+    final bool hasNameChange =
+        oldFullName.isNotEmpty && oldFullName != name;
+
     final sp = doctor['specialty_practice_type']?.toString() ?? '';
     final area = doctor['area']?.toString() ?? '';
     final id = int.tryParse(doctor['id']?.toString() ?? '0') ?? 0;
@@ -1559,13 +1717,24 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
         !(_isSobixo && _isSobixoSubmittedOrLocked);
     final mobileStr = (doctor['mobile'] ?? doctor['phone'] ?? '').toString().trim();
     final emailStr = (doctor['email'] ?? '').toString().trim();
+    final displayMobile = mobileChange != null
+        ? (mobileChange['new_value'] ?? mobileStr)
+        : mobileStr;
+    final displayEmail = emailChange != null
+        ? (emailChange['new_value'] ?? emailStr)
+        : emailStr;
 
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isPathfinder ? Colors.orange.shade200 : Colors.grey.shade200,
+          color: hasChanges
+              ? const Color(0xFF99F6E4)
+              : isPathfinder
+                  ? Colors.orange.shade200
+                  : Colors.grey.shade200,
+          width: hasChanges ? 1.3 : 1.0,
         ),
       ),
       child: Material(
@@ -1605,44 +1774,112 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child: Text(
-                              name,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13.5,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                            child: hasNameChange
+                                ? Wrap(
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    spacing: 6,
+                                    runSpacing: 2,
+                                    children: [
+                                      Text(
+                                        oldFullName,
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          color: Colors.grey.shade600,
+                                          decoration: TextDecoration.lineThrough,
+                                          decorationColor: const Color(0xFFDC2626),
+                                          decorationThickness: 2.2,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.arrow_forward_rounded,
+                                        size: 13,
+                                        color: Color(0xFF64748B),
+                                      ),
+                                      Text(
+                                        name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13.5,
+                                          color: Color(0xFF15803D),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13.5,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                           ),
                           if (_isSobixo) ...[
                             const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: isPathfinder
-                                    ? Colors.orange.shade50
-                                    : Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: isPathfinder
-                                      ? Colors.orange.shade300
-                                      : Colors.blue.shade200,
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: isPathfinder
+                                        ? Colors.orange.shade50
+                                        : Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: isPathfinder
+                                          ? Colors.orange.shade300
+                                          : Colors.blue.shade200,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    isPathfinder ? 'Target Doctor' : 'MCL Doctor',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: isPathfinder
+                                          ? Colors.deepOrange
+                                          : Colors.blueAccent,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                              child: Text(
-                                isPathfinder ? 'Target Doctor' : 'MCL Doctor',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: isPathfinder
-                                      ? Colors.deepOrange
-                                      : Colors.blueAccent,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                                if (hasChanges) ...[
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFCCFBF1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                          color: const Color(0xFF5EEAD4)),
+                                    ),
+                                    child: const Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.edit_note_rounded,
+                                            size: 11,
+                                            color: Color(0xFF0F766E)),
+                                        SizedBox(width: 2),
+                                        Text(
+                                          'Edited',
+                                          style: TextStyle(
+                                            fontSize: 8.5,
+                                            color: Color(0xFF0F766E),
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ] else if (isPathfinder) ...[
                             const SizedBox(width: 4),
@@ -1706,46 +1943,30 @@ class _BrandDrMappingDoctorScreenState extends State<BrandDrMappingDoctorScreen>
                             ),
                         ],
                       ),
-                      if (_isSobixo && (mobileStr.isNotEmpty || emailStr.isNotEmpty)) ...[
+                      if (_isSobixo &&
+                          (displayMobile.isNotEmpty ||
+                              displayEmail.isNotEmpty ||
+                              mobileChange != null ||
+                              emailChange != null)) ...[
                         const SizedBox(height: 6),
                         Wrap(
                           spacing: 12,
-                          runSpacing: 4,
+                          runSpacing: 6,
                           crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            if (mobileStr.isNotEmpty)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.phone_android,
-                                      size: 14, color: _purple.withValues(alpha: 0.8)),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    mobileStr,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.black87,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
+                            if (displayMobile.isNotEmpty || mobileChange != null)
+                              _buildSobixoContactDiff(
+                                icon: Icons.phone_android,
+                                currentValue: displayMobile,
+                                change: mobileChange,
+                                fontSize: 13,
                               ),
-                            if (emailStr.isNotEmpty)
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.email_outlined,
-                                      size: 14, color: Colors.grey.shade600),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    emailStr,
-                                    style: TextStyle(
-                                      fontSize: 12.5,
-                                      color: Colors.grey.shade700,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
+                            if (displayEmail.isNotEmpty || emailChange != null)
+                              _buildSobixoContactDiff(
+                                icon: Icons.email_outlined,
+                                currentValue: displayEmail,
+                                change: emailChange,
+                                fontSize: 12.5,
                               ),
                           ],
                         ),

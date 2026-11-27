@@ -32,6 +32,11 @@ class _DoctorVerificationEntry {
   final String originalSurname;
   final String originalMobile;
   final String originalEmail;
+  final String? previousFirstName;
+  final String? previousSurname;
+  final String? previousMobile;
+  final String? previousEmail;
+  final String? previousFullName;
   final String specialty;
   final String area;
   final bool isPathfinder;
@@ -47,6 +52,11 @@ class _DoctorVerificationEntry {
     required this.originalSurname,
     required this.originalMobile,
     required this.originalEmail,
+    this.previousFirstName,
+    this.previousSurname,
+    this.previousMobile,
+    this.previousEmail,
+    this.previousFullName,
     required this.specialty,
     required this.area,
     required this.isPathfinder,
@@ -81,7 +91,6 @@ class _DoctorVerificationEntry {
   String? get firstNameError {
     final t = firstNameCtrl.text.trim();
     if (t.isEmpty) return "First Name is mandatory.";
-    if (t.length < 2) return "First Name must be at least 2 characters.";
     if (t.length > 100) return "First Name cannot exceed 100 characters.";
     return null;
   }
@@ -89,7 +98,6 @@ class _DoctorVerificationEntry {
   String? get surnameError {
     final t = surnameCtrl.text.trim();
     if (t.isEmpty) return "Surname is mandatory.";
-    if (t.length < 2) return "Surname must be at least 2 characters.";
     if (t.length > 100) return "Surname cannot exceed 100 characters.";
     return null;
   }
@@ -150,12 +158,30 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
     super.initState();
     _entries = widget.selectedDoctors.map((doc) {
       final int id = int.tryParse(doc['id']?.toString() ?? '0') ?? 0;
+
+      final Map<String, Map<String, String>> changesMap = {};
+      if (doc['has_changes'] == true && doc['changes'] is List) {
+        for (final item in (doc['changes'] as List)) {
+          if (item is! Map) continue;
+          final field = item['field']?.toString().trim() ?? '';
+          if (field.isEmpty) continue;
+          final oldVal = item['old_value']?.toString().trim() ?? '';
+          final newVal = item['new_value']?.toString().trim() ?? '';
+          if (!changesMap.containsKey(field)) {
+            changesMap[field] = {'old_value': oldVal, 'new_value': newVal};
+          } else {
+            changesMap[field]!['new_value'] = newVal;
+          }
+        }
+        changesMap.removeWhere((_, v) => v['old_value'] == v['new_value']);
+      }
+
       final String rawFn = (doc['first_name'] ?? '').toString().trim();
       final String rawSn = (doc['surname'] ?? '').toString().trim();
       final String rawDocName = (doc['doctor_name'] ?? '').toString().trim();
 
-      String fn = rawFn;
-      String sn = rawSn;
+      String fn = changesMap['first_name']?['new_value'] ?? rawFn;
+      String sn = changesMap['surname']?['new_value'] ?? rawSn;
       if (fn.isEmpty && sn.isEmpty && rawDocName.isNotEmpty) {
         final clean = rawDocName
             .replaceFirst(RegExp(r'^Dr\.?\s*', caseSensitive: false), '')
@@ -170,11 +196,30 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
         }
       }
 
-      final mobile = doc['mobile']?.toString() ?? doc['phone']?.toString() ?? '';
-      final email = doc['email']?.toString() ?? '';
-      final specialty = doc['specialty_practice_type']?.toString() ?? doc['specialty']?.toString() ?? '';
-      final area = doc['area']?.toString() ?? doc['clinic_name']?.toString() ?? '';
+      final mobile = changesMap['mobile']?['new_value'] ??
+          doc['mobile']?.toString() ??
+          doc['phone']?.toString() ??
+          '';
+      final email =
+          changesMap['email']?['new_value'] ?? doc['email']?.toString() ?? '';
+      final specialty = doc['specialty_practice_type']?.toString() ??
+          doc['specialty']?.toString() ??
+          '';
+      final area =
+          doc['area']?.toString() ?? doc['clinic_name']?.toString() ?? '';
       final bool isPathfinder = doc['is_pathfinder'] == true;
+
+      String? prevFullName;
+      if (changesMap['doctor_name'] != null &&
+          (changesMap['doctor_name']!['old_value'] ?? '').isNotEmpty) {
+        prevFullName = changesMap['doctor_name']!['old_value'];
+      } else if (changesMap['first_name'] != null ||
+          changesMap['surname'] != null) {
+        final pFn = changesMap['first_name']?['old_value'] ?? rawFn;
+        final pSn = changesMap['surname']?['old_value'] ?? rawSn;
+        final joined = '$pFn $pSn'.trim();
+        if (joined.isNotEmpty) prevFullName = joined;
+      }
 
       return _DoctorVerificationEntry(
         doctorId: id,
@@ -182,6 +227,11 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
         originalSurname: sn,
         originalMobile: mobile,
         originalEmail: email,
+        previousFirstName: changesMap['first_name']?['old_value'],
+        previousSurname: changesMap['surname']?['old_value'],
+        previousMobile: changesMap['mobile']?['old_value'],
+        previousEmail: changesMap['email']?['old_value'],
+        previousFullName: prevFullName,
         specialty: specialty,
         area: area,
         isPathfinder: isPathfinder,
@@ -516,22 +566,39 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 2,
                         children: [
-                          Flexible(
-                            child: Text(
-                              entry.fullName,
+                          if (entry.previousFullName != null &&
+                              entry.previousFullName!.isNotEmpty &&
+                              entry.previousFullName != entry.fullName) ...[
+                            Text(
+                              entry.previousFullName!,
                               style: GoogleFonts.poppins(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                                color: _slateDark,
+                                fontSize: 12,
+                                color: Colors.grey.shade500,
+                                decoration: TextDecoration.lineThrough,
+                                decorationColor: const Color(0xFFDC2626),
+                                decorationThickness: 2.0,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 13,
+                              color: Color(0xFF64748B),
+                            ),
+                          ],
+                          Text(
+                            entry.fullName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: _slateDark,
                             ),
                           ),
                           if (isTarget) ...[
-                            const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 6, vertical: 2),
@@ -631,6 +698,7 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
               controller: entry.firstNameCtrl,
               icon: Icons.person_outline,
               errorText: firstNameErr,
+              previousValue: entry.previousFirstName,
               maxLength: 100,
               hintText: "Enter first name (e.g. Aniket)",
             ),
@@ -643,6 +711,7 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
               controller: entry.surnameCtrl,
               icon: Icons.badge_outlined,
               errorText: surnameErr,
+              previousValue: entry.previousSurname,
               maxLength: 100,
               hintText: "Enter surname (e.g. Mandrekar)",
             ),
@@ -655,6 +724,7 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
               controller: entry.mobileCtrl,
               icon: Icons.phone_android_outlined,
               errorText: mobileErr,
+              previousValue: entry.previousMobile,
               keyboardType: TextInputType.phone,
               maxLength: 10,
               inputFormatters: [
@@ -672,6 +742,7 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
               controller: entry.emailCtrl,
               icon: Icons.alternate_email_outlined,
               errorText: emailErr,
+              previousValue: entry.previousEmail,
               keyboardType: TextInputType.emailAddress,
               hintText: "doctor@example.com",
             ),
@@ -686,23 +757,45 @@ class _SobixoVerificationSheetState extends State<SobixoVerificationSheet> {
     required TextEditingController controller,
     required IconData icon,
     String? errorText,
+    String? previousValue,
     String? hintText,
     int? maxLength,
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
   }) {
     final bool hasError = errorText != null;
+    final bool showPrev = previousValue != null &&
+        previousValue.isNotEmpty &&
+        previousValue != controller.text.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            color: hasError ? const Color(0xFFDC2626) : const Color(0xFF475569),
-          ),
+        Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 2,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: hasError ? const Color(0xFFDC2626) : const Color(0xFF475569),
+              ),
+            ),
+            if (showPrev)
+              Text(
+                previousValue,
+                style: GoogleFonts.poppins(
+                  fontSize: 11,
+                  color: Colors.grey.shade600,
+                  decoration: TextDecoration.lineThrough,
+                  decorationColor: const Color(0xFFDC2626),
+                  decorationThickness: 2.0,
+                ),
+              ),
+          ],
         ),
         const SizedBox(height: 5),
         TextField(
